@@ -42,6 +42,7 @@ const emptyForm = {
   minStock: '',
   sku: '',
   description: '',
+  imageUrl: '',
 };
 
 const initialProducts = [
@@ -405,6 +406,7 @@ export default function App() {
       minStock,
       status: stock === 0 ? 'Inactivo' : 'Activo',
       description: form.description.trim(),
+      imageUrl: form.imageUrl || '',
     };
 
     if (editingId) {
@@ -434,7 +436,28 @@ export default function App() {
       minStock: String(product.minStock),
       sku: product.sku,
       description: product.description || '',
+      imageUrl: product.imageUrl || '',
     });
+  }
+
+  function handleProductImage(file) {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setNotice({ type: 'error', message: 'Selecciona un archivo de imagen válido.' });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setNotice({ type: 'error', message: 'La imagen no debe superar los 2MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm(prev => ({ ...prev, imageUrl: reader.result }));
+    };
+    reader.readAsDataURL(file);
   }
 
   function calculateSalePreview() {
@@ -1032,7 +1055,11 @@ function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           {topProducts.map(product => (
             <div key={product.id} className="rounded-2xl border border-slate-100 p-4">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl">📦</div>
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className="mb-3 h-12 w-12 rounded-xl object-cover shadow-sm" />
+              ) : (
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl">📦</div>
+              )}
               <p className="font-bold">{product.name}</p>
               <p className="text-sm text-slate-500">Stock: {product.stock}</p>
             </div>
@@ -1172,7 +1199,7 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <ProductTable products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} />
-        <ProductForm form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} />
+        <ProductForm form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
       <section className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
@@ -1640,7 +1667,11 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
                   <tr key={product.id} className="hover:bg-slate-50/70">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl">📦</div>
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.name} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl">📦</div>
+                        )}
                         <div>
                           <p className="font-bold text-slate-900">{product.name}</p>
                           <p className="text-xs text-slate-500">SKU: {product.sku}</p>
@@ -1676,7 +1707,7 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
   );
 }
 
-function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice, productCategories }) {
+function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice, productCategories, handleProductImage }) {
   const isNewCategory = form.category === '__new__';
 
   return (
@@ -1723,7 +1754,20 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
           <span className="mb-2 block text-sm font-semibold text-slate-700">Descripción</span>
           <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Descripción del producto..." />
         </label>
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">Subir imagen<br />PNG, JPG hasta 2MB</div>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm text-slate-500">
+          {form.imageUrl ? (
+            <div className="space-y-3">
+              <img src={form.imageUrl} alt="Vista previa del producto" className="mx-auto h-32 w-32 rounded-2xl object-cover shadow-sm" />
+              <button type="button" onClick={() => setForm({ ...form, imageUrl: '' })} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Quitar imagen</button>
+            </div>
+          ) : (
+            <div>
+              <p className="font-semibold text-slate-700">Subir imagen</p>
+              <p>PNG, JPG hasta 2MB</p>
+            </div>
+          )}
+          <input type="file" accept="image/*" onChange={e => handleProductImage(e.target.files?.[0])} className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" />
+        </div>
         <div className="grid grid-cols-2 gap-3 pt-2">
           <button type="button" onClick={resetForm} className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50">Cancelar</button>
           <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">{editingId ? 'Actualizar producto' : 'Guardar producto'}</button>
