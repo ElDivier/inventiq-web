@@ -333,10 +333,13 @@ export default function App() {
 
   const filtered = storeProducts.filter(p => {
     const text = search.toLowerCase();
+    const productName = String(p.name || '').toLowerCase();
+    const productSku = String(p.sku || '').toLowerCase();
+    const productCategory = String(p.category || '').toLowerCase();
     const matchSearch =
-      p.name.toLowerCase().includes(text) ||
-      p.sku.toLowerCase().includes(text) ||
-      p.category.toLowerCase().includes(text);
+      productName.includes(text) ||
+      productSku.includes(text) ||
+      productCategory.includes(text);
     const matchCategory = category === 'Todas' || p.category === category;
     return matchSearch && matchCategory;
   });
@@ -842,7 +845,7 @@ export default function App() {
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} />}
-          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} />}
+          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} />}
@@ -1187,7 +1190,7 @@ function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, reset
   );
 }
 
-function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, totalProducts, lowStock, noStock, inventoryValue }) {
+function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage }) {
   return (
     <>
       <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1335,7 +1338,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
         {lowStockProducts.length === 0 && <p className="text-sm text-amber-800">No existen productos con necesidad de reposición.</p>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {lowStockProducts.map(product => {
-            const provider = providers.find(item => item.category?.toLowerCase() === product.category?.toLowerCase());
+            const provider = providers.find(item => String(item.category || '').toLowerCase() === String(product.category || '').toLowerCase());
             return (
               <div key={product.id} className="rounded-2xl bg-white p-4 shadow-sm">
                 <p className="font-bold text-slate-900">{product.name}</p>
@@ -1443,8 +1446,8 @@ function ReportsPage({ products, sales, totalSales, inventoryValue, potentialPro
     else if (unitsSold >= 3) recommendation = 'Mantener stock alto';
 
     let marketing = 'Mantener ubicación actual';
-    const category = product.category.toLowerCase();
-    const name = product.name.toLowerCase();
+    const category = String(product.category || '').toLowerCase();
+    const name = String(product.name || '').toLowerCase();
     if (unitsSold === 0) marketing = 'Mover a zona visible y aplicar promoción';
     else if (category.includes('snack') || name.includes('papas') || name.includes('coca')) marketing = 'Ubicar cerca de caja como producto de impulso';
     else if (category.includes('bebida') || category.includes('lácteo')) marketing = 'Colocar cerca de productos complementarios';
@@ -1679,7 +1682,7 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
                       </div>
                     </td>
                     <td className="px-5 py-4 text-slate-600">{product.category}</td>
-                    <td className="px-5 py-4 font-medium">${product.price.toFixed(2)}</td>
+                    <td className="px-5 py-4 font-medium">${Number(product.price || 0).toFixed(2)}</td>
                     <td className="px-5 py-4"><p className="font-bold">{product.stock}</p><p className={`text-xs ${s.color}`}>{s.label}</p></td>
                     <td className="px-5 py-4"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.badge}`}>{product.status}</span></td>
                     <td className="px-5 py-4">
