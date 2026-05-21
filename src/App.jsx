@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { supabase } from './supabaseClient';
 import {
   Home,
   ShoppingCart,
@@ -178,7 +179,8 @@ function getUsersFromStorage() {
 
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
-  const [currentUser, setCurrentUser] = useState(() => loadFromStorage(STORAGE_KEYS.currentUser, null));
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
@@ -207,6 +209,41 @@ export default function App() {
   const [settingsForm, setSettingsForm] = useState(emptySettingsForm);
   const [settingsNotice, setSettingsNotice] = useState(null);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+
+  useEffect(() => {
+    async function initSupabaseSession() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const sessionUser = data?.session?.user;
+
+        if (sessionUser) {
+          await loadUserProfile(sessionUser);
+        }
+      } catch (error) {
+        console.error('Error iniciando sesión de Supabase:', error);
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    initSupabaseSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        if (session?.user) {
+          await loadUserProfile(session.user);
+        } else {
+          setCurrentUser(null);
+        }
+      } catch (error) {
+        console.error('Error escuchando sesión de Supabase:', error);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => listener?.subscription?.unsubscribe();
+  }, []);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.users, users);
@@ -250,40 +287,71 @@ export default function App() {
     }
   }, [currentUser]);
 
-  function login(e) {
-    e.preventDefault();
-    const username = loginForm.username.trim();
-    const password = loginForm.password.trim();
+  async function loadUserProfile(sessionUser) {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', sessionUser.id)
+      .maybeSingle();
 
-    if (!username || !password) {
-      setAuthNotice({ type: 'error', message: 'Ingresa usuario y contraseña.' });
-      return;
+    if (error) {
+      console.error('Error cargando perfil:', error);
     }
 
-    const foundUser = users.find(user => user.username === username && user.password === password);
-
-    if (!foundUser) {
-      setAuthNotice({ type: 'error', message: 'Usuario o contraseña incorrectos.' });
-      return;
-    }
-
-    setCurrentUser(foundUser);
-    saveToStorage(STORAGE_KEYS.currentUser, foundUser);
-    setAuthNotice(null);
-    setLoginForm(emptyLoginForm);
+    setCurrentUser({
+      id: sessionUser.id,
+      email: sessionUser.email,
+      username: sessionUser.email,
+      name: profile?.owner_name || sessionUser.email,
+      store: profile?.store_name || 'Mi Tienda',
+      city: profile?.city || 'Sin ciudad registrada',
+    });
   }
 
-  function register(e) {
+  async function login(e) {
+    e.preventDefault();
+    const email = loginForm.username.trim();
+    const password = loginForm.password.trim();
+
+    if (!email || !password) {
+      setAuthNotice({ type: 'error', message: 'Ingresa correo y contraseña.' });
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      console.error('Error de login Supabase:', error);
+      setAuthNotice({ type: 'error', message: error.message || 'Correo o contraseña incorrectos.' });
+      return;
+    }
+
+    if (data?.user) {
+      await loadUserProfile(data.user);
+      setAuthNotice(null);
+      setLoginForm(emptyLoginForm);
+    }
+  }
+
+  async function register(e) {
     e.preventDefault();
     const name = registerForm.name.trim();
     const store = registerForm.store.trim();
     const city = registerForm.city.trim();
-    const username = registerForm.username.trim();
+    const email = registerForm.username.trim();
     const password = registerForm.password.trim();
     const confirmPassword = registerForm.confirmPassword.trim();
 
-    if (!name || !store || !username || !password || !confirmPassword) {
+    if (!name || !store || !email || !password || !confirmPassword) {
       setAuthNotice({ type: 'error', message: 'Completa todos los campos obligatorios.' });
+      return;
+    }
+
+    if (!email.includes('@')) {
+      setAuthNotice({ type: 'error', message: 'Ingresa un correo electrónico válido.' });
       return;
     }
 
@@ -292,29 +360,37 @@ export default function App() {
       return;
     }
 
-    if (users.some(user => user.username === username)) {
-      setAuthNotice({ type: 'error', message: 'Ese usuario ya existe. Elige otro.' });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      setAuthNotice({ type: 'error', message: error.message });
       return;
     }
 
-    const newUser = {
-      id: Date.now(),
-      name,
-      store,
-      city: city || 'Sin ciudad registrada',
-      username,
-      password,
-    };
+    if (data?.user) {
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: data.user.id,
+        store_name: store,
+        owner_name: name,
+        city: city || 'Sin ciudad registrada',
+      });
 
-    const updatedUsers = [...users, newUser];
-    saveToStorage(STORAGE_KEYS.users, updatedUsers);
-    setUsers(updatedUsers);
+      if (profileError) {
+        setAuthNotice({ type: 'error', message: 'La cuenta se creó, pero no se pudo guardar el perfil. Revisa si la confirmación por correo está desactivada.' });
+        return;
+      }
+    }
+
     setRegisterForm(emptyRegisterForm);
     setAuthMode('login');
-    setAuthNotice({ type: 'success', message: 'Cuenta creada correctamente. Ahora inicia sesión.' });
+    setAuthNotice({ type: 'success', message: 'Cuenta creada correctamente. Ahora inicia sesión con tu correo.' });
   }
 
-  function logout() {
+  async function logout() {
+    await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_KEYS.currentUser);
     setCurrentUser(null);
     setActive('Inicio');
@@ -670,37 +746,29 @@ export default function App() {
     if (editingProviderId === id) resetProviderForm();
   }
 
-  function saveSettings(e) {
+  async function saveSettings(e) {
     e.preventDefault();
     const name = settingsForm.name.trim();
     const store = settingsForm.store.trim();
     const city = settingsForm.city.trim();
-    const username = settingsForm.username.trim();
+    const email = settingsForm.username.trim();
     const currentPassword = settingsForm.currentPassword.trim();
     const newPassword = settingsForm.newPassword.trim();
     const confirmNewPassword = settingsForm.confirmNewPassword.trim();
 
-    if (!name || !store || !city || !username) {
-      setSettingsNotice({ type: 'error', message: 'Completa nombre, tienda, ciudad y usuario.' });
+    if (!name || !store || !city || !email) {
+      setSettingsNotice({ type: 'error', message: 'Completa nombre, tienda, ciudad y correo.' });
       return;
     }
 
-    const usernameTaken = users.some(user => user.username === username && user.id !== currentUser.id);
-    if (usernameTaken) {
-      setSettingsNotice({ type: 'error', message: 'Ese usuario ya existe. Elige otro.' });
+    if (!email.includes('@')) {
+      setSettingsNotice({ type: 'error', message: 'Ingresa un correo electrónico válido.' });
       return;
     }
-
-    let updatedPassword = currentUser.password;
 
     if (newPassword || confirmNewPassword || currentPassword) {
       if (!currentPassword) {
         setSettingsNotice({ type: 'error', message: 'Ingresa la contraseña actual para cambiar la contraseña.' });
-        return;
-      }
-
-      if (currentPassword !== currentUser.password) {
-        setSettingsNotice({ type: 'error', message: 'La contraseña actual no es correcta.' });
         return;
       }
 
@@ -714,7 +782,43 @@ export default function App() {
         return;
       }
 
-      updatedPassword = newPassword;
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: currentPassword,
+      });
+
+      if (reauthError) {
+        setSettingsNotice({ type: 'error', message: 'La contraseña actual no es correcta.' });
+        return;
+      }
+
+      const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword });
+      if (passwordError) {
+        setSettingsNotice({ type: 'error', message: passwordError.message });
+        return;
+      }
+    }
+
+    if (email !== currentUser.email) {
+      const { error: emailError } = await supabase.auth.updateUser({ email });
+      if (emailError) {
+        setSettingsNotice({ type: 'error', message: emailError.message });
+        return;
+      }
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: currentUser.id,
+        store_name: store,
+        owner_name: name,
+        city,
+      });
+
+    if (profileError) {
+      setSettingsNotice({ type: 'error', message: profileError.message });
+      return;
     }
 
     const updatedUser = {
@@ -722,21 +826,16 @@ export default function App() {
       name,
       store,
       city,
-      username,
-      password: updatedPassword,
+      email,
+      username: email,
     };
 
-    const updatedUsers = users.map(user => user.id === currentUser.id ? updatedUser : user);
-
-    setUsers(updatedUsers);
     setCurrentUser(updatedUser);
-    saveToStorage(STORAGE_KEYS.users, updatedUsers);
-    saveToStorage(STORAGE_KEYS.currentUser, updatedUser);
     setSettingsForm({
-      name: updatedUser.name,
-      store: updatedUser.store,
-      city: updatedUser.city,
-      username: updatedUser.username,
+      name,
+      store,
+      city,
+      username: email,
       currentPassword: '',
       newPassword: '',
       confirmNewPassword: '',
@@ -756,6 +855,17 @@ export default function App() {
   }[active];
 
   const HeaderIcon = pageInfo.icon;
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-700">
+        <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+          <p className="font-bold">Cargando InventiQ...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -987,19 +1097,19 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
 
           {isLogin ? (
             <form onSubmit={login} className="space-y-4">
-              <Field label="Usuario" value={loginForm.username} onChange={v => setLoginForm({ ...loginForm, username: v })} placeholder="Ej: demo" />
-              <Field label="Contraseña" type="password" value={loginForm.password} onChange={v => setLoginForm({ ...loginForm, password: v })} placeholder="Ej: 1234" />
+              <Field label="Correo electrónico" type="email" value={loginForm.username} onChange={v => setLoginForm({ ...loginForm, username: v })} placeholder="Ej: tienda@email.com" />
+              <Field label="Contraseña" type="password" value={loginForm.password} onChange={v => setLoginForm({ ...loginForm, password: v })} placeholder="Tu contraseña" />
               <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Ingresar</button>
               <p className="text-center text-sm text-slate-500">¿No tienes cuenta?</p>
               <button type="button" onClick={() => switchMode('register')} className="w-full rounded-2xl border border-emerald-200 px-5 py-3 font-bold text-emerald-700 hover:bg-emerald-50">Registrarse</button>
-              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Usuario de prueba: <strong>demo</strong> · Contraseña: <strong>1234</strong></p>
+              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Ahora el acceso funciona con Supabase: usa correo electrónico y contraseña.</p>
             </form>
           ) : (
             <form onSubmit={register} className="space-y-4">
               <Field label="Nombre del encargado" value={registerForm.name} onChange={v => setRegisterForm({ ...registerForm, name: v })} placeholder="Ej: Ana Rodríguez" />
               <Field label="Nombre de la tienda" value={registerForm.store} onChange={v => setRegisterForm({ ...registerForm, store: v })} placeholder="Ej: Minimarket La Esquina" />
               <Field label="Ciudad" value={registerForm.city} onChange={v => setRegisterForm({ ...registerForm, city: v })} placeholder="Ej: Ibarra" />
-              <Field label="Usuario" value={registerForm.username} onChange={v => setRegisterForm({ ...registerForm, username: v })} placeholder="Ej: tienda1" />
+              <Field label="Correo electrónico" type="email" value={registerForm.username} onChange={v => setRegisterForm({ ...registerForm, username: v })} placeholder="Ej: tienda@email.com" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Contraseña" type="password" value={registerForm.password} onChange={v => setRegisterForm({ ...registerForm, password: v })} placeholder="Contraseña" />
                 <Field label="Confirmar" type="password" value={registerForm.confirmPassword} onChange={v => setRegisterForm({ ...registerForm, confirmPassword: v })} placeholder="Repetir" />
@@ -1596,7 +1706,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <Field label="Nombre de la tienda" value={settingsForm.store} onChange={v => setSettingsForm({ ...settingsForm, store: v })} placeholder="Nombre de la tienda" />
           <Field label="Propietario / encargado" value={settingsForm.name} onChange={v => setSettingsForm({ ...settingsForm, name: v })} placeholder="Nombre del encargado" />
           <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
-          <Field label="Usuario" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Usuario" />
+          <Field label="Correo electrónico" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
 
           <div className="rounded-2xl bg-slate-50 p-4">
             <h4 className="mb-3 font-bold text-slate-800">Cambiar contraseña</h4>
@@ -1618,8 +1728,8 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
         <div className="space-y-3 text-sm text-slate-600">
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Tienda:</strong> {currentUser.store}</p>
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Encargado:</strong> {currentUser.name}</p>
-          <p className="rounded-2xl bg-slate-50 p-4"><strong>Usuario actual:</strong> {currentUser.username}</p>
-          <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">Los cambios se guardan en el navegador mediante localStorage. Si cambias el usuario, la información seguirá asociada a ese nuevo usuario.</p>
+          <p className="rounded-2xl bg-slate-50 p-4"><strong>Correo actual:</strong> {currentUser.email}</p>
+          <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">El login y el perfil ya usan Supabase. Los módulos de productos, ventas, clientes y proveedores todavía se migrarán en las siguientes fases.</p>
         </div>
       </section>
     </div>
