@@ -319,6 +319,8 @@ export default function App() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
+    const refreshProducts = () => loadProductsFromSupabase(currentUser.id, false);
+
     const channel = supabase
       .channel(`products-${currentUser.id}`)
       .on(
@@ -330,23 +332,24 @@ export default function App() {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
-          loadProductsFromSupabase(currentUser.id);
+          refreshProducts();
         }
       )
       .subscribe(status => {
         console.log('Realtime products status:', status);
       });
 
-    // Respaldo para celulares: algunos navegadores móviles pueden pausar WebSockets.
-    // Esto mantiene sincronizados los productos aunque el canal realtime no dispare al instante.
-    const syncInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadProductsFromSupabase(currentUser.id);
-      }
-    }, 3000);
+    // Respaldo fuerte para celular: sincroniza cada 2 segundos aunque el WebSocket se pause.
+    const syncInterval = setInterval(refreshProducts, 2000);
+
+    // También sincroniza cuando el celular vuelve a enfocar la pestaña.
+    window.addEventListener('focus', refreshProducts);
+    document.addEventListener('visibilitychange', refreshProducts);
 
     return () => {
       clearInterval(syncInterval);
+      window.removeEventListener('focus', refreshProducts);
+      document.removeEventListener('visibilitychange', refreshProducts);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -554,8 +557,8 @@ export default function App() {
     return null;
   }
 
-  async function loadProductsFromSupabase(userId) {
-    setProductsLoading(true);
+  async function loadProductsFromSupabase(userId, showLoader = true) {
+    if (showLoader) setProductsLoading(true);
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -565,12 +568,12 @@ export default function App() {
     if (error) {
       console.error('Error cargando productos:', error);
       setNotice({ type: 'error', message: 'No se pudieron cargar los productos desde Supabase.' });
-      setProductsLoading(false);
+      if (showLoader) setProductsLoading(false);
       return;
     }
 
     setProducts((data || []).map(mapProductFromDb));
-    setProductsLoading(false);
+    if (showLoader) setProductsLoading(false);
   }
 
   async function saveProduct(e) {
@@ -785,6 +788,7 @@ export default function App() {
     }
 
     setProducts(products.filter(p => p.id !== id));
+    await loadProductsFromSupabase(currentUser.id, false);
     setPendingDeleteId(null);
     if (editingId === id) resetForm();
   }
