@@ -396,6 +396,11 @@ export default function App() {
     if (active === 'Productos' && currentUser?.id) {
       loadProductsFromSupabase(currentUser.id);
     }
+
+    if (active === 'Ventas' && currentUser?.id) {
+      loadSalesFromSupabase(currentUser.id);
+      loadProductsFromSupabase(currentUser.id, false);
+    }
   }, [active, currentUser?.id]);
 
   useEffect(() => {
@@ -407,7 +412,10 @@ export default function App() {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const refreshSales = () => loadSalesFromSupabase(currentUser.id, false);
+    const refreshSales = async () => {
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+    };
 
     const channel = supabase
       .channel(`sales-${currentUser.id}`)
@@ -427,10 +435,16 @@ export default function App() {
         console.log('Realtime sales status:', status);
       });
 
-    const syncInterval = setInterval(refreshSales, 3000);
+    // Respaldo fuerte para celular: sincroniza ventas y stock aunque el WebSocket se pause.
+    const syncInterval = setInterval(refreshSales, 2000);
+
+    window.addEventListener('focus', refreshSales);
+    document.addEventListener('visibilitychange', refreshSales);
 
     return () => {
       clearInterval(syncInterval);
+      window.removeEventListener('focus', refreshSales);
+      document.removeEventListener('visibilitychange', refreshSales);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
