@@ -77,7 +77,14 @@ const emptySaleForm = {
   productId: '',
   quantity: 1,
   discount: 0,
+  saleType: 'consumidor',
   customer: '',
+  customerId: '',
+  invoiceEnabled: false,
+  invoiceName: '',
+  invoiceIdentification: '',
+  invoiceAddress: '',
+  invoiceEmail: '',
   paymentMethod: 'Efectivo',
 };
 
@@ -122,6 +129,10 @@ const emptyClientForm = {
   phone: '',
   type: 'Nuevo',
   email: '',
+  identification: '',
+  address: '',
+  invoiceName: '',
+  wantsInvoice: false,
   notes: '',
 };
 
@@ -221,6 +232,11 @@ function mapSaleFromDb(sale) {
     product: sale.product || '',
     customer: sale.customer || 'Consumidor final',
     paymentMethod: sale.payment_method || 'Efectivo',
+    invoiceEnabled: Boolean(sale.invoice_enabled),
+    invoiceName: sale.invoice_name || '',
+    invoiceIdentification: sale.invoice_identification || '',
+    invoiceAddress: sale.invoice_address || '',
+    invoiceEmail: sale.invoice_email || '',
     quantity: Number(sale.quantity || 0),
     subtotal: Number(sale.subtotal || 0),
     discountPercent: Number(sale.discount_percent || 0),
@@ -240,6 +256,11 @@ function mapSaleToDb(sale, userId) {
     product: sale.product,
     customer: sale.customer,
     payment_method: sale.paymentMethod,
+    invoice_enabled: sale.invoiceEnabled,
+    invoice_name: sale.invoiceName,
+    invoice_identification: sale.invoiceIdentification,
+    invoice_address: sale.invoiceAddress,
+    invoice_email: sale.invoiceEmail,
     quantity: sale.quantity,
     subtotal: sale.subtotal,
     discount_percent: sale.discountPercent,
@@ -892,8 +913,13 @@ export default function App() {
       storeName: currentUser.store,
       productId: product.id,
       product: product.name,
-      customer: saleForm.customer || 'Consumidor final',
+      customer: saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final',
       paymentMethod: saleForm.paymentMethod,
+      invoiceEnabled: saleForm.saleType === 'factura' && saleForm.invoiceEnabled,
+      invoiceName: saleForm.saleType === 'factura' ? (saleForm.invoiceName || saleForm.customer || '') : '',
+      invoiceIdentification: saleForm.saleType === 'factura' ? (saleForm.invoiceIdentification || '') : '',
+      invoiceAddress: saleForm.saleType === 'factura' ? (saleForm.invoiceAddress || '') : '',
+      invoiceEmail: saleForm.saleType === 'factura' ? (saleForm.invoiceEmail || '') : '',
       quantity,
       subtotal,
       discount,
@@ -1024,6 +1050,10 @@ export default function App() {
       phone: phone || 'Sin teléfono',
       type: clientForm.type,
       email: clientForm.email.trim(),
+      identification: clientForm.identification.trim(),
+      address: clientForm.address.trim(),
+      invoiceName: clientForm.invoiceName.trim(),
+      wantsInvoice: Boolean(clientForm.wantsInvoice),
       notes: clientForm.notes.trim(),
       purchases: editingClientId ? Number(clients.find(c => c.id === editingClientId)?.purchases || 0) : 0,
     };
@@ -1049,6 +1079,10 @@ export default function App() {
       phone: client.phone || '',
       type: client.type || 'Nuevo',
       email: client.email || '',
+      identification: client.identification || '',
+      address: client.address || '',
+      invoiceName: client.invoiceName || '',
+      wantsInvoice: Boolean(client.wantsInvoice),
       notes: client.notes || '',
     });
   }
@@ -1329,7 +1363,7 @@ export default function App() {
           </header>
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
-          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} />}
+          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} />}
@@ -1558,8 +1592,61 @@ function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue
   );
 }
 
-function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading }) {
+function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading }) {
   const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
+
+  function setSaleType(type) {
+    if (type === 'consumidor') {
+      setSaleForm({
+        ...saleForm,
+        saleType: 'consumidor',
+        customerId: '',
+        customer: '',
+        invoiceEnabled: false,
+        invoiceName: '',
+        invoiceIdentification: '',
+        invoiceAddress: '',
+        invoiceEmail: '',
+      });
+      return;
+    }
+
+    setSaleForm({
+      ...saleForm,
+      saleType: 'factura',
+      invoiceEnabled: true,
+      customer: saleForm.customer || '',
+    });
+  }
+
+  function selectClient(clientId) {
+    const client = clients.find(item => String(item.id) === String(clientId));
+    if (!client) {
+      setSaleForm({
+        ...saleForm,
+        customerId: '',
+        customer: '',
+        invoiceEnabled: true,
+        invoiceName: '',
+        invoiceIdentification: '',
+        invoiceAddress: '',
+        invoiceEmail: '',
+      });
+      return;
+    }
+
+    setSaleForm({
+      ...saleForm,
+      saleType: 'factura',
+      customerId: client.id,
+      customer: client.name,
+      invoiceEnabled: true,
+      invoiceName: client.invoiceName || client.name,
+      invoiceIdentification: client.identification || '',
+      invoiceAddress: client.address || '',
+      invoiceEmail: client.email || '',
+    });
+  }
 
   return (
     <div className="space-y-5">
@@ -1586,7 +1673,7 @@ function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, reset
                     <div>
                       <p className="font-bold">{sale.code}</p>
                       <p className="text-sm text-slate-500">{sale.product} · {sale.quantity} unidades · {sale.date}</p>
-                      <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {sale.paymentMethod || 'Efectivo'}</p>
+                      <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {sale.paymentMethod || 'Efectivo'} {sale.invoiceEnabled ? '· Factura' : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-4 lg:justify-end">
@@ -1643,7 +1730,47 @@ function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, reset
               <Field label="Descuento %" type="number" value={saleForm.discount} onChange={v => setSaleForm({ ...saleForm, discount: v })} placeholder="Ej: 10" min="0" step="0.01" />
             </div>
 
-            <Field label="Cliente" value={saleForm.customer} onChange={v => setSaleForm({ ...saleForm, customer: v })} placeholder="Consumidor final" />
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de venta</span>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setSaleType('consumidor')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'consumidor' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  Consumidor final
+                </button>
+                <button type="button" onClick={() => setSaleType('factura')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'factura' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  Factura
+                </button>
+              </div>
+            </div>
+
+            {saleForm.saleType === 'factura' && (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <h4 className="mb-3 font-bold text-emerald-900">Factura rápida</h4>
+                <label className="mb-3 block">
+                  <span className="mb-2 block text-sm font-semibold text-emerald-900">Buscar cliente guardado</span>
+                  <select value={saleForm.customerId} onChange={e => selectClient(e.target.value)} className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+                    <option value="">Persona no registrada / llenar manual</option>
+                    {clients.map(client => <option key={client.id} value={client.id}>{client.name} {client.wantsInvoice ? '· cliente frecuente' : ''}</option>)}
+                  </select>
+                </label>
+
+                <label className="mb-3 flex items-center gap-3 rounded-2xl bg-white p-4 text-sm font-semibold text-emerald-800">
+                  <input type="checkbox" checked={saleForm.invoiceEnabled} onChange={e => setSaleForm({ ...saleForm, invoiceEnabled: e.target.checked })} className="h-4 w-4" />
+                  Crear factura para esta venta
+                </label>
+
+                {saleForm.invoiceEnabled && (
+                  <div>
+                    <h4 className="mb-3 font-bold text-emerald-900">Datos de facturación</h4>
+                    <div className="space-y-3">
+                      <Field label="Nombre / Razón social" value={saleForm.invoiceName} onChange={v => setSaleForm({ ...saleForm, invoiceName: v, customer: v })} placeholder="Nombre para la factura" />
+                      <Field label="Cédula / RUC" value={saleForm.invoiceIdentification} onChange={v => setSaleForm({ ...saleForm, invoiceIdentification: v })} placeholder="Ej: 1000000001" />
+                      <Field label="Dirección" value={saleForm.invoiceAddress} onChange={v => setSaleForm({ ...saleForm, invoiceAddress: v })} placeholder="Dirección del cliente" />
+                      <Field label="Correo para factura" type="email" value={saleForm.invoiceEmail} onChange={v => setSaleForm({ ...saleForm, invoiceEmail: v })} placeholder="cliente@email.com" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Método de pago</span>
@@ -1756,7 +1883,7 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
                 <div>
                   <p className="font-bold text-slate-900">{client.name}</p>
                   <p className="text-sm text-slate-500">{client.phone} · {client.type}</p>
-                  <p className="text-xs text-slate-400">{client.email || 'Sin correo'} · {client.purchases || 0} compras</p>
+                  <p className="text-xs text-slate-400">{client.email || 'Sin correo'} · {client.purchases || 0} compras {client.wantsInvoice ? '· pide factura' : ''}</p>
                 </div>
                 {isDeleting ? (
                   <div className="flex gap-2">
@@ -1794,6 +1921,13 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
           <Field label="Nombre del cliente" value={clientForm.name} onChange={v => setClientForm({ ...clientForm, name: v })} placeholder="Ej: Juan Pérez" />
           <Field label="Teléfono" value={clientForm.phone} onChange={v => setClientForm({ ...clientForm, phone: v })} placeholder="Ej: 099 000 0000" />
           <Field label="Correo" value={clientForm.email} onChange={v => setClientForm({ ...clientForm, email: v })} placeholder="Ej: cliente@email.com" />
+          <Field label="Cédula / RUC" value={clientForm.identification} onChange={v => setClientForm({ ...clientForm, identification: v })} placeholder="Ej: 1000000001" />
+          <Field label="Dirección" value={clientForm.address} onChange={v => setClientForm({ ...clientForm, address: v })} placeholder="Dirección para factura" />
+          <Field label="Nombre para factura" value={clientForm.invoiceName} onChange={v => setClientForm({ ...clientForm, invoiceName: v })} placeholder="Nombre o razón social" />
+          <label className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+            <input type="checkbox" checked={clientForm.wantsInvoice} onChange={e => setClientForm({ ...clientForm, wantsInvoice: e.target.checked })} className="h-4 w-4" />
+            Cliente frecuente que solicita factura
+          </label>
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de cliente</span>
             <select value={clientForm.type} onChange={e => setClientForm({ ...clientForm, type: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
