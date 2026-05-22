@@ -317,6 +317,36 @@ export default function App() {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const channel = supabase
+      .channel(`products-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          loadProductsFromSupabase(currentUser.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (active === 'Productos' && currentUser?.id) {
+      loadProductsFromSupabase(currentUser.id);
+    }
+  }, [active, currentUser?.id]);
+
+  useEffect(() => {
     saveToStorage(STORAGE_KEYS.sales, sales);
   }, [sales]);
 
