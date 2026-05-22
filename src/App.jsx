@@ -408,6 +408,7 @@ export default function App() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
   const [purchaseNotice, setPurchaseNotice] = useState(null);
+  const [receiptSale, setReceiptSale] = useState(null);
 
   useEffect(() => {
     async function initSupabaseSession() {
@@ -1816,7 +1817,7 @@ export default function App() {
           </header>
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
-          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} />}
+          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
@@ -1828,6 +1829,7 @@ export default function App() {
       </div>
       <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} />
       <MobileFloatingButton setActive={setActive} />
+      {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
   );
 }
@@ -2161,7 +2163,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   );
 }
 
-function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading }) {
+function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
 
   function setSaleType(type) {
@@ -2251,6 +2253,9 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
                       <p className="text-xs text-slate-500">Utilidad: ${(sale.profit || 0).toFixed(2)}</p>
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sale.status === 'Anulada' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{sale.status}</span>
                     </div>
+                    <button type="button" onClick={() => setReceiptSale(sale)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">
+                      Comprobante
+                    </button>
                     {sale.status !== 'Anulada' && (
                       <button onClick={() => cancelSale(sale.id)} className="rounded-xl border border-red-100 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50">
                         Anular
@@ -2369,6 +2374,90 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
           </div>
         </form>
       </section>
+    </div>
+  );
+}
+
+function ReceiptModal({ sale, currentUser, onClose }) {
+  const isInvoice = sale.invoiceEnabled;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">{isInvoice ? 'Factura / comprobante' : 'Comprobante de venta'}</h3>
+            <p className="text-sm text-slate-500">{sale.code} · {sale.date}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
+        </div>
+
+        <div className="p-6" id="receipt-print-area">
+          <div className="mb-6 rounded-3xl bg-emerald-50 p-5">
+            <h2 className="text-2xl font-extrabold text-emerald-900">{currentUser.store}</h2>
+            <p className="text-sm text-emerald-800">Atendido por: {currentUser.name}</p>
+            <p className="text-sm text-emerald-800">Ciudad: {currentUser.city}</p>
+          </div>
+
+          <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase text-slate-400">Comprobante</p>
+              <p className="mt-1 font-bold text-slate-900">{sale.code}</p>
+              <p className="text-sm text-slate-500">Estado: {sale.status}</p>
+              <p className="text-sm text-slate-500">Pago: {sale.paymentMethod}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase text-slate-400">Cliente</p>
+              <p className="mt-1 font-bold text-slate-900">{sale.customer || 'Consumidor final'}</p>
+              {isInvoice ? (
+                <div className="mt-1 text-sm text-slate-500">
+                  <p>Cédula/RUC: {sale.invoiceIdentification || 'No registrado'}</p>
+                  <p>Dirección: {sale.invoiceAddress || 'No registrada'}</p>
+                  <p>Correo: {sale.invoiceEmail || 'No registrado'}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Venta a consumidor final</p>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-slate-100">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Producto</th>
+                  <th className="px-4 py-3">Cant.</th>
+                  <th className="px-4 py-3">Subtotal</th>
+                  <th className="px-4 py-3">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="px-4 py-4 font-bold text-slate-900">{sale.product}</td>
+                  <td className="px-4 py-4">{sale.quantity}</td>
+                  <td className="px-4 py-4">${sale.subtotal.toFixed(2)}</td>
+                  <td className="px-4 py-4 font-bold">${sale.total.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-slate-50 p-5">
+            <div className="flex justify-between text-sm text-slate-600"><span>Subtotal</span><strong>${sale.subtotal.toFixed(2)}</strong></div>
+            <div className="mt-2 flex justify-between text-sm text-slate-600"><span>Descuento</span><strong>-${sale.discount.toFixed(2)}</strong></div>
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <div className="flex justify-between text-lg font-extrabold text-slate-900"><span>Total</span><span>${sale.total.toFixed(2)}</span></div>
+            </div>
+          </div>
+
+          <p className="mt-5 text-center text-xs text-slate-400">Documento generado por InventiQ. Comprobante referencial para control interno.</p>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:justify-end">
+          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Cerrar</button>
+          <button onClick={() => window.print()} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Imprimir / guardar PDF</button>
+        </div>
+      </div>
     </div>
   );
 }
