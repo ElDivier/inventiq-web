@@ -212,6 +212,44 @@ function mapProductToDb(product, userId) {
   };
 }
 
+function mapSaleFromDb(sale) {
+  return {
+    id: sale.id,
+    storeId: sale.user_id,
+    productId: sale.product_id,
+    code: sale.code || '',
+    product: sale.product || '',
+    customer: sale.customer || 'Consumidor final',
+    paymentMethod: sale.payment_method || 'Efectivo',
+    quantity: Number(sale.quantity || 0),
+    subtotal: Number(sale.subtotal || 0),
+    discountPercent: Number(sale.discount_percent || 0),
+    discount: Number(sale.discount || 0),
+    total: Number(sale.total || 0),
+    profit: Number(sale.profit || 0),
+    status: sale.status || 'Completada',
+    date: sale.created_at ? new Date(sale.created_at).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin fecha',
+  };
+}
+
+function mapSaleToDb(sale, userId) {
+  return {
+    user_id: userId,
+    product_id: sale.productId,
+    code: sale.code,
+    product: sale.product,
+    customer: sale.customer,
+    payment_method: sale.paymentMethod,
+    quantity: sale.quantity,
+    subtotal: sale.subtotal,
+    discount_percent: sale.discountPercent,
+    discount: sale.discount,
+    total: sale.total,
+    profit: sale.profit,
+    status: sale.status,
+  };
+}
+
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -222,7 +260,7 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState(null);
   const [active, setActive] = useState('Inicio');
   const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState(() => loadFromStorage(STORAGE_KEYS.sales, initialSales));
+  const [sales, setSales] = useState([]);
   const [clients, setClients] = useState(() => loadFromStorage(STORAGE_KEYS.clients, initialClients));
   const [providers, setProviders] = useState(() => loadFromStorage(STORAGE_KEYS.providers, initialProviders));
   const [search, setSearch] = useState('');
@@ -234,6 +272,7 @@ export default function App() {
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [notice, setNotice] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [editingClientId, setEditingClientId] = useState(null);
   const [pendingDeleteClientId, setPendingDeleteClientId] = useState(null);
@@ -360,8 +399,41 @@ export default function App() {
   }, [active, currentUser?.id]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.sales, sales);
-  }, [sales]);
+    if (currentUser?.id) {
+      loadSalesFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const refreshSales = () => loadSalesFromSupabase(currentUser.id, false);
+
+    const channel = supabase
+      .channel(`sales-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sales',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          refreshSales();
+        }
+      )
+      .subscribe(status => {
+        console.log('Realtime sales status:', status);
+      });
+
+    const syncInterval = setInterval(refreshSales, 3000);
+
+    return () => {
+      clearInterval(syncInterval);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.clients, clients);
@@ -575,6 +647,26 @@ export default function App() {
     if (showLoader) setProductsLoading(false);
   }
 
+  async function loadSalesFromSupabase(userId, showLoader = true) {
+    if (showLoader) setSalesLoading(true);
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando ventas:', error);
+      setSaleNotice({ type: 'error', message: `No se pudieron cargar las ventas: ${error.message}` });
+      if (showLoader) setSalesLoading(false);
+      return;
+    }
+
+    setSales((data || []).map(mapSaleFromDb));
+    if (showLoader) setSalesLoading(false);
+  }
+
   async function saveProduct(e) {
     e.preventDefault();
 
@@ -752,7 +844,7 @@ export default function App() {
     return { product, quantity, subtotal, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
   }
 
-  function registerSale(e) {
+  async function registerSale(e) {
     e.preventDefault();
     const preview = calculateSalePreview();
     const { product, quantity, discount, discountPercent, subtotal, total, profit, error } = preview;
@@ -772,9 +864,16 @@ export default function App() {
       return;
     }
 
+    if (!currentUser?.id) {
+      setSaleNotice({ type: 'error', message: 'No existe una sesión activa.' });
+      return;
+    }
+
+    const newStock = product.stock - quantity;
+    const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
+
     const newSale = {
-      id: Date.now(),
-      code: `V-${String(sales.length + 1).padStart(4, '0')}`,
+      code: `V-${String(storeSales.length + 1).padStart(4, '0')}`,
       storeId: storeKey,
       storeName: currentUser.store,
       productId: product.id,
@@ -787,22 +886,79 @@ export default function App() {
       discountPercent,
       total,
       profit,
-      date: 'Hoy, ahora',
       status: 'Completada',
     };
 
-    setSales([newSale, ...sales]);
-    setProducts(products.map(p => p.id === product.id ? { ...p, stock: p.stock - quantity, status: p.stock - quantity === 0 ? 'Inactivo' : 'Activo' } : p));
+    const { data: saleData, error: saleError } = await supabase
+      .from('sales')
+      .insert(mapSaleToDb(newSale, currentUser.id))
+      .select()
+      .single();
+
+    if (saleError) {
+      console.error('Error registrando venta:', saleError);
+      setSaleNotice({ type: 'error', message: `No se pudo registrar la venta: ${saleError.message}` });
+      return;
+    }
+
+    const { error: productError } = await supabase
+      .from('products')
+      .update({ stock: newStock, status: newStatus })
+      .eq('id', product.id)
+      .eq('user_id', currentUser.id);
+
+    if (productError) {
+      console.error('Error actualizando stock:', productError);
+      setSaleNotice({ type: 'error', message: `La venta se registró, pero no se pudo actualizar el stock: ${productError.message}` });
+      await loadSalesFromSupabase(currentUser.id, false);
+      return;
+    }
+
+    setSales([mapSaleFromDb(saleData), ...sales]);
+    setProducts(products.map(p => p.id === product.id ? { ...p, stock: newStock, status: newStatus } : p));
     setSaleForm(emptySaleForm);
-    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente. Stock actualizado.` });
+    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente. Stock actualizado en Supabase.` });
+    await loadSalesFromSupabase(currentUser.id, false);
+    await loadProductsFromSupabase(currentUser.id, false);
   }
 
-  function cancelSale(id) {
+  async function cancelSale(id) {
     const sale = storeSales.find(s => s.id === id);
-    if (!sale) return;
+    if (!sale || !currentUser?.id) return;
 
-    setSales(sales.map(s => s.id === id ? { ...s, status: 'Anulada' } : s));
-    setProducts(products.map(p => p.id === sale.productId ? { ...p, stock: p.stock + sale.quantity, status: 'Activo' } : p));
+    const product = products.find(p => String(p.id) === String(sale.productId));
+
+    const { error: saleError } = await supabase
+      .from('sales')
+      .update({ status: 'Anulada' })
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (saleError) {
+      console.error('Error anulando venta:', saleError);
+      setSaleNotice({ type: 'error', message: `No se pudo anular la venta: ${saleError.message}` });
+      return;
+    }
+
+    if (product) {
+      const restoredStock = product.stock + sale.quantity;
+      const { error: productError } = await supabase
+        .from('products')
+        .update({ stock: restoredStock, status: 'Activo' })
+        .eq('id', product.id)
+        .eq('user_id', currentUser.id);
+
+      if (productError) {
+        console.error('Error devolviendo stock:', productError);
+        setSaleNotice({ type: 'error', message: `Venta anulada, pero no se pudo devolver stock: ${productError.message}` });
+        await loadSalesFromSupabase(currentUser.id, false);
+        return;
+      }
+    }
+
+    await loadSalesFromSupabase(currentUser.id, false);
+    await loadProductsFromSupabase(currentUser.id, false);
+    setSaleNotice({ type: 'success', message: 'Venta anulada y stock devuelto correctamente.' });
   }
 
   function resetSaleForm() {
@@ -1159,7 +1315,7 @@ export default function App() {
           </header>
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
-          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} />}
+          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} />}
@@ -1388,7 +1544,7 @@ function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue
   );
 }
 
-function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview }) {
+function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading }) {
   const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
 
   return (
@@ -1399,6 +1555,8 @@ function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, reset
         <Metric icon={Percent} label="Descuentos" value={`$${totalDiscount.toFixed(2)}`} note="aplicados" color="amber" />
         <Metric icon={Boxes} label="Unidades vendidas" value={totalUnitsSold} note="productos" color="red" />
       </section>
+
+      {salesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando ventas desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
         <div className="space-y-5">
