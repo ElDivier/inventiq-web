@@ -333,9 +333,20 @@ export default function App() {
           loadProductsFromSupabase(currentUser.id);
         }
       )
-      .subscribe();
+      .subscribe(status => {
+        console.log('Realtime products status:', status);
+      });
+
+    // Respaldo para celulares: algunos navegadores móviles pueden pausar WebSockets.
+    // Esto mantiene sincronizados los productos aunque el canal realtime no dispare al instante.
+    const syncInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadProductsFromSupabase(currentUser.id);
+      }
+    }, 3000);
 
     return () => {
+      clearInterval(syncInterval);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
