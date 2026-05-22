@@ -177,6 +177,42 @@ function getUsersFromStorage() {
   return initialUsers;
 }
 
+function mapProductFromDb(product) {
+  return {
+    id: product.id,
+    storeId: product.user_id,
+    storeName: '',
+    sku: product.sku || '',
+    name: product.name || '',
+    category: product.category || '',
+    price: Number(product.price || 0),
+    cost: Number(product.cost || 0),
+    stock: Number(product.stock || 0),
+    minStock: Number(product.min_stock || 0),
+    status: product.status || 'Activo',
+    description: product.description || '',
+    imageUrl: product.image_url || '',
+  };
+}
+
+function mapProductToDb(product, userId) {
+  return {
+    user_id: userId,
+    sku: product.sku,
+    name: product.name,
+    category: product.category,
+    price: product.price,
+    cost: product.cost,
+    stock: product.stock,
+    min_stock: product.minStock,
+    status: product.status,
+    description: product.description,
+    // Las imágenes en base64 no se guardan aquí para evitar errores de tamaño.
+    // En la siguiente fase se subirán a Supabase Storage y aquí se guardará la URL pública.
+    image_url: product.imageUrl && !String(product.imageUrl).startsWith('data:image') ? product.imageUrl : '',
+  };
+}
+
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -186,7 +222,7 @@ export default function App() {
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
   const [authNotice, setAuthNotice] = useState(null);
   const [active, setActive] = useState('Inicio');
-  const [products, setProducts] = useState(() => loadFromStorage(STORAGE_KEYS.products, initialProducts));
+  const [products, setProducts] = useState([]);
   const [sales, setSales] = useState(() => loadFromStorage(STORAGE_KEYS.sales, initialSales));
   const [clients, setClients] = useState(() => loadFromStorage(STORAGE_KEYS.clients, initialClients));
   const [providers, setProviders] = useState(() => loadFromStorage(STORAGE_KEYS.providers, initialProviders));
@@ -198,6 +234,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [editingClientId, setEditingClientId] = useState(null);
   const [pendingDeleteClientId, setPendingDeleteClientId] = useState(null);
@@ -217,7 +254,15 @@ export default function App() {
         const sessionUser = data?.session?.user;
 
         if (sessionUser) {
-          await loadUserProfile(sessionUser);
+          setCurrentUser({
+            id: sessionUser.id,
+            email: sessionUser.email,
+            username: sessionUser.email,
+            name: sessionUser.email,
+            store: 'Mi Tienda',
+            city: 'Sin ciudad registrada',
+          });
+          loadUserProfile(sessionUser);
         }
       } catch (error) {
         console.error('Error iniciando sesión de Supabase:', error);
@@ -229,10 +274,18 @@ export default function App() {
 
     initSupabaseSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       try {
         if (session?.user) {
-          await loadUserProfile(session.user);
+          setCurrentUser({
+            id: session.user.id,
+            email: session.user.email,
+            username: session.user.email,
+            name: session.user.email,
+            store: 'Mi Tienda',
+            city: 'Sin ciudad registrada',
+          });
+          loadUserProfile(session.user);
         } else {
           setCurrentUser(null);
         }
@@ -258,8 +311,10 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.products, products);
-  }, [products]);
+    if (currentUser?.id) {
+      loadProductsFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id]);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.sales, sales);
@@ -398,7 +453,7 @@ export default function App() {
     setAuthNotice(null);
   }
 
-  const storeKey = currentUser?.username || 'demo';
+  const storeKey = currentUser?.id || 'demo';
   const storeProducts = products.filter(product => (product.storeId || 'demo') === storeKey);
   const storeSales = sales.filter(sale => (sale.storeId || 'demo') === storeKey);
   const storeClients = clients.filter(client => (client.storeId || 'demo') === storeKey);
@@ -458,7 +513,26 @@ export default function App() {
     return null;
   }
 
-  function saveProduct(e) {
+  async function loadProductsFromSupabase(userId) {
+    setProductsLoading(true);
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando productos:', error);
+      setNotice({ type: 'error', message: 'No se pudieron cargar los productos desde Supabase.' });
+      setProductsLoading(false);
+      return;
+    }
+
+    setProducts((data || []).map(mapProductFromDb));
+    setProductsLoading(false);
+  }
+
+  async function saveProduct(e) {
     e.preventDefault();
 
     const finalCategory = form.category === '__new__' ? form.customCategory.trim() : form.category.trim();
@@ -470,6 +544,11 @@ export default function App() {
 
     if (validationError) {
       setNotice({ type: 'error', message: validationError });
+      return;
+    }
+
+    if (!currentUser?.id) {
+      setNotice({ type: 'error', message: 'No existe una sesión activa.' });
       return;
     }
 
@@ -488,12 +567,41 @@ export default function App() {
       imageUrl: form.imageUrl || '',
     };
 
+    const productPayload = mapProductToDb(productData, currentUser.id);
+
     if (editingId) {
-      setProducts(products.map(product => product.id === editingId ? { ...product, ...productData } : product));
-      setNotice({ type: 'success', message: 'Producto actualizado correctamente.' });
+      const { data, error } = await supabase
+        .from('products')
+        .update(productPayload)
+        .eq('id', editingId)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error actualizando producto:', error);
+        setNotice({ type: 'error', message: `No se pudo actualizar el producto: ${error.message}` });
+        return;
+      }
+
+      const updatedProduct = mapProductFromDb(data);
+      setProducts(products.map(product => product.id === editingId ? updatedProduct : product));
+      setNotice({ type: 'success', message: 'Producto actualizado correctamente en Supabase.' });
     } else {
-      setProducts([{ id: Date.now(), ...productData }, ...products]);
-      setNotice({ type: 'success', message: 'Producto guardado correctamente.' });
+      const { data, error } = await supabase
+        .from('products')
+        .insert(productPayload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error guardando producto:', error);
+        setNotice({ type: 'error', message: `No se pudo guardar el producto: ${error.message}` });
+        return;
+      }
+
+      setProducts([mapProductFromDb(data), ...products]);
+      setNotice({ type: 'success', message: 'Producto guardado correctamente en Supabase.' });
     }
 
     setForm(emptyForm);
@@ -540,7 +648,7 @@ export default function App() {
   }
 
   function calculateSalePreview() {
-    const product = storeProducts.find(p => p.id === Number(saleForm.productId));
+    const product = storeProducts.find(p => String(p.id) === String(saleForm.productId));
     const quantity = Number(saleForm.quantity || 0);
     const discountPercent = Number(saleForm.discount || 0);
 
@@ -620,7 +728,21 @@ export default function App() {
     setSaleNotice(null);
   }
 
-  function deleteProduct(id) {
+  async function deleteProduct(id) {
+    if (!currentUser?.id) return;
+
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (error) {
+      console.error('Error eliminando producto:', error);
+      setNotice({ type: 'error', message: `No se pudo eliminar el producto: ${error.message}` });
+      return;
+    }
+
     setProducts(products.filter(p => p.id !== id));
     setPendingDeleteId(null);
     if (editingId === id) resetForm();
@@ -955,7 +1077,7 @@ export default function App() {
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} />}
-          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} />}
+          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} />}
@@ -1300,7 +1422,7 @@ function SalesPage({ sales, products, saleForm, setSaleForm, registerSale, reset
   );
 }
 
-function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage }) {
+function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
   return (
     <>
       <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1309,6 +1431,8 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
         <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
+
+      {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <ProductTable products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} />
