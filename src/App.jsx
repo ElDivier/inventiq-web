@@ -271,6 +271,39 @@ function mapSaleToDb(sale, userId) {
   };
 }
 
+function mapClientFromDb(client) {
+  return {
+    id: client.id,
+    storeId: client.user_id,
+    name: client.name || '',
+    phone: client.phone || 'Sin teléfono',
+    type: client.type || 'Nuevo',
+    email: client.email || '',
+    identification: client.identification || '',
+    address: client.address || '',
+    invoiceName: client.invoice_name || '',
+    wantsInvoice: Boolean(client.wants_invoice),
+    notes: client.notes || '',
+    purchases: Number(client.purchases || 0),
+  };
+}
+
+function mapClientToDb(client, userId) {
+  return {
+    user_id: userId,
+    name: client.name,
+    phone: client.phone,
+    type: client.type,
+    email: client.email,
+    identification: client.identification,
+    address: client.address,
+    invoice_name: client.invoiceName,
+    wants_invoice: client.wantsInvoice,
+    notes: client.notes,
+    purchases: client.purchases,
+  };
+}
+
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -282,7 +315,7 @@ export default function App() {
   const [active, setActive] = useState('Inicio');
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
-  const [clients, setClients] = useState(() => loadFromStorage(STORAGE_KEYS.clients, initialClients));
+  const [clients, setClients] = useState([]);
   const [providers, setProviders] = useState(() => loadFromStorage(STORAGE_KEYS.providers, initialProviders));
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
@@ -294,6 +327,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [salesLoading, setSalesLoading] = useState(false);
+  const [clientsLoading, setClientsLoading] = useState(false);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [editingClientId, setEditingClientId] = useState(null);
   const [pendingDeleteClientId, setPendingDeleteClientId] = useState(null);
@@ -471,8 +505,41 @@ export default function App() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.clients, clients);
-  }, [clients]);
+    if (currentUser?.id) {
+      loadClientsFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const refreshClients = () => loadClientsFromSupabase(currentUser.id, false);
+
+    const channel = supabase
+      .channel(`clients-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clients',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          refreshClients();
+        }
+      )
+      .subscribe(status => {
+        console.log('Realtime clients status:', status);
+      });
+
+    const syncInterval = setInterval(refreshClients, 3000);
+
+    return () => {
+      clearInterval(syncInterval);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.providers, providers);
@@ -700,6 +767,26 @@ export default function App() {
 
     setSales((data || []).map(mapSaleFromDb));
     if (showLoader) setSalesLoading(false);
+  }
+
+  async function loadClientsFromSupabase(userId, showLoader = true) {
+    if (showLoader) setClientsLoading(true);
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando clientes:', error);
+      setClientNotice({ type: 'error', message: `No se pudieron cargar los clientes: ${error.message}` });
+      if (showLoader) setClientsLoading(false);
+      return;
+    }
+
+    setClients((data || []).map(mapClientFromDb));
+    if (showLoader) setClientsLoading(false);
   }
 
   async function saveProduct(e) {
@@ -1033,13 +1120,18 @@ export default function App() {
     setClientNotice(null);
   }
 
-  function saveClient(e) {
+  async function saveClient(e) {
     e.preventDefault();
     const name = clientForm.name.trim();
     const phone = clientForm.phone.trim();
 
     if (!name) {
       setClientNotice({ type: 'error', message: 'Ingresa el nombre del cliente.' });
+      return;
+    }
+
+    if (!currentUser?.id) {
+      setClientNotice({ type: 'error', message: 'No existe una sesión activa.' });
       return;
     }
 
@@ -1058,16 +1150,46 @@ export default function App() {
       purchases: editingClientId ? Number(clients.find(c => c.id === editingClientId)?.purchases || 0) : 0,
     };
 
+    const payload = mapClientToDb(clientData, currentUser.id);
+
     if (editingClientId) {
-      setClients(clients.map(client => client.id === editingClientId ? { ...client, ...clientData } : client));
-      setClientNotice({ type: 'success', message: 'Cliente actualizado correctamente.' });
+      const { data, error } = await supabase
+        .from('clients')
+        .update(payload)
+        .eq('id', editingClientId)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error actualizando cliente:', error);
+        setClientNotice({ type: 'error', message: `No se pudo actualizar el cliente: ${error.message}` });
+        return;
+      }
+
+      const updatedClient = mapClientFromDb(data);
+      setClients(clients.map(client => client.id === editingClientId ? updatedClient : client));
+      setClientNotice({ type: 'success', message: 'Cliente actualizado correctamente en Supabase.' });
     } else {
-      setClients([{ id: Date.now(), ...clientData }, ...clients]);
-      setClientNotice({ type: 'success', message: 'Cliente registrado correctamente.' });
+      const { data, error } = await supabase
+        .from('clients')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error guardando cliente:', error);
+        setClientNotice({ type: 'error', message: `No se pudo guardar el cliente: ${error.message}` });
+        return;
+      }
+
+      setClients([mapClientFromDb(data), ...clients]);
+      setClientNotice({ type: 'success', message: 'Cliente guardado correctamente en Supabase.' });
     }
 
     setClientForm(emptyClientForm);
     setEditingClientId(null);
+    await loadClientsFromSupabase(currentUser.id, false);
   }
 
   function editClient(client) {
@@ -1087,10 +1209,25 @@ export default function App() {
     });
   }
 
-  function deleteClient(id) {
+  async function deleteClient(id) {
+    if (!currentUser?.id) return;
+
+    const { error } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (error) {
+      console.error('Error eliminando cliente:', error);
+      setClientNotice({ type: 'error', message: `No se pudo eliminar el cliente: ${error.message}` });
+      return;
+    }
+
     setClients(clients.filter(client => client.id !== id));
     setPendingDeleteClientId(null);
     if (editingClientId === id) resetClientForm();
+    await loadClientsFromSupabase(currentUser.id, false);
   }
 
   function resetProviderForm() {
@@ -1366,7 +1503,7 @@ export default function App() {
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
-          {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} />}
+          {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} />}
@@ -1867,10 +2004,11 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
   );
 }
 
-function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice }) {
+function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading }) {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        {clientsLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando clientes desde Supabase...</div>}
         <div className="border-b border-slate-100 p-5">
           <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-emerald-600" /> Clientes registrados</h3>
         </div>
