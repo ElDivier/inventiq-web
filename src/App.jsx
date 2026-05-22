@@ -304,6 +304,29 @@ function mapClientToDb(client, userId) {
   };
 }
 
+function mapProviderFromDb(provider) {
+  return {
+    id: provider.id,
+    storeId: provider.user_id,
+    name: provider.name || '',
+    category: provider.category || '',
+    contact: provider.contact || 'Sin contacto',
+    delivery: provider.delivery || 'No definido',
+    notes: provider.notes || '',
+  };
+}
+
+function mapProviderToDb(provider, userId) {
+  return {
+    user_id: userId,
+    name: provider.name,
+    category: provider.category,
+    contact: provider.contact,
+    delivery: provider.delivery,
+    notes: provider.notes,
+  };
+}
+
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -316,7 +339,7 @@ export default function App() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
-  const [providers, setProviders] = useState(() => loadFromStorage(STORAGE_KEYS.providers, initialProviders));
+  const [providers, setProviders] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
   const [saleForm, setSaleForm] = useState(emptySaleForm);
@@ -328,6 +351,7 @@ export default function App() {
   const [productsLoading, setProductsLoading] = useState(false);
   const [salesLoading, setSalesLoading] = useState(false);
   const [clientsLoading, setClientsLoading] = useState(false);
+  const [providersLoading, setProvidersLoading] = useState(false);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [editingClientId, setEditingClientId] = useState(null);
   const [pendingDeleteClientId, setPendingDeleteClientId] = useState(null);
@@ -542,8 +566,41 @@ export default function App() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.providers, providers);
-  }, [providers]);
+    if (currentUser?.id) {
+      loadProvidersFromSupabase(currentUser.id);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const refreshProviders = () => loadProvidersFromSupabase(currentUser.id, false);
+
+    const channel = supabase
+      .channel(`providers-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'providers',
+          filter: `user_id=eq.${currentUser.id}`,
+        },
+        () => {
+          refreshProviders();
+        }
+      )
+      .subscribe(status => {
+        console.log('Realtime providers status:', status);
+      });
+
+    const syncInterval = setInterval(refreshProviders, 3000);
+
+    return () => {
+      clearInterval(syncInterval);
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (currentUser) {
@@ -787,6 +844,26 @@ export default function App() {
 
     setClients((data || []).map(mapClientFromDb));
     if (showLoader) setClientsLoading(false);
+  }
+
+  async function loadProvidersFromSupabase(userId, showLoader = true) {
+    if (showLoader) setProvidersLoading(true);
+
+    const { data, error } = await supabase
+      .from('providers')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando proveedores:', error);
+      setProviderNotice({ type: 'error', message: `No se pudieron cargar los proveedores: ${error.message}` });
+      if (showLoader) setProvidersLoading(false);
+      return;
+    }
+
+    setProviders((data || []).map(mapProviderFromDb));
+    if (showLoader) setProvidersLoading(false);
   }
 
   async function saveProduct(e) {
@@ -1236,7 +1313,7 @@ export default function App() {
     setProviderNotice(null);
   }
 
-  function saveProvider(e) {
+  async function saveProvider(e) {
     e.preventDefault();
     const name = providerForm.name.trim();
     const categoryValue = providerForm.category.trim();
@@ -1251,6 +1328,11 @@ export default function App() {
       return;
     }
 
+    if (!currentUser?.id) {
+      setProviderNotice({ type: 'error', message: 'No existe una sesión activa.' });
+      return;
+    }
+
     const providerData = {
       storeId: storeKey,
       storeName: currentUser.store,
@@ -1261,16 +1343,46 @@ export default function App() {
       notes: providerForm.notes.trim(),
     };
 
+    const payload = mapProviderToDb(providerData, currentUser.id);
+
     if (editingProviderId) {
-      setProviders(providers.map(provider => provider.id === editingProviderId ? { ...provider, ...providerData } : provider));
-      setProviderNotice({ type: 'success', message: 'Proveedor actualizado correctamente.' });
+      const { data, error } = await supabase
+        .from('providers')
+        .update(payload)
+        .eq('id', editingProviderId)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error actualizando proveedor:', error);
+        setProviderNotice({ type: 'error', message: `No se pudo actualizar el proveedor: ${error.message}` });
+        return;
+      }
+
+      const updatedProvider = mapProviderFromDb(data);
+      setProviders(providers.map(provider => provider.id === editingProviderId ? updatedProvider : provider));
+      setProviderNotice({ type: 'success', message: 'Proveedor actualizado correctamente en Supabase.' });
     } else {
-      setProviders([{ id: Date.now(), ...providerData }, ...providers]);
-      setProviderNotice({ type: 'success', message: 'Proveedor registrado correctamente.' });
+      const { data, error } = await supabase
+        .from('providers')
+        .insert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error guardando proveedor:', error);
+        setProviderNotice({ type: 'error', message: `No se pudo guardar el proveedor: ${error.message}` });
+        return;
+      }
+
+      setProviders([mapProviderFromDb(data), ...providers]);
+      setProviderNotice({ type: 'success', message: 'Proveedor guardado correctamente en Supabase.' });
     }
 
     setProviderForm(emptyProviderForm);
     setEditingProviderId(null);
+    await loadProvidersFromSupabase(currentUser.id, false);
   }
 
   function editProvider(provider) {
@@ -1286,10 +1398,25 @@ export default function App() {
     });
   }
 
-  function deleteProvider(id) {
+  async function deleteProvider(id) {
+    if (!currentUser?.id) return;
+
+    const { error } = await supabase
+      .from('providers')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (error) {
+      console.error('Error eliminando proveedor:', error);
+      setProviderNotice({ type: 'error', message: `No se pudo eliminar el proveedor: ${error.message}` });
+      return;
+    }
+
     setProviders(providers.filter(provider => provider.id !== id));
     setPendingDeleteProviderId(null);
     if (editingProviderId === id) resetProviderForm();
+    await loadProvidersFromSupabase(currentUser.id, false);
   }
 
   async function saveSettings(e) {
@@ -1504,7 +1631,7 @@ export default function App() {
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
-          {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} />}
+          {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} />}
         </main>
@@ -2089,7 +2216,7 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
   );
 }
 
-function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider, resetProviderForm, editProvider, deleteProvider, editingProviderId, pendingDeleteProviderId, setPendingDeleteProviderId, providerNotice, productCategories, products }) {
+function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider, resetProviderForm, editProvider, deleteProvider, editingProviderId, pendingDeleteProviderId, setPendingDeleteProviderId, providerNotice, productCategories, products, providersLoading }) {
   const lowStockProducts = products.filter(product => product.stock <= product.minStock);
 
   return (
@@ -2113,6 +2240,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          {providersLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando proveedores desde Supabase...</div>}
           <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold"><Truck className="h-5 w-5 text-emerald-600" /> Proveedores registrados</h3>
           </div>
