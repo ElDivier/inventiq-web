@@ -150,6 +150,11 @@ const emptySettingsForm = {
   name: '',
   store: '',
   city: '',
+  businessId: '',
+  address: '',
+  phone: '',
+  commercialEmail: '',
+  receiptFooter: '',
   username: '',
   currentPassword: '',
   newPassword: '',
@@ -451,6 +456,11 @@ export default function App() {
             name: sessionUser.email,
             store: 'Mi Tienda',
             city: 'Sin ciudad registrada',
+            businessId: '',
+            address: '',
+            phone: '',
+            commercialEmail: '',
+            receiptFooter: 'Gracias por su compra.',
           });
           loadUserProfile(sessionUser);
         }
@@ -474,6 +484,11 @@ export default function App() {
             name: session.user.email,
             store: 'Mi Tienda',
             city: 'Sin ciudad registrada',
+            businessId: '',
+            address: '',
+            phone: '',
+            commercialEmail: '',
+            receiptFooter: 'Gracias por su compra.',
           });
           loadUserProfile(session.user);
         } else {
@@ -721,6 +736,11 @@ export default function App() {
         name: currentUser.name || '',
         store: currentUser.store || '',
         city: currentUser.city || '',
+        businessId: currentUser.businessId || '',
+        address: currentUser.address || '',
+        phone: currentUser.phone || '',
+        commercialEmail: currentUser.commercialEmail || '',
+        receiptFooter: currentUser.receiptFooter || 'Gracias por su compra.',
         username: currentUser.username || '',
         currentPassword: '',
         newPassword: '',
@@ -747,6 +767,11 @@ export default function App() {
       name: profile?.owner_name || sessionUser.email,
       store: profile?.store_name || 'Mi Tienda',
       city: profile?.city || 'Sin ciudad registrada',
+      businessId: profile?.business_id || '',
+      address: profile?.address || '',
+      phone: profile?.phone || '',
+      commercialEmail: profile?.commercial_email || '',
+      receiptFooter: profile?.receipt_footer || 'Gracias por su compra.',
     });
   }
 
@@ -1641,6 +1666,11 @@ export default function App() {
     const store = settingsForm.store.trim();
     const city = settingsForm.city.trim();
     const email = settingsForm.username.trim();
+    const businessId = settingsForm.businessId.trim();
+    const address = settingsForm.address.trim();
+    const phone = settingsForm.phone.trim();
+    const commercialEmail = settingsForm.commercialEmail.trim();
+    const receiptFooter = settingsForm.receiptFooter.trim();
     const currentPassword = settingsForm.currentPassword.trim();
     const newPassword = settingsForm.newPassword.trim();
     const confirmNewPassword = settingsForm.confirmNewPassword.trim();
@@ -1703,6 +1733,11 @@ export default function App() {
         store_name: store,
         owner_name: name,
         city,
+        business_id: businessId,
+        address,
+        phone,
+        commercial_email: commercialEmail,
+        receipt_footer: receiptFooter || 'Gracias por su compra.',
       });
 
     if (profileError) {
@@ -1715,6 +1750,11 @@ export default function App() {
       name,
       store,
       city,
+      businessId,
+      address,
+      phone,
+      commercialEmail,
+      receiptFooter: receiptFooter || 'Gracias por su compra.',
       email,
       username: email,
     };
@@ -1724,6 +1764,11 @@ export default function App() {
       name,
       store,
       city,
+      businessId,
+      address,
+      phone,
+      commercialEmail,
+      receiptFooter: receiptFooter || 'Gracias por su compra.',
       username: email,
       currentPassword: '',
       newPassword: '',
@@ -2424,6 +2469,10 @@ function ReceiptModal({ sale, currentUser, onClose }) {
             <h2 className="text-2xl font-extrabold text-emerald-900">{currentUser.store}</h2>
             <p className="text-sm text-emerald-800">Atendido por: {currentUser.name}</p>
             <p className="text-sm text-emerald-800">Ciudad: {currentUser.city}</p>
+            {currentUser.businessId && <p className="text-sm text-emerald-800">RUC/ID: {currentUser.businessId}</p>}
+            {currentUser.address && <p className="text-sm text-emerald-800">Dirección: {currentUser.address}</p>}
+            {currentUser.phone && <p className="text-sm text-emerald-800">Teléfono: {currentUser.phone}</p>}
+            {currentUser.commercialEmail && <p className="text-sm text-emerald-800">Correo: {currentUser.commercialEmail}</p>}
           </div>
 
           <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2477,7 +2526,8 @@ function ReceiptModal({ sale, currentUser, onClose }) {
             </div>
           </div>
 
-          <p className="mt-5 text-center text-xs text-slate-400">Documento generado por InventiQ. Comprobante referencial para control interno.</p>
+          <p className="mt-5 text-center text-xs text-slate-400">{currentUser.receiptFooter || 'Gracias por su compra.'}</p>
+          <p className="mt-2 text-center text-xs text-slate-400">Documento generado por InventiQ. Comprobante referencial para control interno.</p>
         </div>
 
         <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:justify-end">
@@ -3025,7 +3075,15 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <Field label="Nombre de la tienda" value={settingsForm.store} onChange={v => setSettingsForm({ ...settingsForm, store: v })} placeholder="Nombre de la tienda" />
           <Field label="Propietario / encargado" value={settingsForm.name} onChange={v => setSettingsForm({ ...settingsForm, name: v })} placeholder="Nombre del encargado" />
           <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
-          <Field label="Correo electrónico" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
+          <Field label="RUC / identificación de la tienda" value={settingsForm.businessId} onChange={v => setSettingsForm({ ...settingsForm, businessId: v })} placeholder="Ej: 1000000001001" />
+          <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
+          <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
+          <Field label="Correo comercial" type="email" value={settingsForm.commercialEmail} onChange={v => setSettingsForm({ ...settingsForm, commercialEmail: v })} placeholder="Ej: ventas@mitienda.com" />
+          <Field label="Correo de acceso" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">Texto al pie del comprobante</span>
+            <textarea value={settingsForm.receiptFooter} onChange={e => setSettingsForm({ ...settingsForm, receiptFooter: e.target.value })} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Ej: Gracias por su compra." />
+          </label>
 
           <div className="rounded-2xl bg-slate-50 p-4">
             <h4 className="mb-3 font-bold text-slate-800">Cambiar contraseña</h4>
@@ -3048,7 +3106,10 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Tienda:</strong> {currentUser.store}</p>
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Encargado:</strong> {currentUser.name}</p>
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Correo actual:</strong> {currentUser.email}</p>
-          <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">El login y el perfil ya usan Supabase. Los módulos de productos, ventas, clientes y proveedores todavía se migrarán en las siguientes fases.</p>
+          <p className="rounded-2xl bg-slate-50 p-4"><strong>RUC/ID:</strong> {currentUser.businessId || 'No registrado'}</p>
+          <p className="rounded-2xl bg-slate-50 p-4"><strong>Dirección:</strong> {currentUser.address || 'No registrada'}</p>
+          <p className="rounded-2xl bg-slate-50 p-4"><strong>Teléfono:</strong> {currentUser.phone || 'No registrado'}</p>
+          <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">Estos datos aparecerán en el comprobante visual de ventas y facturas.</p>
         </div>
       </section>
     </div>
