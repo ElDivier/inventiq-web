@@ -382,7 +382,7 @@ function exportToCSV(filename, rows) {
       const value = row[header] ?? '';
       return `"${String(value).replace(/"/g, '""')}"`;
     }).join(';')),
-  ].join('\\n');
+  ].join('\n');
 
   const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1850,7 +1850,7 @@ export default function App() {
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
-          {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} />}
+          {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} />}
         </main>
       </div>
@@ -2765,7 +2765,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
   );
 }
 
-function ReportsPage({ products, sales, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit }) {
+function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit }) {
   const completedSales = sales.filter(s => s.status !== 'Anulada');
 
   const salesByProduct = products.map(product => {
@@ -2812,6 +2812,78 @@ function ReportsPage({ products, sales, totalSales, inventoryValue, potentialPro
   const typeA = salesByProduct.filter(p => p.abc === 'A').length;
   const typeB = salesByProduct.filter(p => p.abc === 'B').length;
   const typeC = salesByProduct.filter(p => p.abc === 'C').length;
+  const totalPurchases = purchases.reduce((sum, purchase) => sum + purchase.total, 0);
+  const netBalance = totalSales - totalPurchases;
+
+  function exportSales() {
+    exportToCSV('inventiq_ventas.csv', sales.map(sale => ({
+      Codigo: sale.code,
+      Producto: sale.product,
+      Cliente: sale.customer,
+      Cantidad: sale.quantity,
+      Subtotal: sale.subtotal,
+      Descuento: sale.discount,
+      Total: sale.total,
+      Utilidad: sale.profit,
+      Estado: sale.status,
+      Factura: sale.invoiceEnabled ? 'Si' : 'No',
+      Fecha: sale.date,
+    })));
+  }
+
+  function exportPurchases() {
+    exportToCSV('inventiq_compras.csv', purchases.map(purchase => ({
+      Codigo: purchase.code,
+      Producto: purchase.product,
+      Proveedor: purchase.provider,
+      Cantidad: purchase.quantity,
+      Costo_unitario: purchase.unitCost,
+      Total: purchase.total,
+      Nota: purchase.note,
+      Fecha: purchase.date,
+    })));
+  }
+
+  function exportRecommendations() {
+    exportToCSV('inventiq_recomendaciones.csv', salesByProduct.map(product => ({
+      Producto: product.name,
+      Categoria: product.category,
+      ABC: product.abc,
+      Unidades_vendidas: product.unitsSold,
+      Ingresos: product.revenue.toFixed(2),
+      Utilidad: product.profit.toFixed(2),
+      Stock: product.stock,
+      Stock_minimo: product.minStock,
+      Compra_sugerida: product.suggestedPurchase,
+      Decision_compra: product.recommendation,
+      Marketing: product.marketing,
+    })));
+  }
+
+  function exportDirectory() {
+    exportToCSV('inventiq_clientes_proveedores.csv', [
+      ...clients.map(client => ({
+        Tipo: 'Cliente',
+        Nombre: client.name,
+        Categoria: client.type,
+        Contacto: client.phone,
+        Correo: client.email,
+        Identificacion: client.identification,
+        Direccion: client.address,
+        Observaciones: client.notes,
+      })),
+      ...providers.map(provider => ({
+        Tipo: 'Proveedor',
+        Nombre: provider.name,
+        Categoria: provider.category,
+        Contacto: provider.contact,
+        Correo: '',
+        Identificacion: '',
+        Direccion: '',
+        Observaciones: `Entrega: ${provider.delivery}. ${provider.notes || ''}`,
+      })),
+    ]);
+  }
 
   return (
     <div className="space-y-5">
@@ -2820,6 +2892,23 @@ function ReportsPage({ products, sales, totalSales, inventoryValue, potentialPro
         <Metric icon={TrendingUp} label="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} note="estimada" color="blue" />
         <Metric icon={Package} label="Producto estrella" value={bestSeller} note="más vendido" color="amber" />
         <Metric icon={BarChart3} label="ABC" value={`A:${typeA} B:${typeB} C:${typeC}`} note="clasificación" color="red" />
+        <Metric icon={ClipboardList} label="Compras" value={`$${totalPurchases.toFixed(2)}`} note="registradas" color="amber" />
+      </section>
+
+      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-emerald-900">Reportes exportables</h3>
+            <p className="text-sm text-emerald-800">Descarga ventas, compras, recomendaciones y directorio de clientes/proveedores.</p>
+            <p className={`mt-2 text-sm font-bold ${netBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>Balance ventas - compras: ${netBalance.toFixed(2)}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button onClick={exportSales} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Ventas</button>
+            <button onClick={exportPurchases} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Compras</button>
+            <button onClick={exportRecommendations} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Recomendaciones</button>
+            <button onClick={exportDirectory} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Directorio</button>
+          </div>
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
