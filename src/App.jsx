@@ -31,6 +31,7 @@ import {
   Lock,
   User,
   MoreHorizontal,
+  Download,
 } from 'lucide-react';
 
 const emptyForm = {
@@ -366,6 +367,32 @@ function mapPurchaseToDb(purchase, userId) {
     total: purchase.total,
     note: purchase.note,
   };
+}
+
+function exportToCSV(filename, rows) {
+  if (!rows || rows.length === 0) {
+    alert('No existen datos para exportar.');
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const csv = [
+    headers.join(';'),
+    ...rows.map(row => headers.map(header => {
+      const value = row[header] ?? '';
+      return `"${String(value).replace(/"/g, '""')}"`;
+    }).join(';')),
+  ].join('\\n');
+
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 export default function App() {
@@ -2494,6 +2521,24 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
 
 function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialProfit, statusText }) {
   const alerts = products.filter(p => p.stock <= p.minStock);
+  const criticalProducts = products.filter(p => p.stock === 0);
+  const availableProducts = products.filter(p => p.stock > p.minStock);
+
+  function exportInventory() {
+    exportToCSV('inventiq_inventario.csv', products.map(product => ({
+      SKU: product.sku,
+      Producto: product.name,
+      Categoria: product.category,
+      Precio_venta: product.price,
+      Costo: product.cost,
+      Stock_actual: product.stock,
+      Stock_minimo: product.minStock,
+      Estado: statusText(product).label,
+      Valor_inventario: (product.cost * product.stock).toFixed(2),
+      Ganancia_potencial: ((product.price - product.cost) * product.stock).toFixed(2),
+    })));
+  }
+
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -2501,6 +2546,18 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
         <Metric icon={TrendingUp} label="Ganancia potencial" value={`$${potentialProfit.toFixed(2)}`} note="estimada" color="emerald" />
         <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
         <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
+      </section>
+
+      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-emerald-900">Control de inventario</h3>
+            <p className="text-sm text-emerald-800">{availableProducts.length} productos disponibles, {alerts.length} con alerta y {criticalProducts.length} sin stock.</p>
+          </div>
+          <button onClick={exportInventory} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">
+            <Download className="mr-2 inline h-5 w-5" />Exportar inventario
+          </button>
+        </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
