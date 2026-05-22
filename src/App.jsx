@@ -44,6 +44,7 @@ const emptyForm = {
   sku: '',
   description: '',
   imageUrl: '',
+  imageFile: null,
 };
 
 const initialProducts = [
@@ -207,9 +208,7 @@ function mapProductToDb(product, userId) {
     min_stock: product.minStock,
     status: product.status,
     description: product.description,
-    // Las imágenes en base64 no se guardan aquí para evitar errores de tamaño.
-    // En la siguiente fase se subirán a Supabase Storage y aquí se guardará la URL pública.
-    image_url: product.imageUrl && !String(product.imageUrl).startsWith('data:image') ? product.imageUrl : '',
+    image_url: product.imageUrl || '',
   };
 }
 
@@ -596,6 +595,18 @@ export default function App() {
       return;
     }
 
+    let uploadedImageUrl = form.imageUrl || '';
+
+    if (form.imageFile) {
+      try {
+        setNotice({ type: 'success', message: 'Subiendo imagen del producto...' });
+        uploadedImageUrl = await uploadProductImage(form.imageFile, form.name.trim());
+      } catch (error) {
+        setNotice({ type: 'error', message: `No se pudo subir la imagen: ${error.message}` });
+        return;
+      }
+    }
+
     const productData = {
       storeId: storeKey,
       storeName: currentUser.store,
@@ -608,7 +619,7 @@ export default function App() {
       minStock,
       status: stock === 0 ? 'Inactivo' : 'Activo',
       description: form.description.trim(),
-      imageUrl: form.imageUrl || '',
+      imageUrl: uploadedImageUrl,
     };
 
     const productPayload = mapProductToDb(productData, currentUser.id);
@@ -668,7 +679,34 @@ export default function App() {
       sku: product.sku,
       description: product.description || '',
       imageUrl: product.imageUrl || '',
+      imageFile: null,
     });
+  }
+
+  async function uploadProductImage(file, productName) {
+    if (!file) return form.imageUrl || '';
+
+    const extension = file.name.split('.').pop() || 'png';
+    const safeName = productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'producto';
+    const filePath = `${currentUser.id}/${Date.now()}-${safeName}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Error subiendo imagen:', uploadError);
+      throw new Error(uploadError.message);
+    }
+
+    const { data } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   }
 
   function handleProductImage(file) {
@@ -686,7 +724,7 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = () => {
-      setForm(prev => ({ ...prev, imageUrl: reader.result }));
+      setForm(prev => ({ ...prev, imageUrl: reader.result, imageFile: file }));
     };
     reader.readAsDataURL(file);
   }
@@ -2040,7 +2078,7 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
           {form.imageUrl ? (
             <div className="space-y-3">
               <img src={form.imageUrl} alt="Vista previa del producto" className="mx-auto h-32 w-32 rounded-2xl object-cover shadow-sm" />
-              <button type="button" onClick={() => setForm({ ...form, imageUrl: '' })} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Quitar imagen</button>
+              <button type="button" onClick={() => setForm({ ...form, imageUrl: '', imageFile: null })} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Quitar imagen</button>
             </div>
           ) : (
             <div>
