@@ -1,11 +1,1 @@
-html,
-body,
-#root {
-  min-height: 100%;
-  background: #022c22;
-}
-
-body {
-  margin: 0;
-}
 @import "tailwindcss";
