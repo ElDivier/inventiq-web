@@ -277,7 +277,7 @@ function mapSaleFromDb(sale) {
 function mapSaleToDb(sale, userId) {
   return {
     user_id: userId,
-    product_id: sale.productId,
+    product_id: sale.productId || null,
     code: sale.code,
     product: sale.product,
     customer: sale.customer,
@@ -294,6 +294,34 @@ function mapSaleToDb(sale, userId) {
     total: sale.total,
     profit: sale.profit,
     status: sale.status,
+  };
+}
+
+function mapSaleItemFromDb(item) {
+  return {
+    id: item.id,
+    saleId: item.sale_id,
+    productId: item.product_id,
+    product: item.product || '',
+    quantity: Number(item.quantity || 0),
+    price: Number(item.price || 0),
+    cost: Number(item.cost || 0),
+    subtotal: Number(item.subtotal || 0),
+    profit: Number(item.profit || 0),
+  };
+}
+
+function mapSaleItemToDb(item, saleId, userId) {
+  return {
+    user_id: userId,
+    sale_id: saleId,
+    product_id: item.productId,
+    product: item.product,
+    quantity: item.quantity,
+    price: item.price,
+    cost: item.cost,
+    subtotal: item.subtotal,
+    profit: item.profit,
   };
 }
 
@@ -433,6 +461,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
   const [saleForm, setSaleForm] = useState(emptySaleForm);
+  const [saleCart, setSaleCart] = useState([]);
   const [saleNotice, setSaleNotice] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
@@ -996,7 +1025,28 @@ export default function App() {
       return;
     }
 
-    setSales((data || []).map(mapSaleFromDb));
+    const saleIds = (data || []).map(sale => sale.id);
+    let itemsBySale = {};
+
+    if (saleIds.length > 0) {
+      const { data: itemData, error: itemError } = await supabase
+        .from('sale_items')
+        .select('*')
+        .in('sale_id', saleIds);
+
+      if (!itemError) {
+        itemsBySale = (itemData || []).reduce((acc, item) => {
+          const mapped = mapSaleItemFromDb(item);
+          acc[mapped.saleId] = acc[mapped.saleId] || [];
+          acc[mapped.saleId].push(mapped);
+          return acc;
+        }, {});
+      } else {
+        console.error('Error cargando detalle de ventas:', itemError);
+      }
+    }
+
+    setSales((data || []).map(sale => ({ ...mapSaleFromDb(sale), items: itemsBySale[sale.id] || [] })));
     if (showLoader) setSalesLoading(false);
   }
 
@@ -1266,26 +1316,84 @@ export default function App() {
   }
 
   function calculateSalePreview() {
-    const product = storeProducts.find(p => String(p.id) === String(saleForm.productId));
+    const selectedProduct = storeProducts.find(p => String(p.id) === String(saleForm.productId));
     const quantity = Number(saleForm.quantity || 0);
     const discountPercent = Number(saleForm.discount || 0);
 
-    if (!product || quantity <= 0) {
-      return { product: null, quantity, subtotal: 0, discountPercent, discount: 0, total: 0, profit: 0, error: null };
-    }
-
-    const subtotal = product.price * quantity;
+    const subtotal = saleCart.reduce((sum, item) => sum + item.subtotal, 0);
     const safeDiscountPercent = Math.min(Math.max(discountPercent, 0), 100);
     const discountAmount = subtotal * (safeDiscountPercent / 100);
     const total = subtotal - discountAmount;
-    const profit = total - product.cost * quantity;
+    const cartCost = saleCart.reduce((sum, item) => sum + item.cost * item.quantity, 0);
+    const profit = total - cartCost;
 
     let error = null;
-    if (quantity > product.stock) error = `No puedes vender ${quantity} unidades. Stock disponible: ${product.stock}.`;
     if (discountPercent < 0) error = 'El descuento no puede ser negativo.';
     if (discountPercent > 100) error = 'El descuento no puede ser mayor al 100%.';
 
-    return { product, quantity, subtotal, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
+    return { product: selectedProduct || null, quantity, subtotal, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
+  }
+
+  function addSaleItem() {
+    const product = storeProducts.find(p => String(p.id) === String(saleForm.productId));
+    const quantity = Number(saleForm.quantity || 0);
+
+    if (!product) {
+      setSaleNotice({ type: 'error', message: 'Selecciona un producto para agregar al carrito.' });
+      return;
+    }
+
+    if (quantity <= 0 || Number.isNaN(quantity)) {
+      setSaleNotice({ type: 'error', message: 'La cantidad debe ser mayor a 0.' });
+      return;
+    }
+
+    const currentInCart = saleCart
+      .filter(item => String(item.productId) === String(product.id))
+      .reduce((sum, item) => sum + item.quantity, 0);
+
+    if (quantity + currentInCart > product.stock) {
+      setSaleNotice({ type: 'error', message: `No puedes agregar ${quantity} unidades. Stock disponible: ${product.stock - currentInCart}.` });
+      return;
+    }
+
+    const existing = saleCart.find(item => String(item.productId) === String(product.id));
+
+    if (existing) {
+      setSaleCart(saleCart.map(item => String(item.productId) === String(product.id)
+        ? {
+          ...item,
+          quantity: item.quantity + quantity,
+          subtotal: product.price * (item.quantity + quantity),
+          profit: (product.price - product.cost) * (item.quantity + quantity),
+        }
+        : item
+      ));
+    } else {
+      setSaleCart([
+        ...saleCart,
+        {
+          productId: product.id,
+          product: product.name,
+          quantity,
+          price: product.price,
+          cost: product.cost,
+          subtotal: product.price * quantity,
+          profit: (product.price - product.cost) * quantity,
+        },
+      ]);
+    }
+
+    setSaleForm({ ...saleForm, productId: '', quantity: 1 });
+    setSaleNotice(null);
+  }
+
+  function removeSaleItem(productId) {
+    setSaleCart(saleCart.filter(item => String(item.productId) !== String(productId)));
+  }
+
+  function clearSaleCart() {
+    setSaleCart([]);
   }
 
   async function registerPurchase(e) {
@@ -1374,15 +1482,10 @@ export default function App() {
   async function registerSale(e) {
     e.preventDefault();
     const preview = calculateSalePreview();
-    const { product, quantity, discount, discountPercent, subtotal, total, profit, error } = preview;
+    const { discount, discountPercent, subtotal, total, profit, error } = preview;
 
-    if (!product) {
-      setSaleNotice({ type: 'error', message: 'Selecciona un producto para registrar la venta.' });
-      return;
-    }
-
-    if (quantity <= 0 || Number.isNaN(quantity)) {
-      setSaleNotice({ type: 'error', message: 'La cantidad debe ser mayor a 0.' });
+    if (saleCart.length === 0) {
+      setSaleNotice({ type: 'error', message: 'Agrega al menos un producto al carrito.' });
       return;
     }
 
@@ -1396,15 +1499,27 @@ export default function App() {
       return;
     }
 
-    const newStock = product.stock - quantity;
-    const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
+    for (const item of saleCart) {
+      const product = storeProducts.find(p => String(p.id) === String(item.productId));
+      if (!product) {
+        setSaleNotice({ type: 'error', message: `No se encontró el producto ${item.product}.` });
+        return;
+      }
+      if (item.quantity > product.stock) {
+        setSaleNotice({ type: 'error', message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}.` });
+        return;
+      }
+    }
+
+    const totalQuantity = saleCart.reduce((sum, item) => sum + item.quantity, 0);
+    const productSummary = saleCart.length === 1 ? saleCart[0].product : `${saleCart.length} productos`;
 
     const newSale = {
       code: `V-${String(storeSales.length + 1).padStart(4, '0')}`,
       storeId: storeKey,
       storeName: currentUser.store,
-      productId: product.id,
-      product: product.name,
+      productId: saleCart.length === 1 ? saleCart[0].productId : null,
+      product: productSummary,
       customer: saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final',
       paymentMethod: saleForm.paymentMethod,
       invoiceEnabled: saleForm.saleType === 'factura' && saleForm.invoiceEnabled,
@@ -1412,7 +1527,7 @@ export default function App() {
       invoiceIdentification: saleForm.saleType === 'factura' ? (saleForm.invoiceIdentification || '') : '',
       invoiceAddress: saleForm.saleType === 'factura' ? (saleForm.invoiceAddress || '') : '',
       invoiceEmail: saleForm.saleType === 'factura' ? (saleForm.invoiceEmail || '') : '',
-      quantity,
+      quantity: totalQuantity,
       subtotal,
       discount,
       discountPercent,
@@ -1433,23 +1548,38 @@ export default function App() {
       return;
     }
 
-    const { error: productError } = await supabase
-      .from('products')
-      .update({ stock: newStock, status: newStatus })
-      .eq('id', product.id)
-      .eq('user_id', currentUser.id);
+    const itemsPayload = saleCart.map(item => mapSaleItemToDb(item, saleData.id, currentUser.id));
+    const { error: itemsError } = await supabase.from('sale_items').insert(itemsPayload);
 
-    if (productError) {
-      console.error('Error actualizando stock:', productError);
-      setSaleNotice({ type: 'error', message: `La venta se registró, pero no se pudo actualizar el stock: ${productError.message}` });
-      await loadSalesFromSupabase(currentUser.id, false);
+    if (itemsError) {
+      console.error('Error guardando detalle de venta:', itemsError);
+      setSaleNotice({ type: 'error', message: `La venta se creó, pero no se guardó el detalle: ${itemsError.message}` });
       return;
     }
 
-    setSales([mapSaleFromDb(saleData), ...sales]);
-    setProducts(products.map(p => p.id === product.id ? { ...p, stock: newStock, status: newStatus } : p));
+    for (const item of saleCart) {
+      const product = storeProducts.find(p => String(p.id) === String(item.productId));
+      const newStock = product.stock - item.quantity;
+      const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
+
+      const { error: productError } = await supabase
+        .from('products')
+        .update({ stock: newStock, status: newStatus })
+        .eq('id', product.id)
+        .eq('user_id', currentUser.id);
+
+      if (productError) {
+        console.error('Error actualizando stock:', productError);
+        setSaleNotice({ type: 'error', message: `La venta se registró, pero no se pudo actualizar el stock de ${product.name}: ${productError.message}` });
+        await loadSalesFromSupabase(currentUser.id, false);
+        await loadProductsFromSupabase(currentUser.id, false);
+        return;
+      }
+    }
+
     setSaleForm(emptySaleForm);
-    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente. Stock actualizado en Supabase.` });
+    setSaleCart([]);
+    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${saleCart.length} producto(s).` });
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
@@ -1458,7 +1588,9 @@ export default function App() {
     const sale = storeSales.find(s => s.id === id);
     if (!sale || !currentUser?.id) return;
 
-    const product = products.find(p => String(p.id) === String(sale.productId));
+    const items = sale.items?.length > 0
+      ? sale.items
+      : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity }];
 
     const { error: saleError } = await supabase
       .from('sales')
@@ -1472,8 +1604,11 @@ export default function App() {
       return;
     }
 
-    if (product) {
-      const restoredStock = product.stock + sale.quantity;
+    for (const item of items) {
+      const product = products.find(p => String(p.id) === String(item.productId));
+      if (!product) continue;
+
+      const restoredStock = product.stock + item.quantity;
       const { error: productError } = await supabase
         .from('products')
         .update({ stock: restoredStock, status: 'Activo' })
@@ -1482,7 +1617,7 @@ export default function App() {
 
       if (productError) {
         console.error('Error devolviendo stock:', productError);
-        setSaleNotice({ type: 'error', message: `Venta anulada, pero no se pudo devolver stock: ${productError.message}` });
+        setSaleNotice({ type: 'error', message: `Venta anulada, pero no se pudo devolver stock de ${product.name}: ${productError.message}` });
         await loadSalesFromSupabase(currentUser.id, false);
         return;
       }
@@ -1495,6 +1630,7 @@ export default function App() {
 
   function resetSaleForm() {
     setSaleForm(emptySaleForm);
+    setSaleCart([]);
     setSaleNotice(null);
   }
 
@@ -1991,7 +2127,7 @@ export default function App() {
           </header>
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
-          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
+          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} />}
@@ -2243,7 +2379,12 @@ function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue
 }
 
 function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
+  const [productSearch, setProductSearch] = useState('');
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
+  const filteredProducts = products.filter(product => {
+    const text = productSearch.toLowerCase();
+    return String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text);
+  });
   const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
   const quantity = Number(purchaseForm.quantity || 0);
   const unitCost = Number(purchaseForm.unitCost || selectedProduct?.cost || 0);
@@ -2311,11 +2452,38 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 
           <div className="space-y-4">
             <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o categoría..." />
+              </div>
+              {productSearch && filteredProducts.length > 0 && (
+                <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+                  {filteredProducts.slice(0, 8).map(product => (
+                    <button
+                      type="button"
+                      key={product.id}
+                      onClick={() => {
+                        selectProduct(product.id);
+                        setProductSearch(product.name);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
+                    >
+                      <span>
+                        <strong className="text-slate-900">{product.name}</strong>
+                        <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
+                      </span>
+                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="mb-2 block text-sm font-semibold text-slate-700">Producto comprado</span>
               <select value={purchaseForm.productId} onChange={e => selectProduct(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                 <option value="">Seleccionar producto</option>
-                {products.map(product => <option key={product.id} value={product.id}>{product.name} · Stock actual {product.stock}</option>)}
+                {filteredProducts.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku || 'Sin SKU'} · Stock actual {product.stock}</option>)}
               </select>
+              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} resultado(s).</p>}
             </label>
 
             {selectedProduct && (
@@ -2357,8 +2525,14 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   );
 }
 
-function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
+function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
+  const [productSearch, setProductSearch] = useState('');
   const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
+  const filteredProducts = products.filter(product => {
+    const text = productSearch.toLowerCase();
+    const hasStock = Number(product.stock || 0) > 0;
+    return hasStock && (String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text));
+  });
 
   function setSaleType(type) {
     if (type === 'consumidor') {
@@ -2466,7 +2640,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar nueva venta</h3>
-              <p className="text-sm text-slate-500">Selecciona producto, cantidad y descuento porcentual.</p>
+              <p className="text-sm text-slate-500">Agrega varios productos al carrito y registra una sola venta.</p>
             </div>
             <button type="button" onClick={resetSaleForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-50"><RotateCcw className="h-5 w-5" /></button>
           </div>
@@ -2479,11 +2653,38 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
 
           <div className="space-y-4">
             <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o categoría..." />
+              </div>
+              {productSearch && filteredProducts.length > 0 && (
+                <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+                  {filteredProducts.slice(0, 8).map(product => (
+                    <button
+                      type="button"
+                      key={product.id}
+                      onClick={() => {
+                        setSaleForm({ ...saleForm, productId: product.id });
+                        setProductSearch(product.name);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
+                    >
+                      <span>
+                        <strong className="text-slate-900">{product.name}</strong>
+                        <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
+                      </span>
+                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="mb-2 block text-sm font-semibold text-slate-700">Producto</span>
               <select value={saleForm.productId} onChange={e => setSaleForm({ ...saleForm, productId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                 <option value="">Seleccionar producto</option>
-                {products.filter(p => p.stock > 0).map(product => <option key={product.id} value={product.id}>{product.name} · Stock {product.stock}</option>)}
+                {filteredProducts.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku || 'Sin SKU'} · Stock {product.stock}</option>)}
               </select>
+              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} producto(s) con stock.</p>}
             </label>
 
             {product && (
@@ -2495,8 +2696,32 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cantidad" type="number" value={saleForm.quantity} onChange={v => setSaleForm({ ...saleForm, quantity: v })} placeholder="1" min="1" />
-              <Field label="Descuento %" type="number" value={saleForm.discount} onChange={v => setSaleForm({ ...saleForm, discount: v })} placeholder="Ej: 10" min="0" step="0.01" />
+              <button type="button" onClick={addSaleItem} className="mt-7 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar al carrito</button>
             </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-bold text-slate-800">Carrito de venta</h4>
+                {saleCart.length > 0 && <button type="button" onClick={clearSaleCart} className="text-xs font-bold text-red-500 hover:underline">Vaciar</button>}
+              </div>
+              {saleCart.length === 0 && <p className="text-sm text-slate-500">Todavía no agregas productos.</p>}
+              <div className="space-y-2">
+                {saleCart.map(item => (
+                  <div key={item.productId} className="flex items-center justify-between rounded-2xl bg-white p-3 text-sm shadow-sm">
+                    <div>
+                      <p className="font-bold text-slate-900">{item.product}</p>
+                      <p className="text-xs text-slate-500">{item.quantity} x ${item.price.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="font-bold text-emerald-700">${item.subtotal.toFixed(2)}</p>
+                      <button type="button" onClick={() => removeSaleItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Field label="Descuento general %" type="number" value={saleForm.discount} onChange={v => setSaleForm({ ...saleForm, discount: v })} placeholder="Ej: 10" min="0" step="0.01" />
 
             <div>
               <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de venta</span>
@@ -2574,6 +2799,15 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
 
 function printReceiptDocument(sale, currentUser) {
   const isInvoice = sale.invoiceEnabled;
+  const receiptItems = sale.items?.length > 0 ? sale.items : [{ product: sale.product, quantity: sale.quantity, price: sale.subtotal / Math.max(sale.quantity || 1, 1), subtotal: sale.subtotal }];
+  const itemRows = receiptItems.map(item => `
+    <tr>
+      <td><strong>${item.product}</strong></td>
+      <td>${item.quantity}</td>
+      <td>$${Number(item.price || 0).toFixed(2)}</td>
+      <td><strong>$${Number(item.subtotal || 0).toFixed(2)}</strong></td>
+    </tr>
+  `).join('');
   const logoBlock = currentUser.logoUrl
     ? `<img src="${currentUser.logoUrl}" alt="Logo" class="logo" />`
     : `<div class="avatar">${getAvatarLetter(currentUser)}</div>`;
@@ -2657,15 +2891,10 @@ function printReceiptDocument(sale, currentUser) {
             </div>
             <table>
               <thead>
-                <tr><th>Producto</th><th>Cantidad</th><th>Subtotal</th><th>Total</th></tr>
+                <tr><th>Producto</th><th>Cantidad</th><th>P. Unitario</th><th>Total</th></tr>
               </thead>
               <tbody>
-                <tr>
-                  <td><strong>${sale.product}</strong></td>
-                  <td>${sale.quantity}</td>
-                  <td>$${sale.subtotal.toFixed(2)}</td>
-                  <td><strong>$${sale.total.toFixed(2)}</strong></td>
-                </tr>
+                ${itemRows}
               </tbody>
             </table>
             <div class="totals">
@@ -2698,6 +2927,7 @@ function printReceiptDocument(sale, currentUser) {
 
 function ReceiptModal({ sale, currentUser, onClose }) {
   const isInvoice = sale.invoiceEnabled;
+  const receiptItems = sale.items?.length > 0 ? sale.items : [{ product: sale.product, quantity: sale.quantity, price: sale.subtotal / Math.max(sale.quantity || 1, 1), subtotal: sale.subtotal }];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -2752,17 +2982,19 @@ function ReceiptModal({ sale, currentUser, onClose }) {
                 <tr>
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3">Cant.</th>
-                  <th className="px-4 py-3">Subtotal</th>
+                  <th className="px-4 py-3">P. Unit.</th>
                   <th className="px-4 py-3">Total</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="px-4 py-4 font-bold text-slate-900">{sale.product}</td>
-                  <td className="px-4 py-4">{sale.quantity}</td>
-                  <td className="px-4 py-4">${sale.subtotal.toFixed(2)}</td>
-                  <td className="px-4 py-4 font-bold">${sale.total.toFixed(2)}</td>
-                </tr>
+                {receiptItems.map((item, index) => (
+                  <tr key={`${item.productId || item.product}-${index}`}>
+                    <td className="px-4 py-4 font-bold text-slate-900">{item.product}</td>
+                    <td className="px-4 py-4">{item.quantity}</td>
+                    <td className="px-4 py-4">${Number(item.price || 0).toFixed(2)}</td>
+                    <td className="px-4 py-4 font-bold">${Number(item.subtotal || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -3100,10 +3332,13 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
   const completedSales = sales.filter(s => s.status !== 'Anulada');
 
   const salesByProduct = products.map(product => {
-    const productSales = completedSales.filter(s => s.productId === product.id || s.product === product.name);
-    const unitsSold = productSales.reduce((sum, sale) => sum + sale.quantity, 0);
-    const revenue = productSales.reduce((sum, sale) => sum + sale.total, 0);
-    const profit = productSales.reduce((sum, sale) => sum + (sale.profit || 0), 0);
+    const productItems = completedSales.flatMap(sale => {
+      if (sale.items?.length > 0) return sale.items.filter(item => String(item.productId) === String(product.id));
+      return (String(sale.productId) === String(product.id) || sale.product === product.name) ? [{ quantity: sale.quantity, subtotal: sale.total, profit: sale.profit || 0 }] : [];
+    });
+    const unitsSold = productItems.reduce((sum, item) => sum + item.quantity, 0);
+    const revenue = productItems.reduce((sum, item) => sum + (item.subtotal || 0), 0);
+    const profit = productItems.reduce((sum, item) => sum + (item.profit || 0), 0);
     const suggestedPurchase = Math.max(product.minStock + unitsSold - product.stock, 0);
 
     let abc = 'C';
