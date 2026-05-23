@@ -2228,7 +2228,7 @@ export default function App() {
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} />}
-          {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
+          {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
@@ -3499,7 +3499,27 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
   );
 }
 
-function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading }) {
+function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading }) {
+  function getClientSales(client) {
+    return sales.filter(sale => {
+      if (sale.status === 'Anulada') return false;
+      const saleCustomer = String(sale.customer || '').trim().toLowerCase();
+      const saleInvoiceName = String(sale.invoiceName || '').trim().toLowerCase();
+      const saleId = String(sale.invoiceIdentification || '').trim();
+      const clientName = String(client.name || '').trim().toLowerCase();
+      const clientInvoiceName = String(client.invoiceName || '').trim().toLowerCase();
+      const clientId = String(client.identification || '').trim();
+
+      return (
+        saleCustomer === clientName ||
+        saleInvoiceName === clientName ||
+        (clientInvoiceName && saleCustomer === clientInvoiceName) ||
+        (clientInvoiceName && saleInvoiceName === clientInvoiceName) ||
+        (clientId && saleId && saleId === clientId)
+      );
+    });
+  }
+
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -3516,7 +3536,18 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
                 <div>
                   <p className="font-bold text-slate-900">{client.name}</p>
                   <p className="text-sm text-slate-500">{client.phone} · {client.type}</p>
-                  <p className="text-xs text-slate-400">{client.email || 'Sin correo'} · {client.purchases || 0} compras {client.wantsInvoice ? '· pide factura' : ''}</p>
+                  {(() => {
+                    const clientSales = getClientSales(client);
+                    const totalPurchased = clientSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+                    const lastSale = clientSales[0];
+                    return (
+                      <div className="mt-1 space-y-1">
+                        <p className="text-xs text-slate-400">{client.email || 'Sin correo'} {client.wantsInvoice ? '· pide factura' : ''}</p>
+                        <p className="text-xs font-semibold text-emerald-700">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
+                        {lastSale && <p className="text-xs text-slate-500">Última compra: {lastSale.code} · {lastSale.date} · ${Number(lastSale.total || 0).toFixed(2)}</p>}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {isDeleting ? (
                   <div className="flex gap-2">
@@ -3779,16 +3810,38 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
   }
 
   function exportPurchases() {
-    exportToCSV('inventiq_compras.csv', purchases.map(purchase => ({
+    exportToCSV('inventiq_compras_resumen.csv', purchases.map(purchase => ({
       Codigo: purchase.code,
       Producto: purchase.product,
       Proveedor: purchase.provider,
-      Cantidad: purchase.quantity,
+      Cantidad_total: purchase.quantity,
       Costo_unitario: purchase.unitCost,
       Total: purchase.total,
       Nota: purchase.note,
       Fecha: purchase.date,
     })));
+  }
+
+  function exportPurchaseDetails() {
+    const detailRows = purchases.flatMap(purchase => {
+      const items = purchase.items?.length > 0
+        ? purchase.items
+        : [{ productId: purchase.productId, product: purchase.product, quantity: purchase.quantity, unitCost: purchase.unitCost, total: purchase.total }];
+
+      return items.map(item => ({
+        Codigo_compra: purchase.code,
+        Fecha: purchase.date,
+        Proveedor: purchase.provider,
+        Producto: item.product,
+        Cantidad: item.quantity,
+        Costo_unitario: Number(item.unitCost || 0).toFixed(2),
+        Total_producto: Number(item.total || 0).toFixed(2),
+        Nota_compra: purchase.note || '',
+        Total_compra: purchase.total,
+      }));
+    });
+
+    exportToCSV('inventiq_detalle_compras.csv', detailRows);
   }
 
   function exportRecommendations() {
@@ -3851,10 +3904,11 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
             <p className="text-sm text-emerald-800">Descarga ventas, compras, recomendaciones y directorio de clientes/proveedores.</p>
             <p className={`mt-2 text-sm font-bold ${netBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>Balance ventas - compras: ${netBalance.toFixed(2)}</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
             <button onClick={exportSales} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Ventas</button>
             <button onClick={exportSaleDetails} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Detalle ventas</button>
             <button onClick={exportPurchases} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Compras</button>
+            <button onClick={exportPurchaseDetails} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Detalle compras</button>
             <button onClick={exportRecommendations} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Recomendaciones</button>
             <button onClick={exportDirectory} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Directorio</button>
           </div>
