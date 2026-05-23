@@ -158,6 +158,8 @@ const emptySettingsForm = {
   phone: '',
   commercialEmail: '',
   receiptFooter: '',
+  logoUrl: '',
+  logoFile: null,
   username: '',
   currentPassword: '',
   newPassword: '',
@@ -383,6 +385,11 @@ function mapPurchaseToDb(purchase, userId) {
   };
 }
 
+function getAvatarLetter(user) {
+  const source = String(user?.store || user?.name || user?.email || 'InventiQ').trim();
+  return source.charAt(0).toUpperCase() || 'I';
+}
+
 function exportToCSV(filename, rows) {
   if (!rows || rows.length === 0) {
     alert('No existen datos para exportar.');
@@ -470,6 +477,7 @@ export default function App() {
             phone: '',
             commercialEmail: '',
             receiptFooter: 'Gracias por su compra.',
+            logoUrl: '',
           });
           loadUserProfile(sessionUser);
         }
@@ -498,6 +506,7 @@ export default function App() {
             phone: '',
             commercialEmail: '',
             receiptFooter: 'Gracias por su compra.',
+            logoUrl: '',
           });
           loadUserProfile(session.user);
         } else {
@@ -750,6 +759,8 @@ export default function App() {
         phone: currentUser.phone || '',
         commercialEmail: currentUser.commercialEmail || '',
         receiptFooter: currentUser.receiptFooter || 'Gracias por su compra.',
+        logoUrl: currentUser.logoUrl || '',
+        logoFile: null,
         username: currentUser.username || '',
         currentPassword: '',
         newPassword: '',
@@ -781,6 +792,7 @@ export default function App() {
       phone: profile?.phone || '',
       commercialEmail: profile?.commercial_email || '',
       receiptFooter: profile?.receipt_footer || 'Gracias por su compra.',
+      logoUrl: profile?.logo_url || '',
     });
   }
 
@@ -1160,6 +1172,51 @@ export default function App() {
       imageUrl: product.imageUrl || '',
       imageFile: null,
     });
+  }
+
+  async function uploadStoreLogo(file) {
+    if (!file) return settingsForm.logoUrl || currentUser.logoUrl || '';
+
+    const extension = file.name.split('.').pop() || 'png';
+    const filePath = `${currentUser.id}/logo-${Date.now()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('store-logos')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Error subiendo logo:', uploadError);
+      throw new Error(uploadError.message);
+    }
+
+    const { data } = supabase.storage
+      .from('store-logos')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  }
+
+  function handleStoreLogo(file) {
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setSettingsNotice({ type: 'error', message: 'Selecciona una imagen válida para el logo.' });
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setSettingsNotice({ type: 'error', message: 'El logo no debe superar los 2MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSettingsForm(prev => ({ ...prev, logoUrl: reader.result, logoFile: file }));
+    };
+    reader.readAsDataURL(file);
   }
 
   async function uploadProductImage(file, productName) {
@@ -1702,6 +1759,17 @@ export default function App() {
     const commercialEmail = settingsForm.commercialEmail.trim();
     const receiptFooter = settingsForm.receiptFooter.trim();
     const currentPassword = settingsForm.currentPassword.trim();
+    let logoUrl = settingsForm.logoUrl || currentUser.logoUrl || '';
+
+    if (settingsForm.logoFile) {
+      try {
+        setSettingsNotice({ type: 'success', message: 'Subiendo logo de la tienda...' });
+        logoUrl = await uploadStoreLogo(settingsForm.logoFile);
+      } catch (error) {
+        setSettingsNotice({ type: 'error', message: `No se pudo subir el logo: ${error.message}` });
+        return;
+      }
+    }
     const newPassword = settingsForm.newPassword.trim();
     const confirmNewPassword = settingsForm.confirmNewPassword.trim();
 
@@ -1768,6 +1836,7 @@ export default function App() {
         phone,
         commercial_email: commercialEmail,
         receipt_footer: receiptFooter || 'Gracias por su compra.',
+        logo_url: logoUrl,
       });
 
     if (profileError) {
@@ -1785,6 +1854,7 @@ export default function App() {
       phone,
       commercialEmail,
       receiptFooter: receiptFooter || 'Gracias por su compra.',
+      logoUrl,
       email,
       username: email,
     };
@@ -1799,6 +1869,8 @@ export default function App() {
       phone,
       commercialEmail,
       receiptFooter: receiptFooter || 'Gracias por su compra.',
+      logoUrl,
+      logoFile: null,
       username: email,
       currentPassword: '',
       newPassword: '',
@@ -1886,7 +1958,7 @@ export default function App() {
               <button onClick={() => setActive('Reportes')} className="mt-5 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white">Ver reportes</button>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-400 text-lg font-bold">A</div>
+              <StoreAvatar currentUser={currentUser} size="md" />
               <div>
                 <p className="font-semibold">{currentUser.name}</p>
                 <p className="text-sm text-emerald-100">{currentUser.store}</p>
@@ -1926,7 +1998,7 @@ export default function App() {
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
-          {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} />}
+          {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
         </main>
       </div>
       <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} />
@@ -1936,12 +2008,32 @@ export default function App() {
   );
 }
 
+function StoreAvatar({ currentUser, size = 'md' }) {
+  const sizes = {
+    sm: 'h-10 w-10 text-base rounded-2xl',
+    md: 'h-12 w-12 text-lg rounded-full',
+    lg: 'h-16 w-16 text-2xl rounded-3xl',
+  };
+
+  const className = sizes[size] || sizes.md;
+
+  if (currentUser?.logoUrl) {
+    return <img src={currentUser.logoUrl} alt="Logo de tienda" className={`${className} object-cover shadow-sm`} />;
+  }
+
+  return (
+    <div className={`flex items-center justify-center bg-purple-400 font-extrabold text-white shadow-sm ${className}`}>
+      {getAvatarLetter(currentUser)}
+    </div>
+  );
+}
+
 function MobileTopBar({ currentUser, logout }) {
   return (
     <div className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-emerald-900 p-2 text-white"><Store className="h-6 w-6" /></div>
+          <StoreAvatar currentUser={currentUser} size="sm" />
           <div>
             <p className="text-lg font-extrabold leading-5">InventiQ</p>
             <p className="text-xs font-semibold text-emerald-700">{currentUser.store}</p>
@@ -2496,7 +2588,10 @@ function ReceiptModal({ sale, currentUser, onClose }) {
 
         <div className="p-6" id="receipt-print-area">
           <div className="mb-6 rounded-3xl bg-emerald-50 p-5">
-            <h2 className="text-2xl font-extrabold text-emerald-900">{currentUser.store}</h2>
+            <div className="mb-3 flex items-center gap-3">
+              <StoreAvatar currentUser={currentUser} size="lg" />
+              <h2 className="text-2xl font-extrabold text-emerald-900">{currentUser.store}</h2>
+            </div>
             <p className="text-sm text-emerald-800">Atendido por: {currentUser.name}</p>
             <p className="text-sm text-emerald-800">Ciudad: {currentUser.city}</p>
             {currentUser.businessId && <p className="text-sm text-emerald-800">RUC/ID: {currentUser.businessId}</p>}
@@ -3123,7 +3218,7 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
   );
 }
 
-function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings, settingsNotice }) {
+function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings, settingsNotice, handleStoreLogo }) {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <form onSubmit={saveSettings} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -3143,6 +3238,21 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
           <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
           <Field label="Correo comercial" type="email" value={settingsForm.commercialEmail} onChange={v => setSettingsForm({ ...settingsForm, commercialEmail: v })} placeholder="Ej: ventas@mitienda.com" />
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm text-slate-500">
+            {settingsForm.logoUrl ? (
+              <div className="space-y-3">
+                <img src={settingsForm.logoUrl} alt="Logo de tienda" className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-sm" />
+                <button type="button" onClick={() => setSettingsForm({ ...settingsForm, logoUrl: '', logoFile: null })} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">Quitar logo</button>
+              </div>
+            ) : (
+              <div>
+                <StoreAvatar currentUser={currentUser} size="lg" />
+                <p className="mt-3 font-semibold text-slate-700">Logo de tienda</p>
+                <p>Si no subes logo, se mostrará la inicial de la tienda o encargado.</p>
+              </div>
+            )}
+            <input type="file" accept="image/*" onChange={e => handleStoreLogo(e.target.files?.[0])} className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" />
+          </div>
           <Field label="Correo de acceso" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">Texto al pie del comprobante</span>
@@ -3173,6 +3283,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <p className="rounded-2xl bg-slate-50 p-4"><strong>RUC/ID:</strong> {currentUser.businessId || 'No registrado'}</p>
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Dirección:</strong> {currentUser.address || 'No registrada'}</p>
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Teléfono:</strong> {currentUser.phone || 'No registrado'}</p>
+          <div className="rounded-2xl bg-slate-50 p-4"><strong>Logo actual:</strong><div className="mt-3"><StoreAvatar currentUser={currentUser} size="md" /></div></div>
           <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">Estos datos aparecerán en el comprobante visual de ventas y facturas.</p>
         </div>
       </section>
