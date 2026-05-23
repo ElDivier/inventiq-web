@@ -33,6 +33,85 @@ import {
   Download,
 } from 'lucide-react';
 
+const businessTypes = [
+  { value: 'general', label: 'Tienda general / minimarket' },
+  { value: 'ropa', label: 'Tienda de ropa' },
+  { value: 'cafeteria', label: 'Cafetería / restaurante pequeño' },
+  { value: 'ferreteria', label: 'Ferretería / repuestos' },
+  { value: 'taller', label: 'Taller / servicios' },
+  { value: 'otro', label: 'Otro negocio' },
+];
+
+function getBusinessConfig(type = 'general') {
+  const configs = {
+    general: {
+      label: 'Tienda general',
+      usesExpiration: true,
+      productExtraFields: false,
+      productNamePlaceholder: 'Ej: Arroz 1kg',
+      categoryPlaceholder: 'Ej: Bebidas, snacks, limpieza',
+      extraLabels: {},
+    },
+    ropa: {
+      label: 'Tienda de ropa',
+      usesExpiration: false,
+      productExtraFields: true,
+      productNamePlaceholder: 'Ej: Camiseta oversize',
+      categoryPlaceholder: 'Ej: Camisetas, pantalones, zapatos',
+      extraLabels: {
+        brand: { label: 'Marca', placeholder: 'Ej: Nike, Adidas, Shein' },
+        size: { label: 'Talla', placeholder: 'Ej: S, M, L, 32, 38' },
+        color: { label: 'Color', placeholder: 'Ej: Negro, blanco, azul' },
+      },
+    },
+    cafeteria: {
+      label: 'Cafetería',
+      usesExpiration: true,
+      productExtraFields: true,
+      productNamePlaceholder: 'Ej: Café molido 500g',
+      categoryPlaceholder: 'Ej: Insumos, bebidas, postres',
+      extraLabels: {
+        brand: { label: 'Marca / proveedor', placeholder: 'Ej: Café Vélez, proveedor local' },
+        size: { label: 'Unidad / presentación', placeholder: 'Ej: kg, litro, caja, unidad' },
+        color: { label: 'Uso en cocina', placeholder: 'Ej: Bebida caliente, postre, insumo' },
+      },
+    },
+    ferreteria: {
+      label: 'Ferretería / repuestos',
+      usesExpiration: false,
+      productExtraFields: true,
+      productNamePlaceholder: 'Ej: Tornillo 1/2',
+      categoryPlaceholder: 'Ej: Herramientas, pinturas, repuestos',
+      extraLabels: {
+        brand: { label: 'Marca', placeholder: 'Ej: Stanley, Truper, Bosch' },
+        size: { label: 'Medida / dimensión', placeholder: 'Ej: 1/2, 10 mm, 3 m' },
+        color: { label: 'Modelo / especificación', placeholder: 'Ej: galvanizado, industrial, universal' },
+      },
+    },
+    taller: {
+      label: 'Taller / servicios',
+      usesExpiration: false,
+      productExtraFields: true,
+      productNamePlaceholder: 'Ej: Filtro de aceite',
+      categoryPlaceholder: 'Ej: Repuestos, lubricantes, accesorios',
+      extraLabels: {
+        brand: { label: 'Marca', placeholder: 'Ej: Toyota, Bosch, Genérico' },
+        size: { label: 'Vehículo / modelo compatible', placeholder: 'Ej: Aveo, Hilux, universal' },
+        color: { label: 'Código de pieza / especificación', placeholder: 'Ej: FIL-001, 10W-30, original' },
+      },
+    },
+    otro: {
+      label: 'Otro negocio',
+      usesExpiration: true,
+      productExtraFields: false,
+      productNamePlaceholder: 'Ej: Producto principal',
+      categoryPlaceholder: 'Ej: Categoría del producto',
+      extraLabels: {},
+    },
+  };
+  return configs[type] || configs.general;
+}
+
 const emptyForm = {
   name: '',
   category: '',
@@ -42,6 +121,10 @@ const emptyForm = {
   stock: '',
   minStock: '',
   sku: '',
+  barcode: '',
+  brand: '',
+  size: '',
+  color: '',
   description: '',
   batchNumber: '',
   entryDate: '',
@@ -79,6 +162,7 @@ const initialProviders = [
 const emptySaleForm = {
   productId: '',
   quantity: 1,
+  discountType: 'percent',
   discount: 0,
   saleType: 'consumidor',
   customer: '',
@@ -123,6 +207,7 @@ const emptyRegisterForm = {
   name: '',
   store: '',
   city: '',
+  businessType: 'general',
   username: '',
   password: '',
   confirmPassword: '',
@@ -153,6 +238,7 @@ const emptySettingsForm = {
   name: '',
   store: '',
   city: '',
+  businessType: 'general',
   businessId: '',
   address: '',
   phone: '',
@@ -239,6 +325,10 @@ function mapProductFromDb(product) {
     storeId: product.user_id,
     storeName: '',
     sku: product.sku || '',
+    barcode: product.barcode || '',
+    brand: product.brand || '',
+    size: product.size || '',
+    color: product.color || '',
     name: product.name || '',
     category: product.category || '',
     price: Number(product.price || 0),
@@ -258,6 +348,10 @@ function mapProductToDb(product, userId) {
   return {
     user_id: userId,
     sku: product.sku,
+    barcode: product.barcode || '',
+    brand: product.brand || '',
+    size: product.size || '',
+    color: product.color || '',
     name: product.name,
     category: product.category,
     price: product.price,
@@ -544,6 +638,8 @@ export default function App() {
             commercialEmail: '',
             receiptFooter: 'Gracias por su compra.',
             logoUrl: '',
+            businessType: 'general',
+            businessType: 'general',
           });
           loadUserProfile(sessionUser);
         }
@@ -820,6 +916,7 @@ export default function App() {
         name: currentUser.name || '',
         store: currentUser.store || '',
         city: currentUser.city || '',
+        businessType: currentUser.businessType || 'general',
         businessId: currentUser.businessId || '',
         address: currentUser.address || '',
         phone: currentUser.phone || '',
@@ -859,6 +956,7 @@ export default function App() {
       commercialEmail: profile?.commercial_email || '',
       receiptFooter: profile?.receipt_footer || 'Gracias por su compra.',
       logoUrl: profile?.logo_url || '',
+      businessType: profile?.business_type || 'general',
     });
   }
 
@@ -895,6 +993,7 @@ export default function App() {
     const name = registerForm.name.trim();
     const store = registerForm.store.trim();
     const city = registerForm.city.trim();
+    const businessType = registerForm.businessType || 'general';
     const email = registerForm.username.trim();
     const password = registerForm.password.trim();
     const confirmPassword = registerForm.confirmPassword.trim();
@@ -930,6 +1029,7 @@ export default function App() {
         store_name: store,
         owner_name: name,
         city: city || 'Sin ciudad registrada',
+        business_type: businessType,
       });
 
       if (profileError) {
@@ -965,10 +1065,18 @@ export default function App() {
     const text = search.toLowerCase();
     const productName = String(p.name || '').toLowerCase();
     const productSku = String(p.sku || '').toLowerCase();
+    const productBarcode = String(p.barcode || '').toLowerCase();
+    const productBrand = String(p.brand || '').toLowerCase();
+    const productSize = String(p.size || '').toLowerCase();
+    const productColor = String(p.color || '').toLowerCase();
     const productCategory = String(p.category || '').toLowerCase();
     const matchSearch =
       productName.includes(text) ||
       productSku.includes(text) ||
+      productBarcode.includes(text) ||
+      productBrand.includes(text) ||
+      productSize.includes(text) ||
+      productColor.includes(text) ||
       productCategory.includes(text);
     const matchCategory = category === 'Todas' || p.category === category;
     return matchSearch && matchCategory;
@@ -1204,6 +1312,10 @@ export default function App() {
       storeId: storeKey,
       storeName: currentUser.store,
       sku: form.sku.trim() || `SKU${storeProducts.length + 1}`,
+      barcode: form.barcode.trim(),
+      brand: form.brand.trim(),
+      size: form.size.trim(),
+      color: form.color.trim(),
       name: form.name.trim(),
       category: finalCategory,
       price,
@@ -1273,6 +1385,10 @@ export default function App() {
       stock: String(product.stock),
       minStock: String(product.minStock),
       sku: product.sku,
+      barcode: product.barcode || '',
+      brand: product.brand || '',
+      size: product.size || '',
+      color: product.color || '',
       description: product.description || '',
       batchNumber: product.batchNumber || '',
       entryDate: product.entryDate || '',
@@ -1376,20 +1492,31 @@ export default function App() {
   function calculateSalePreview() {
     const selectedProduct = storeProducts.find(p => String(p.id) === String(saleForm.productId));
     const quantity = Number(saleForm.quantity || 0);
-    const discountPercent = Number(saleForm.discount || 0);
+    const discountValue = Number(saleForm.discount || 0);
+    const discountType = saleForm.discountType || 'percent';
 
     const subtotal = saleCart.reduce((sum, item) => sum + item.subtotal, 0);
-    const safeDiscountPercent = Math.min(Math.max(discountPercent, 0), 100);
-    const discountAmount = subtotal * (safeDiscountPercent / 100);
+    let discountAmount = 0;
+    let safeDiscountPercent = 0;
+
+    if (discountType === 'fixed') {
+      discountAmount = Math.min(Math.max(discountValue, 0), subtotal);
+      safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+    } else {
+      safeDiscountPercent = Math.min(Math.max(discountValue, 0), 100);
+      discountAmount = subtotal * (safeDiscountPercent / 100);
+    }
+
     const total = subtotal - discountAmount;
     const cartCost = saleCart.reduce((sum, item) => sum + item.cost * item.quantity, 0);
     const profit = total - cartCost;
 
     let error = null;
-    if (discountPercent < 0) error = 'El descuento no puede ser negativo.';
-    if (discountPercent > 100) error = 'El descuento no puede ser mayor al 100%.';
+    if (discountValue < 0) error = 'El descuento no puede ser negativo.';
+    if (discountType === 'percent' && discountValue > 100) error = 'El descuento porcentual no puede ser mayor al 100%.';
+    if (discountType === 'fixed' && discountValue > subtotal) error = 'El descuento en dólares no puede ser mayor al subtotal.';
 
-    return { product: selectedProduct || null, quantity, subtotal, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
+    return { product: selectedProduct || null, quantity, subtotal, discountType, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
   }
 
   function addSaleItem() {
@@ -2034,6 +2161,7 @@ export default function App() {
     const name = settingsForm.name.trim();
     const store = settingsForm.store.trim();
     const city = settingsForm.city.trim();
+    const businessType = settingsForm.businessType || 'general';
     const email = settingsForm.username.trim();
     const businessId = settingsForm.businessId.trim();
     const address = settingsForm.address.trim();
@@ -2113,6 +2241,7 @@ export default function App() {
         store_name: store,
         owner_name: name,
         city,
+        business_type: businessType,
         business_id: businessId,
         address,
         phone,
@@ -2131,6 +2260,7 @@ export default function App() {
       name,
       store,
       city,
+      businessType,
       businessId,
       address,
       phone,
@@ -2146,6 +2276,7 @@ export default function App() {
       name,
       store,
       city,
+      businessType,
       businessId,
       address,
       phone,
@@ -2255,8 +2386,8 @@ export default function App() {
           {active === 'Inicio' && <HomePage currentUser={currentUser} totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} setActive={setActive} expirationText={expirationText} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
-          {active === 'Inventario' && <InventoryPage products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
+          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
+          {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
@@ -2454,6 +2585,13 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
               <Field label="Nombre del encargado" value={registerForm.name} onChange={v => setRegisterForm({ ...registerForm, name: v })} placeholder="Ej: Ana Rodríguez" />
               <Field label="Nombre de la tienda" value={registerForm.store} onChange={v => setRegisterForm({ ...registerForm, store: v })} placeholder="Ej: Minimarket La Esquina" />
               <Field label="Ciudad" value={registerForm.city} onChange={v => setRegisterForm({ ...registerForm, city: v })} placeholder="Ej: Ibarra" />
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de negocio</span>
+                <select value={registerForm.businessType} onChange={e => setRegisterForm({ ...registerForm, businessType: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+                  {businessTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">InventiQ adaptará campos y alertas según el tipo de negocio.</p>
+              </label>
               <Field label="Correo electrónico" type="email" value={registerForm.username} onChange={v => setRegisterForm({ ...registerForm, username: v })} placeholder="Ej: tienda@email.com" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Contraseña" type="password" value={registerForm.password} onChange={v => setRegisterForm({ ...registerForm, password: v })} placeholder="Contraseña" />
@@ -2740,7 +2878,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
   const filteredProducts = products.filter(product => {
     const text = productSearch.toLowerCase();
-    return String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text);
+    return String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.barcode || '').toLowerCase().includes(text) || String(product.brand || '').toLowerCase().includes(text) || String(product.size || '').toLowerCase().includes(text) || String(product.color || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text);
   });
   const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
   const quantity = Number(purchaseForm.quantity || 0);
@@ -2943,11 +3081,11 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 
 function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const [productSearch, setProductSearch] = useState('');
-  const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
+  const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
   const filteredProducts = products.filter(product => {
     const text = productSearch.toLowerCase();
     const hasStock = Number(product.stock || 0) > 0;
-    return hasStock && (String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text));
+    return hasStock && (String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.barcode || '').toLowerCase().includes(text) || String(product.brand || '').toLowerCase().includes(text) || String(product.size || '').toLowerCase().includes(text) || String(product.color || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text));
   });
 
   function setSaleType(type) {
@@ -3138,7 +3276,26 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               </div>
             </div>
 
-            <Field label="Descuento general %" type="number" value={saleForm.discount} onChange={v => setSaleForm({ ...saleForm, discount: v })} placeholder="Ej: 10" min="0" step="0.01" />
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <span className="mb-3 block text-sm font-semibold text-slate-700">Descuento general</span>
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setSaleForm({ ...saleForm, discountType: 'percent', discount: 0 })} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.discountType !== 'fixed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                  Porcentaje %
+                </button>
+                <button type="button" onClick={() => setSaleForm({ ...saleForm, discountType: 'fixed', discount: 0 })} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.discountType === 'fixed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                  Valor $
+                </button>
+              </div>
+              <Field
+                label={saleForm.discountType === 'fixed' ? 'Descuento en dólares' : 'Descuento en porcentaje'}
+                type="number"
+                value={saleForm.discount}
+                onChange={v => setSaleForm({ ...saleForm, discount: v })}
+                placeholder={saleForm.discountType === 'fixed' ? 'Ej: 2.00' : 'Ej: 10'}
+                min="0"
+                step="0.01"
+              />
+            </div>
 
             <div>
               <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de venta</span>
@@ -3197,7 +3354,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
             <div className="rounded-2xl bg-emerald-50 p-4">
               <div className="space-y-2 text-sm text-emerald-800">
                 <div className="flex justify-between"><span>Subtotal</span><strong>${subtotal.toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Descuento ({discountPercent.toFixed(2)}%)</span><strong>-${discount.toFixed(2)}</strong></div>
+                <div className="flex justify-between"><span>Descuento {discountType === 'fixed' ? `(valor fijo · ${discountPercent.toFixed(2)}%)` : `(${discountPercent.toFixed(2)}%)`}</span><strong>-${discount.toFixed(2)}</strong></div>
                 <div className="flex justify-between"><span>Utilidad estimada</span><strong>${profit.toFixed(2)}</strong></div>
               </div>
               <div className="mt-3 border-t border-emerald-100 pt-3">
@@ -3437,11 +3594,12 @@ function ReceiptModal({ sale, currentUser, onClose }) {
   );
 }
 
-function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
-  const expiringProducts = products.filter(product => {
+function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
+  const businessConfig = getBusinessConfig(currentUser?.businessType);
+  const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
     const exp = expirationText ? expirationText(product) : null;
     return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
-  });
+  }) : [];
 
   return (
     <>
@@ -3456,8 +3614,8 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
       {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-        <ProductTable products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
-        <ProductForm form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
+        <ProductTable businessConfig={businessConfig} products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
+        <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
       <section className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
@@ -3473,16 +3631,17 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
   );
 }
 
-function InventoryPage({ products, sales, purchases, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText, adjustProductStock }) {
+function InventoryPage({ currentUser, products, sales, purchases, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText, adjustProductStock }) {
   const [inventoryView, setInventoryView] = useState('Alertas');
   const [adjustForm, setAdjustForm] = useState({ productId: '', stock: '', reason: 'Conteo físico' });
   const [adjustNotice, setAdjustNotice] = useState(null);
 
+  const businessConfig = getBusinessConfig(currentUser?.businessType);
   const alerts = products.filter(p => p.stock <= p.minStock);
   const criticalProducts = products.filter(p => p.stock === 0);
   const availableProducts = products.filter(p => p.stock > p.minStock);
-  const expiredProducts = products.filter(p => expirationText(p).label === 'Vencido');
-  const expiringProducts = products.filter(p => ['Por vencer', 'Vence pronto'].includes(expirationText(p).label));
+  const expiredProducts = businessConfig.usesExpiration ? products.filter(p => expirationText(p).label === 'Vencido') : [];
+  const expiringProducts = businessConfig.usesExpiration ? products.filter(p => ['Por vencer', 'Vence pronto'].includes(expirationText(p).label)) : [];
   const selectedProduct = products.find(product => String(product.id) === String(adjustForm.productId));
 
   const inventoryMovements = useMemo(() => {
@@ -3572,7 +3731,7 @@ function InventoryPage({ products, sales, purchases, lowStock, noStock, inventor
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-bold text-emerald-900">Control de inventario</h3>
-            <p className="text-sm text-emerald-800">{alerts.length} productos con alerta, {criticalProducts.length} sin stock, {expiringProducts.length} próximos a caducar y {expiredProducts.length} vencidos.</p>
+            <p className="text-sm text-emerald-800">{alerts.length} productos con alerta, {criticalProducts.length} sin stock{businessConfig.usesExpiration ? `, ${expiringProducts.length} próximos a caducar y ${expiredProducts.length} vencidos` : '. Este tipo de negocio no usa caducidad.'}</p>
           </div>
           <button onClick={exportInventory} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">
             <Download className="mr-2 inline h-5 w-5" />Exportar inventario
@@ -3591,8 +3750,8 @@ function InventoryPage({ products, sales, purchases, lowStock, noStock, inventor
       </section>
 
       {inventoryView === 'Alertas' && (
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-2' : ''}`}>
+          {businessConfig.usesExpiration && <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="mb-5 text-xl font-bold">Alertas de caducidad</h3>
             <div className="space-y-3">
               {[...expiredProducts, ...expiringProducts].length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen productos vencidos o próximos a caducar.</p>}
@@ -3610,7 +3769,7 @@ function InventoryPage({ products, sales, purchases, lowStock, noStock, inventor
                 );
               })}
             </div>
-          </section>
+          </section>}
 
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="mb-5 text-xl font-bold">Alertas de inventario</h3>
@@ -3707,7 +3866,7 @@ function InventoryPage({ products, sales, purchases, lowStock, noStock, inventor
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
           <DashboardListCard title="Sin stock" subtitle="Requieren reposición urgente" empty="No hay productos sin stock." items={criticalProducts.slice(0, 8).map(product => ({ title: product.name, subtitle: `${product.category} · mínimo ${product.minStock}`, badge: 'Comprar', tone: 'red' }))} />
           <DashboardListCard title="Stock bajo" subtitle="Debes revisar reposición" empty="No hay stock bajo." items={alerts.filter(product => product.stock > 0).slice(0, 8).map(product => ({ title: product.name, subtitle: `${product.category} · Stock ${product.stock}/${product.minStock}`, badge: 'Alerta', tone: 'amber' }))} />
-          <DashboardListCard title="Caducidad" subtitle="Vencidos o próximos a caducar" empty="No hay alertas de caducidad." items={[...expiredProducts, ...expiringProducts].slice(0, 8).map(product => { const exp = expirationText(product); return { title: product.name, subtitle: `${product.category} · ${product.expirationDate || 'Sin fecha'}`, badge: exp.label, tone: exp.label === 'Vencido' ? 'red' : 'amber' }; })} />
+          {businessConfig.usesExpiration && <DashboardListCard title="Caducidad" subtitle="Vencidos o próximos a caducar" empty="No hay alertas de caducidad." items={[...expiredProducts, ...expiringProducts].slice(0, 8).map(product => { const exp = expirationText(product); return { title: product.name, subtitle: `${product.category} · ${product.expirationDate || 'Sin fecha'}`, badge: exp.label, tone: exp.label === 'Vencido' ? 'red' : 'amber' }; })} />}
         </section>
       )}
     </div>
@@ -4333,6 +4492,13 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
             <Field label="Nombre de la tienda" value={settingsForm.store} onChange={v => setSettingsForm({ ...settingsForm, store: v })} placeholder="Nombre de la tienda" />
             <Field label="Propietario / encargado" value={settingsForm.name} onChange={v => setSettingsForm({ ...settingsForm, name: v })} placeholder="Nombre del encargado" />
             <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de negocio</span>
+              <select value={settingsForm.businessType} onChange={e => setSettingsForm({ ...settingsForm, businessType: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+                {businessTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+              <p className="mt-2 text-xs text-slate-500">Al cambiarlo, InventiQ ajusta los campos visibles para productos e inventario.</p>
+            </label>
             <Field label="RUC / identificación de la tienda" value={settingsForm.businessId} onChange={v => setSettingsForm({ ...settingsForm, businessId: v })} placeholder="Ej: 1000000001001" />
             <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
             <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
@@ -4403,7 +4569,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
   );
 }
 
-function ProductTable({ products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText }) {
+function ProductTable({ businessConfig, products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5">
@@ -4455,8 +4621,9 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
                         )}
                         <div>
                           <p className="font-bold text-slate-900">{product.name}</p>
-                          <p className="text-xs text-slate-500">SKU: {product.sku}</p>
-                          {product.expirationDate && <p className={`text-xs ${exp?.color}`}>Caduca: {product.expirationDate} · {exp?.label}</p>}
+                          <p className="text-xs text-slate-500">SKU: {product.sku}{product.barcode ? ` · Barra: ${product.barcode}` : ''}</p>
+                          {businessConfig?.productExtraFields && <p className="text-xs text-slate-500">{[product.brand, product.size, product.color].filter(Boolean).join(' · ') || 'Sin variante'}</p>}
+                          {businessConfig?.usesExpiration && product.expirationDate && <p className={`text-xs ${exp?.color}`}>Caduca: {product.expirationDate} · {exp?.label}</p>}
                         </div>
                       </div>
                     </td>
@@ -4489,8 +4656,9 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
   );
 }
 
-function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice, productCategories, handleProductImage }) {
+function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, editingId, notice, productCategories, handleProductImage }) {
   const isNewCategory = form.category === '__new__';
+  const extraLabels = businessConfig?.extraLabels || {};
 
   return (
     <form onSubmit={saveProduct} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -4509,7 +4677,7 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
       )}
 
       <div className="space-y-4">
-        <Field label="Nombre del producto" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Ej: Arroz 1kg" />
+        <Field label="Nombre del producto" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder={businessConfig?.productNamePlaceholder || 'Ej: Arroz 1kg'} />
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-700">Categoría</span>
           <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
@@ -4520,7 +4688,7 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
         </label>
 
         {isNewCategory && (
-          <Field label="Nueva categoría" value={form.customCategory} onChange={v => setForm({ ...form, customCategory: v })} placeholder="Ej: Mascotas" />
+          <Field label="Nueva categoría" value={form.customCategory} onChange={v => setForm({ ...form, customCategory: v })} placeholder={businessConfig?.categoryPlaceholder || 'Ej: Mascotas'} />
         )}
 
         <div className="grid grid-cols-2 gap-3">
@@ -4531,12 +4699,22 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
           <Field label="Stock actual" type="number" min="0" value={form.stock} onChange={v => setForm({ ...form, stock: v })} placeholder="0" />
           <Field label="Stock mínimo" type="number" min="0" value={form.minStock} onChange={v => setForm({ ...form, minStock: v })} placeholder="5" />
         </div>
-        <Field label="Código / SKU" value={form.sku} onChange={v => setForm({ ...form, sku: v })} placeholder="Ej: ARROZ001" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Lote" value={form.batchNumber} onChange={v => setForm({ ...form, batchNumber: v })} placeholder="Ej: LOTE-001" />
-          <Field label="Fecha de ingreso" type="date" value={form.entryDate} onChange={v => setForm({ ...form, entryDate: v })} />
-          <Field label="Fecha de caducidad" type="date" value={form.expirationDate} onChange={v => setForm({ ...form, expirationDate: v })} />
-        </div>
+        <Field label="Código / SKU" value={form.sku} onChange={v => setForm({ ...form, sku: v })} placeholder="Ej: PROD001" />
+        <Field label="Código de barras" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} placeholder="Ej: 7861234567890" />
+        {businessConfig?.productExtraFields && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label={extraLabels.brand?.label || 'Marca'} value={form.brand} onChange={v => setForm({ ...form, brand: v })} placeholder={extraLabels.brand?.placeholder || 'Ej: Marca'} />
+            <Field label={extraLabels.size?.label || 'Talla / medida'} value={form.size} onChange={v => setForm({ ...form, size: v })} placeholder={extraLabels.size?.placeholder || 'Ej: M / 32 / 1/2'} />
+            <Field label={extraLabels.color?.label || 'Color / modelo'} value={form.color} onChange={v => setForm({ ...form, color: v })} placeholder={extraLabels.color?.placeholder || 'Ej: Negro'} />
+          </div>
+        )}
+        {businessConfig?.usesExpiration && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Lote" value={form.batchNumber} onChange={v => setForm({ ...form, batchNumber: v })} placeholder="Ej: LOTE-001" />
+            <Field label="Fecha de ingreso" type="date" value={form.entryDate} onChange={v => setForm({ ...form, entryDate: v })} />
+            <Field label="Fecha de caducidad" type="date" value={form.expirationDate} onChange={v => setForm({ ...form, expirationDate: v })} />
+          </div>
+        )}
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-700">Descripción</span>
           <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Descripción del producto..." />
