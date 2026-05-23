@@ -174,6 +174,30 @@ const emptyPurchaseForm = {
   note: '',
 };
 
+function mapPurchaseItemFromDb(item) {
+  return {
+    id: item.id,
+    purchaseId: item.purchase_id,
+    productId: item.product_id,
+    product: item.product || '',
+    quantity: Number(item.quantity || 0),
+    unitCost: Number(item.unit_cost || 0),
+    total: Number(item.total || 0),
+  };
+}
+
+function mapPurchaseItemToDb(item, purchaseId, userId) {
+  return {
+    user_id: userId,
+    purchase_id: purchaseId,
+    product_id: item.productId,
+    product: item.product,
+    quantity: item.quantity,
+    unit_cost: item.unitCost,
+    total: item.total,
+  };
+}
+
 const STORAGE_KEYS = {
   users: 'inventiq_users',
   currentUser: 'inventiq_current_user',
@@ -484,6 +508,7 @@ export default function App() {
   const [settingsNotice, setSettingsNotice] = useState(null);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
+  const [purchaseCart, setPurchaseCart] = useState([]);
   const [purchaseNotice, setPurchaseNotice] = useState(null);
   const [receiptSale, setReceiptSale] = useState(null);
 
@@ -1106,7 +1131,28 @@ export default function App() {
       return;
     }
 
-    setPurchases((data || []).map(mapPurchaseFromDb));
+    const purchaseIds = (data || []).map(purchase => purchase.id);
+    let itemsByPurchase = {};
+
+    if (purchaseIds.length > 0) {
+      const { data: itemData, error: itemError } = await supabase
+        .from('purchase_items')
+        .select('*')
+        .in('purchase_id', purchaseIds);
+
+      if (!itemError) {
+        itemsByPurchase = (itemData || []).reduce((acc, item) => {
+          const mapped = mapPurchaseItemFromDb(item);
+          acc[mapped.purchaseId] = acc[mapped.purchaseId] || [];
+          acc[mapped.purchaseId].push(mapped);
+          return acc;
+        }, {});
+      } else {
+        console.error('Error cargando detalle de compras:', itemError);
+      }
+    }
+
+    setPurchases((data || []).map(purchase => ({ ...mapPurchaseFromDb(purchase), items: itemsByPurchase[purchase.id] || [] })));
     if (showLoader) setPurchasesLoading(false);
   }
 
@@ -1396,16 +1442,13 @@ export default function App() {
     setSaleCart([]);
   }
 
-  async function registerPurchase(e) {
-    e.preventDefault();
-
+  function addPurchaseItem() {
     const product = storeProducts.find(p => String(p.id) === String(purchaseForm.productId));
-    const provider = storeProviders.find(p => String(p.id) === String(purchaseForm.providerId));
     const quantity = Number(purchaseForm.quantity || 0);
-    const unitCost = Number(purchaseForm.unitCost || 0);
+    const unitCost = Number(purchaseForm.unitCost || product?.cost || 0);
 
     if (!product) {
-      setPurchaseNotice({ type: 'error', message: 'Selecciona un producto para registrar la compra.' });
+      setPurchaseNotice({ type: 'error', message: 'Selecciona un producto para agregar a la compra.' });
       return;
     }
 
@@ -1419,24 +1462,71 @@ export default function App() {
       return;
     }
 
+    const existing = purchaseCart.find(item => String(item.productId) === String(product.id));
+
+    if (existing) {
+      setPurchaseCart(purchaseCart.map(item => String(item.productId) === String(product.id)
+        ? {
+          ...item,
+          quantity: item.quantity + quantity,
+          unitCost,
+          total: (item.quantity + quantity) * unitCost,
+        }
+        : item
+      ));
+    } else {
+      setPurchaseCart([
+        ...purchaseCart,
+        {
+          productId: product.id,
+          product: product.name,
+          quantity,
+          unitCost,
+          total: quantity * unitCost,
+        },
+      ]);
+    }
+
+    setPurchaseForm({ ...purchaseForm, productId: '', quantity: 1, unitCost: '' });
+    setPurchaseNotice(null);
+  }
+
+  function removePurchaseItem(productId) {
+    setPurchaseCart(purchaseCart.filter(item => String(item.productId) !== String(productId)));
+  }
+
+  function clearPurchaseCart() {
+    setPurchaseCart([]);
+  }
+
+  async function registerPurchase(e) {
+    e.preventDefault();
+
+    const provider = storeProviders.find(p => String(p.id) === String(purchaseForm.providerId));
+
+    if (purchaseCart.length === 0) {
+      setPurchaseNotice({ type: 'error', message: 'Agrega al menos un producto a la compra.' });
+      return;
+    }
+
     if (!currentUser?.id) {
       setPurchaseNotice({ type: 'error', message: 'No existe una sesión activa.' });
       return;
     }
 
-    const newStock = product.stock + quantity;
-    const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
-    const total = quantity * unitCost;
+    const totalQuantity = purchaseCart.reduce((sum, item) => sum + item.quantity, 0);
+    const total = purchaseCart.reduce((sum, item) => sum + item.total, 0);
+    const productSummary = purchaseCart.length === 1 ? purchaseCart[0].product : `${purchaseCart.length} productos`;
 
     const newPurchase = {
       code: `C-${String(purchases.length + 1).padStart(4, '0')}`,
       storeId: storeKey,
-      productId: product.id,
+      productId: purchaseCart.length === 1 ? purchaseCart[0].productId : null,
       providerId: provider?.id || null,
-      product: product.name,
+      product: productSummary,
       provider: provider?.name || 'Sin proveedor',
-      quantity,
-      unitCost,
+      quantity: totalQuantity,
+      unitCost: purchaseCart.length === 1 ? purchaseCart[0].unitCost : 0,
       total,
       note: purchaseForm.note.trim(),
     };
@@ -1453,29 +1543,47 @@ export default function App() {
       return;
     }
 
-    const { error: productError } = await supabase
-      .from('products')
-      .update({ stock: newStock, cost: unitCost || product.cost, status: newStatus })
-      .eq('id', product.id)
-      .eq('user_id', currentUser.id);
+    const itemsPayload = purchaseCart.map(item => mapPurchaseItemToDb(item, purchaseData.id, currentUser.id));
+    const { error: itemsError } = await supabase.from('purchase_items').insert(itemsPayload);
 
-    if (productError) {
-      console.error('Error actualizando stock por compra:', productError);
-      setPurchaseNotice({ type: 'error', message: `La compra se registró, pero no se pudo actualizar el stock: ${productError.message}` });
-      await loadPurchasesFromSupabase(currentUser.id, false);
+    if (itemsError) {
+      console.error('Error guardando detalle de compra:', itemsError);
+      setPurchaseNotice({ type: 'error', message: `La compra se creó, pero no se guardó el detalle: ${itemsError.message}` });
       return;
     }
 
-    setPurchases([mapPurchaseFromDb(purchaseData), ...purchases]);
-    setProducts(products.map(p => p.id === product.id ? { ...p, stock: newStock, cost: unitCost || p.cost, status: newStatus } : p));
+    for (const item of purchaseCart) {
+      const product = storeProducts.find(p => String(p.id) === String(item.productId));
+      if (!product) continue;
+
+      const newStock = product.stock + item.quantity;
+      const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
+
+      const { error: productError } = await supabase
+        .from('products')
+        .update({ stock: newStock, cost: item.unitCost || product.cost, status: newStatus })
+        .eq('id', product.id)
+        .eq('user_id', currentUser.id);
+
+      if (productError) {
+        console.error('Error actualizando stock por compra:', productError);
+        setPurchaseNotice({ type: 'error', message: `La compra se registró, pero no se pudo actualizar el stock de ${product.name}: ${productError.message}` });
+        await loadPurchasesFromSupabase(currentUser.id, false);
+        await loadProductsFromSupabase(currentUser.id, false);
+        return;
+      }
+    }
+
     setPurchaseForm(emptyPurchaseForm);
-    setPurchaseNotice({ type: 'success', message: `Compra ${newPurchase.code} registrada. Stock actualizado en Supabase.` });
+    setPurchaseCart([]);
+    setPurchaseNotice({ type: 'success', message: `Compra ${newPurchase.code} registrada con ${purchaseCart.length} producto(s). Stock actualizado en Supabase.` });
     await loadPurchasesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
 
   function resetPurchaseForm() {
     setPurchaseForm(emptyPurchaseForm);
+    setPurchaseCart([]);
     setPurchaseNotice(null);
   }
 
@@ -2128,7 +2236,7 @@ export default function App() {
 
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
-          {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
+          {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
@@ -2378,7 +2486,7 @@ function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue
   );
 }
 
-function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
+function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
   const [productSearch, setProductSearch] = useState('');
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
   const filteredProducts = products.filter(product => {
@@ -2388,7 +2496,8 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
   const quantity = Number(purchaseForm.quantity || 0);
   const unitCost = Number(purchaseForm.unitCost || selectedProduct?.cost || 0);
-  const total = quantity > 0 && unitCost >= 0 ? quantity * unitCost : 0;
+  const lineTotal = quantity > 0 && unitCost >= 0 ? quantity * unitCost : 0;
+  const total = purchaseCart.reduce((sum, item) => sum + item.total, 0);
 
   function selectProduct(productId) {
     const product = products.find(item => String(item.id) === String(productId));
@@ -2439,7 +2548,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar compra</h3>
-              <p className="text-sm text-slate-500">Aumenta el stock cuando compras mercadería.</p>
+              <p className="text-sm text-slate-500">Agrega varios productos y registra una sola compra.</p>
             </div>
             <button type="button" onClick={resetPurchaseForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-50"><RotateCcw className="h-5 w-5" /></button>
           </div>
@@ -2505,6 +2614,30 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cantidad" type="number" min="1" value={purchaseForm.quantity} onChange={v => setPurchaseForm({ ...purchaseForm, quantity: v })} placeholder="1" />
               <Field label="Costo unitario" type="number" min="0" step="0.01" value={purchaseForm.unitCost} onChange={v => setPurchaseForm({ ...purchaseForm, unitCost: v })} placeholder="0.00" />
+            </div>
+
+            <button type="button" onClick={addPurchaseItem} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar a la compra</button>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-bold text-slate-800">Carrito de compra</h4>
+                {purchaseCart.length > 0 && <button type="button" onClick={clearPurchaseCart} className="text-xs font-bold text-red-500 hover:underline">Vaciar</button>}
+              </div>
+              {purchaseCart.length === 0 && <p className="text-sm text-slate-500">Todavía no agregas productos.</p>}
+              <div className="space-y-2">
+                {purchaseCart.map(item => (
+                  <div key={item.productId} className="flex items-center justify-between rounded-2xl bg-white p-3 text-sm shadow-sm">
+                    <div>
+                      <p className="font-bold text-slate-900">{item.product}</p>
+                      <p className="text-xs text-slate-500">{item.quantity} x ${item.unitCost.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="font-bold text-emerald-700">${item.total.toFixed(2)}</p>
+                      <button type="button" onClick={() => removePurchaseItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <label className="block">
