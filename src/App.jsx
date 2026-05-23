@@ -2572,6 +2572,130 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, registerSa
   );
 }
 
+function printReceiptDocument(sale, currentUser) {
+  const isInvoice = sale.invoiceEnabled;
+  const logoBlock = currentUser.logoUrl
+    ? `<img src="${currentUser.logoUrl}" alt="Logo" class="logo" />`
+    : `<div class="avatar">${getAvatarLetter(currentUser)}</div>`;
+
+  const invoiceBlock = isInvoice
+    ? `
+      <div class="box">
+        <p class="label">Datos de facturación</p>
+        <p><strong>Razón social:</strong> ${sale.invoiceName || sale.customer || 'No registrado'}</p>
+        <p><strong>Cédula/RUC:</strong> ${sale.invoiceIdentification || 'No registrado'}</p>
+        <p><strong>Dirección:</strong> ${sale.invoiceAddress || 'No registrada'}</p>
+        <p><strong>Correo:</strong> ${sale.invoiceEmail || 'No registrado'}</p>
+      </div>
+    `
+    : `
+      <div class="box">
+        <p class="label">Cliente</p>
+        <p><strong>Consumidor final</strong></p>
+      </div>
+    `;
+
+  const html = `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${sale.code} - InventiQ</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 24px; font-family: Arial, sans-serif; color: #0f172a; background: #fff; }
+          .receipt { max-width: 760px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; }
+          .header { padding: 24px; background: #ecfdf5; display: flex; gap: 16px; align-items: center; }
+          .logo, .avatar { width: 72px; height: 72px; border-radius: 18px; object-fit: cover; }
+          .avatar { display: flex; align-items: center; justify-content: center; background: #a855f7; color: white; font-size: 32px; font-weight: 800; }
+          h1 { margin: 0; font-size: 28px; }
+          p { margin: 4px 0; font-size: 14px; }
+          .content { padding: 24px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+          .box { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; }
+          .label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: .04em; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th { background: #f8fafc; color: #475569; font-size: 12px; text-align: left; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+          td { padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+          .totals { margin-top: 18px; margin-left: auto; max-width: 320px; background: #f8fafc; border-radius: 14px; padding: 16px; }
+          .line { display: flex; justify-content: space-between; margin: 8px 0; }
+          .total { border-top: 1px solid #cbd5e1; padding-top: 12px; font-size: 20px; font-weight: 800; }
+          .footer { text-align: center; color: #64748b; margin-top: 24px; font-size: 12px; }
+          .no-print { text-align: center; margin: 18px 0; }
+          .no-print button { background: #059669; color: white; border: 0; border-radius: 12px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+          @media print {
+            body { padding: 0; }
+            .receipt { border: none; border-radius: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            ${logoBlock}
+            <div>
+              <h1>${currentUser.store || 'Mi Tienda'}</h1>
+              <p><strong>Atendido por:</strong> ${currentUser.name || ''}</p>
+              <p><strong>Ciudad:</strong> ${currentUser.city || ''}</p>
+              ${currentUser.businessId ? `<p><strong>RUC/ID:</strong> ${currentUser.businessId}</p>` : ''}
+              ${currentUser.address ? `<p><strong>Dirección:</strong> ${currentUser.address}</p>` : ''}
+              ${currentUser.phone ? `<p><strong>Teléfono:</strong> ${currentUser.phone}</p>` : ''}
+              ${currentUser.commercialEmail ? `<p><strong>Correo:</strong> ${currentUser.commercialEmail}</p>` : ''}
+            </div>
+          </div>
+          <div class="content">
+            <div class="grid">
+              <div class="box">
+                <p class="label">${isInvoice ? 'Factura / comprobante' : 'Comprobante de venta'}</p>
+                <p><strong>Código:</strong> ${sale.code}</p>
+                <p><strong>Fecha:</strong> ${sale.date}</p>
+                <p><strong>Estado:</strong> ${sale.status}</p>
+                <p><strong>Pago:</strong> ${sale.paymentMethod}</p>
+              </div>
+              ${invoiceBlock}
+            </div>
+            <table>
+              <thead>
+                <tr><th>Producto</th><th>Cantidad</th><th>Subtotal</th><th>Total</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>${sale.product}</strong></td>
+                  <td>${sale.quantity}</td>
+                  <td>$${sale.subtotal.toFixed(2)}</td>
+                  <td><strong>$${sale.total.toFixed(2)}</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="totals">
+              <div class="line"><span>Subtotal</span><strong>$${sale.subtotal.toFixed(2)}</strong></div>
+              <div class="line"><span>Descuento</span><strong>-$${sale.discount.toFixed(2)}</strong></div>
+              <div class="line total"><span>Total</span><span>$${sale.total.toFixed(2)}</span></div>
+            </div>
+            <div class="footer">
+              <p>${currentUser.receiptFooter || 'Gracias por su compra.'}</p>
+              <p>Documento generado por InventiQ. Comprobante referencial para control interno.</p>
+            </div>
+          </div>
+        </div>
+        <div class="no-print"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
+        <script>window.onload = () => setTimeout(() => window.print(), 300);</script>
+      </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  if (!printWindow) {
+    alert('Permite ventanas emergentes para imprimir el comprobante.');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function ReceiptModal({ sale, currentUser, onClose }) {
   const isInvoice = sale.invoiceEnabled;
 
@@ -2657,7 +2781,7 @@ function ReceiptModal({ sale, currentUser, onClose }) {
 
         <div className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:justify-end">
           <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Cerrar</button>
-          <button onClick={() => window.print()} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Imprimir / guardar PDF</button>
+          <button onClick={() => printReceiptDocument(sale, currentUser)} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Imprimir / guardar PDF</button>
         </div>
       </div>
     </div>
