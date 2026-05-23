@@ -3382,19 +3382,46 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
   const netBalance = totalSales - totalPurchases;
 
   function exportSales() {
-    exportToCSV('inventiq_ventas.csv', sales.map(sale => ({
+    exportToCSV('inventiq_ventas_resumen.csv', sales.map(sale => ({
       Codigo: sale.code,
-      Producto: sale.product,
       Cliente: sale.customer,
-      Cantidad: sale.quantity,
+      Productos: sale.product,
+      Cantidad_total: sale.quantity,
       Subtotal: sale.subtotal,
       Descuento: sale.discount,
       Total: sale.total,
       Utilidad: sale.profit,
       Estado: sale.status,
       Factura: sale.invoiceEnabled ? 'Si' : 'No',
+      Metodo_pago: sale.paymentMethod,
       Fecha: sale.date,
     })));
+  }
+
+  function exportSaleDetails() {
+    const detailRows = sales.flatMap(sale => {
+      const items = sale.items?.length > 0
+        ? sale.items
+        : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity, price: sale.subtotal / Math.max(sale.quantity || 1, 1), subtotal: sale.subtotal, profit: sale.profit }];
+
+      return items.map(item => ({
+        Codigo_venta: sale.code,
+        Fecha: sale.date,
+        Estado: sale.status,
+        Cliente: sale.customer,
+        Factura: sale.invoiceEnabled ? 'Si' : 'No',
+        Metodo_pago: sale.paymentMethod,
+        Producto: item.product,
+        Cantidad: item.quantity,
+        Precio_unitario: Number(item.price || 0).toFixed(2),
+        Subtotal_producto: Number(item.subtotal || 0).toFixed(2),
+        Utilidad_producto: Number(item.profit || 0).toFixed(2),
+        Descuento_general_venta: sale.discount,
+        Total_venta: sale.total,
+      }));
+    });
+
+    exportToCSV('inventiq_detalle_ventas.csv', detailRows);
   }
 
   function exportPurchases() {
@@ -3470,8 +3497,9 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
             <p className="text-sm text-emerald-800">Descarga ventas, compras, recomendaciones y directorio de clientes/proveedores.</p>
             <p className={`mt-2 text-sm font-bold ${netBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>Balance ventas - compras: ${netBalance.toFixed(2)}</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <button onClick={exportSales} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Ventas</button>
+            <button onClick={exportSaleDetails} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Detalle ventas</button>
             <button onClick={exportPurchases} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Compras</button>
             <button onClick={exportRecommendations} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Recomendaciones</button>
             <button onClick={exportDirectory} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Directorio</button>
