@@ -2217,7 +2217,7 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="p-3 pb-32 pt-20 sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
+        <main className="p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
           <header className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-white/70 p-3 shadow-sm backdrop-blur sm:mb-8 sm:bg-transparent sm:p-0 sm:shadow-none lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><HeaderIcon className="h-8 w-8" /></div>
@@ -2248,7 +2248,7 @@ export default function App() {
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
         </main>
       </div>
-      <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} />
+      <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
       <MobileFloatingButton active={active} setActive={setActive} />
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
@@ -2287,26 +2287,21 @@ function StoreAvatar({ currentUser, size = 'md' }) {
   );
 }
 
-function MobileTopBar({ currentUser, logout, active }) {
+function MobileTopBar({ currentUser, active }) {
   return (
-    <div className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <InventiQIcon className="h-11 w-11 rounded-2xl object-cover shadow-sm" />
-          <div>
-            <p className="text-lg font-extrabold leading-5">InventiQ</p>
-            <p className="max-w-[170px] truncate text-xs font-semibold text-emerald-700">{currentUser.store} · {active}</p>
-          </div>
+    <div className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.65rem)] shadow-sm backdrop-blur lg:hidden">
+      <div className="flex items-center gap-3">
+        <InventiQIcon className="h-10 w-10 shrink-0 rounded-2xl object-cover shadow-sm" />
+        <div className="min-w-0">
+          <p className="truncate text-base font-extrabold leading-5">InventiQ</p>
+          <p className="max-w-[240px] truncate text-xs font-semibold text-emerald-700">{currentUser.store} · {active}</p>
         </div>
-        <button onClick={logout} className="rounded-2xl border border-slate-200 p-3 text-slate-600 hover:bg-slate-50">
-          <LogOut className="h-5 w-5" />
-        </button>
       </div>
     </div>
   );
 }
 
-function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMoreOpen }) {
+function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMoreOpen, logout }) {
   const primaryLabels = ['Inicio', 'Ventas', 'Productos', 'Inventario'];
   const moreLabels = ['Compras', 'Reportes', 'Clientes', 'Proveedores', 'Configuración'];
   const primaryMenu = menu.filter(item => primaryLabels.includes(item.label));
@@ -2337,6 +2332,10 @@ function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMor
                 </button>
               );
             })}
+            <button onClick={logout} className="col-span-2 flex items-center justify-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-4 text-sm font-extrabold text-red-600 hover:bg-red-100">
+              <LogOut className="h-5 w-5" />
+              Cerrar sesión
+            </button>
           </div>
         </div>
       )}
