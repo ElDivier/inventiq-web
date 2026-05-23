@@ -71,9 +71,9 @@ const initialClients = [
 ];
 
 const initialProviders = [
-  { id: 1, name: 'Distribuidora Norte', category: 'Bebidas', contact: 'ventas@disnorte.com', delivery: '2 días' },
-  { id: 2, name: 'Comercial Andina', category: 'Snacks', contact: '099 222 3333', delivery: '1 día' },
-  { id: 3, name: 'Lácteos San Miguel', category: 'Lácteos', contact: '098 555 7777', delivery: '3 días' },
+  { id: 1, name: 'Distribuidora Norte', category: 'Bebidas', contact: '099 111 2222', email: 'ventas@disnorte.com', delivery: '2 días' },
+  { id: 2, name: 'Comercial Andina', category: 'Snacks', contact: '099 222 3333', email: 'ventas@comercialandina.com', delivery: '1 día' },
+  { id: 3, name: 'Lácteos San Miguel', category: 'Lácteos', contact: '098 555 7777', email: 'pedidos@lacteossanmiguel.com', delivery: '3 días' },
 ];
 
 const emptySaleForm = {
@@ -144,6 +144,7 @@ const emptyProviderForm = {
   name: '',
   category: '',
   contact: '',
+  email: '',
   delivery: '',
   notes: '',
 };
@@ -387,7 +388,8 @@ function mapProviderFromDb(provider) {
     storeId: provider.user_id,
     name: provider.name || '',
     category: provider.category || '',
-    contact: provider.contact || 'Sin contacto',
+    contact: provider.contact || 'Sin teléfono',
+    email: provider.email || '',
     delivery: provider.delivery || 'No definido',
     notes: provider.notes || '',
   };
@@ -399,6 +401,7 @@ function mapProviderToDb(provider, userId) {
     name: provider.name,
     category: provider.category,
     contact: provider.contact,
+    email: provider.email,
     delivery: provider.delivery,
     notes: provider.notes,
   };
@@ -1919,7 +1922,8 @@ export default function App() {
       storeName: currentUser.store,
       name,
       category: categoryValue,
-      contact: providerForm.contact.trim() || 'Sin contacto',
+      contact: providerForm.contact.trim() || 'Sin teléfono',
+      email: providerForm.email.trim(),
       delivery: providerForm.delivery.trim() || 'No definido',
       notes: providerForm.notes.trim(),
     };
@@ -1974,6 +1978,7 @@ export default function App() {
       name: provider.name || '',
       category: provider.category || '',
       contact: provider.contact || '',
+      email: provider.email || '',
       delivery: provider.delivery || '',
       notes: provider.notes || '',
     });
@@ -2139,7 +2144,7 @@ export default function App() {
     Productos: { title: 'Productos', subtitle: 'Administra los productos de tu tienda fácilmente.', icon: Package },
     Inventario: { title: 'Inventario', subtitle: 'Controla stock, alertas y valor de inventario.', icon: Boxes },
     Clientes: { title: 'Clientes', subtitle: 'Administra clientes frecuentes de la tienda.', icon: Users },
-    Proveedores: { title: 'Proveedores', subtitle: 'Organiza proveedores y tiempos de entrega.', icon: Truck },
+    Proveedores: { title: 'Proveedores', subtitle: 'Organiza proveedores y entregas estimadas.', icon: Truck },
     Reportes: { title: 'Reportes', subtitle: 'Analiza ventas, utilidad y decisiones de compra.', icon: BarChart3 },
     Configuración: { title: 'Configuración', subtitle: 'Ajusta datos generales de la tienda.', icon: Settings },
   }[active];
@@ -2729,6 +2734,40 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
       providerId: provider?.id || '',
       unitCost: product?.cost || '',
     });
+  }
+
+  async function copyProviderOrder(provider) {
+    const { message } = buildProviderOrder(provider, products);
+    try {
+      await navigator.clipboard.writeText(message);
+      alert('Pedido sugerido copiado correctamente.');
+    } catch {
+      alert(message);
+    }
+  }
+
+  function openProviderWhatsApp(provider) {
+    const phone = normalizeEcuadorPhone(provider.contact);
+    const { message } = buildProviderOrder(provider, products);
+
+    if (!phone) {
+      alert('Este proveedor no tiene un número válido para WhatsApp.');
+      return;
+    }
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  }
+
+  function openProviderEmail(provider) {
+    const email = String(provider.email || '').trim();
+    const { message } = buildProviderOrder(provider, products);
+
+    if (!email.includes('@')) {
+      alert('Este proveedor no tiene un correo válido.');
+      return;
+    }
+
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent('Pedido de reposición')}&body=${encodeURIComponent(message)}`;
   }
 
   return (
@@ -3615,8 +3654,82 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
   );
 }
 
+function normalizeEcuadorPhone(contact) {
+  const digits = String(contact || '').replace(/[^0-9]/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('593')) return digits;
+  if (digits.startsWith('0')) return `593${digits.slice(1)}`;
+  if (digits.length === 9) return `593${digits}`;
+  return digits;
+}
+
+function buildProviderOrder(provider, products) {
+  const lineBreak = String.fromCharCode(10);
+  const providerCategory = String(provider.category || '').toLowerCase();
+  const pendingProducts = products
+    .filter(product => {
+      const stock = Number(product.stock || 0);
+      const minStock = Number(product.minStock || 0);
+      const productCategory = String(product.category || '').toLowerCase();
+      const matchesCategory = providerCategory === 'general' || productCategory === providerCategory;
+      return matchesCategory && stock <= minStock;
+    })
+    .map(product => {
+      const stock = Number(product.stock || 0);
+      const minStock = Number(product.minStock || 0);
+      const suggested = Math.max((minStock * 2) - stock, minStock || 1);
+      return { ...product, suggested };
+    });
+
+  const lines = pendingProducts.map(product => `- ${product.name}: ${product.suggested} unidades sugeridas (stock actual: ${product.stock}, mínimo: ${product.minStock})`);
+
+  const message = lines.length > 0
+    ? ['Hola, buen día. Necesito cotizar los siguientes productos para reposición:', '', ...lines, '', 'Quedo atento a su confirmación. Gracias.'].join(lineBreak)
+    : `Hola, buen día. Me gustaría consultar disponibilidad y precios para reposición de productos de la categoría ${provider.category || 'general'}. Quedo atento. Gracias.`;
+
+  return { pendingProducts, message };
+}
+
+function getProviderEmail(provider) {
+  return String(provider?.email || '').trim();
+}
+
 function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider, resetProviderForm, editProvider, deleteProvider, editingProviderId, pendingDeleteProviderId, setPendingDeleteProviderId, providerNotice, productCategories, products, providersLoading }) {
   const lowStockProducts = products.filter(product => product.stock <= product.minStock);
+
+  async function copyProviderOrder(provider) {
+    const { message } = buildProviderOrder(provider, products);
+    try {
+      await navigator.clipboard.writeText(message);
+      alert('Pedido sugerido copiado correctamente.');
+    } catch {
+      alert(message);
+    }
+  }
+
+  function openProviderWhatsApp(provider) {
+    const phone = normalizeEcuadorPhone(provider.contact);
+    const { message } = buildProviderOrder(provider, products);
+
+    if (!phone) {
+      alert('Este proveedor no tiene un número válido para WhatsApp.');
+      return;
+    }
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  }
+
+  function openProviderEmail(provider) {
+    const email = getProviderEmail(provider);
+    const { message } = buildProviderOrder(provider, products);
+
+    if (!email) {
+      alert('Este proveedor no tiene un correo válido.');
+      return;
+    }
+
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent('Pedido de reposición')}&body=${encodeURIComponent(message)}`;
+  }
 
   return (
     <div className="space-y-5">
@@ -3647,13 +3760,20 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
             {providers.length === 0 && <div className="p-5"><EmptyState icon={Truck} title="Aún no tienes proveedores" text="Registra proveedores para asociarlos con categorías y facilitar reposiciones." /></div>}
             {providers.map(provider => {
               const isDeleting = pendingDeleteProviderId === provider.id;
+              const { pendingProducts } = buildProviderOrder(provider, products);
+              const hasEmail = Boolean(getProviderEmail(provider));
+              const hasPhone = Boolean(normalizeEcuadorPhone(provider.contact));
               return (
-                <div key={provider.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="font-bold text-slate-900">{provider.name}</p>
-                    <p className="text-sm text-slate-500">{provider.category} · {provider.contact}</p>
-                    <p className="text-xs text-slate-400">Tiempo de entrega: {provider.delivery}</p>
-                  </div>
+                <div key={provider.id} className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="font-bold text-slate-900">{provider.name}</p>
+                      <p className="text-sm text-slate-500">{provider.category} · Tel: {provider.contact}</p>
+                      <p className="text-xs text-slate-400">Correo: {provider.email || 'Sin correo'} · Entrega estimada: {provider.delivery}</p>
+                      <p className={`mt-2 text-xs font-bold ${pendingProducts.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {pendingProducts.length > 0 ? `Pedido sugerido: ${pendingProducts.length} producto(s)` : 'Sin productos pendientes de reposición'}
+                      </p>
+                    </div>
                   {isDeleting ? (
                     <div className="flex gap-2">
                       <button onClick={() => deleteProvider(provider.id)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600">Confirmar</button>
@@ -3665,6 +3785,13 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
                       <button onClick={() => setPendingDeleteProviderId(provider.id)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {hasPhone && <button type="button" onClick={() => openProviderWhatsApp(provider)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">WhatsApp</button>}
+                    {hasEmail && <button type="button" onClick={() => openProviderEmail(provider)} className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">Correo</button>}
+                    <button type="button" onClick={() => copyProviderOrder(provider)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Copiar pedido</button>
+                  </div>
                 </div>
               );
             })}
@@ -3696,8 +3823,9 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
                 <option value="General">General</option>
               </select>
             </label>
-            <Field label="Contacto" value={providerForm.contact} onChange={v => setProviderForm({ ...providerForm, contact: v })} placeholder="Teléfono o correo" />
-            <Field label="Tiempo de entrega" value={providerForm.delivery} onChange={v => setProviderForm({ ...providerForm, delivery: v })} placeholder="Ej: 2 días" />
+            <Field label="Teléfono / WhatsApp" value={providerForm.contact} onChange={v => setProviderForm({ ...providerForm, contact: v })} placeholder="Ej: 0991234567" />
+            <Field label="Correo electrónico" type="email" value={providerForm.email} onChange={v => setProviderForm({ ...providerForm, email: v })} placeholder="Ej: ventas@proveedor.com" />
+            <Field label="Entrega estimada" value={providerForm.delivery} onChange={v => setProviderForm({ ...providerForm, delivery: v })} placeholder="Ej: 2 días" />
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Observaciones</span>
               <textarea value={providerForm.notes} onChange={e => setProviderForm({ ...providerForm, notes: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Condiciones, horarios, productos principales..." />
@@ -3879,10 +4007,10 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
         Nombre: provider.name,
         Categoria: provider.category,
         Contacto: provider.contact,
-        Correo: '',
+        Correo: provider.email,
         Identificacion: '',
         Direccion: '',
-        Observaciones: `Entrega: ${provider.delivery}. ${provider.notes || ''}`,
+        Observaciones: `Entrega estimada: ${provider.delivery}. ${provider.notes || ''}`,
       })),
     ]);
   }
