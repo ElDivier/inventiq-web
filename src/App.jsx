@@ -511,6 +511,16 @@ export default function App() {
   const [purchaseCart, setPurchaseCart] = useState([]);
   const [purchaseNotice, setPurchaseNotice] = useState(null);
   const [receiptSale, setReceiptSale] = useState(null);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    if (!showSplash) return;
+    const timer = setTimeout(() => setShowSplash(false), 1500);
+    return () => clearTimeout(timer);
+  }, [showSplash]);
 
   useEffect(() => {
     async function initSupabaseSession() {
@@ -2137,15 +2147,8 @@ export default function App() {
 
   const HeaderIcon = pageInfo.icon;
 
-  if (authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-700">
-        <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
-          <p className="font-bold">Cargando InventiQ...</p>
-        </div>
-      </div>
-    );
+  if (showSplash) {
+    return <SplashScreen />;
   }
 
   if (!currentUser) {
@@ -2254,6 +2257,14 @@ export default function App() {
 
 function InventiQIcon({ className = 'h-12 w-12 rounded-2xl object-cover shadow-sm' }) {
   return <img src="/inventiq-icon.png" alt="InventiQ" className={className} />;
+}
+
+function SplashScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-emerald-950 to-teal-800 p-6">
+      <InventiQIcon className="h-36 w-36 rounded-[2rem] object-cover shadow-2xl shadow-emerald-950/40" />
+    </div>
+  );
 }
 
 function StoreAvatar({ currentUser, size = 'md' }) {
