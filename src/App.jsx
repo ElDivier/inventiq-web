@@ -2172,7 +2172,7 @@ export default function App() {
         <aside className="hidden lg:flex flex-col justify-between bg-gradient-to-b from-emerald-950 to-teal-950 text-white p-6">
           <div>
             <div className="mb-10 flex items-center gap-3">
-              <div className="rounded-2xl bg-white/10 p-3"><Store className="h-8 w-8" /></div>
+              <InventiQIcon className="h-14 w-14 rounded-2xl object-cover shadow-md" />
               <div>
                 <h1 className="text-2xl font-bold">InventiQ</h1>
                 <p className="text-sm text-emerald-100">Controla tu inventario</p>
@@ -2252,6 +2252,10 @@ export default function App() {
   );
 }
 
+function InventiQIcon({ className = 'h-12 w-12 rounded-2xl object-cover shadow-sm' }) {
+  return <img src="/inventiq-icon.png" alt="InventiQ" className={className} />;
+}
+
 function StoreAvatar({ currentUser, size = 'md' }) {
   const sizes = {
     sm: 'h-10 w-10 text-base rounded-2xl',
@@ -2277,7 +2281,7 @@ function MobileTopBar({ currentUser, logout, active }) {
     <div className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <StoreAvatar currentUser={currentUser} size="sm" />
+          <InventiQIcon className="h-11 w-11 rounded-2xl object-cover shadow-sm" />
           <div>
             <p className="text-lg font-extrabold leading-5">InventiQ</p>
             <p className="max-w-[170px] truncate text-xs font-semibold text-emerald-700">{currentUser.store} · {active}</p>
@@ -2370,7 +2374,7 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
       <div className="mx-auto grid min-h-screen max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[1fr_440px]">
         <section className="hidden text-white lg:block">
           <div className="mb-8 flex items-center gap-4">
-            <div className="rounded-3xl bg-white/10 p-4 backdrop-blur"><Store className="h-12 w-12" /></div>
+            <InventiQIcon className="h-20 w-20 rounded-3xl object-cover shadow-xl" />
             <div>
               <h1 className="text-5xl font-extrabold">InventiQ</h1>
               <p className="mt-2 text-lg text-emerald-100">Gestión inteligente de inventarios para tiendas.</p>
@@ -2385,8 +2389,8 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
 
         <section className="rounded-[2rem] bg-white p-7 shadow-2xl sm:p-9">
           <div className="mb-7 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-900 text-white shadow-lg">
-              {isLogin ? <Lock className="h-9 w-9" /> : <UserPlus className="h-9 w-9" />}
+            <div className="mx-auto mb-4 flex justify-center">
+              <InventiQIcon className="h-24 w-24 rounded-3xl object-cover shadow-lg" />
             </div>
             <h2 className="text-3xl font-extrabold">{isLogin ? 'Iniciar sesión' : 'Crear cuenta'}</h2>
             <p className="mt-2 text-sm text-slate-500">{isLogin ? 'Ingresa para acceder al panel de tu tienda.' : 'Registra tu tienda para usar InventiQ.'}</p>
