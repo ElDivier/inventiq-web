@@ -3698,22 +3698,44 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
   }
 
   function exportInventory() {
-    exportToCSV('inventiq_inventario.csv', products.map(product => ({
-      SKU: product.sku,
-      Producto: product.name,
-      Categoria: product.category,
-      Precio_venta: product.price,
-      Costo: product.cost,
-      Stock_actual: product.stock,
-      Stock_minimo: product.minStock,
-      Estado: statusText(product).label,
-      Lote: product.batchNumber || '',
-      Fecha_ingreso: product.entryDate || '',
-      Fecha_caducidad: product.expirationDate || '',
-      Estado_caducidad: expirationText(product).label,
-      Valor_inventario: (product.cost * product.stock).toFixed(2),
-      Ganancia_potencial: ((product.price - product.cost) * product.stock).toFixed(2),
-    })));
+    const extraLabels = businessConfig.extraLabels || {};
+
+    const rows = products.map(product => {
+      const baseRow = {
+        SKU: product.sku,
+        Codigo_barras: product.barcode || '',
+        Producto: product.name,
+        Categoria: product.category,
+        Precio_unitario_venta: Number(product.price || 0).toFixed(2),
+        Costo_unitario: Number(product.cost || 0).toFixed(2),
+        Stock_actual: product.stock,
+        Stock_minimo: product.minStock,
+        Estado: statusText(product).label,
+        Valor_inventario: (product.cost * product.stock).toFixed(2),
+        Ganancia_potencial: ((product.price - product.cost) * product.stock).toFixed(2),
+      };
+
+      const extraRow = businessConfig.productExtraFields ? {
+        [extraLabels.brand?.label || 'Marca']: product.brand || '',
+        [extraLabels.size?.label || 'Talla_medida']: product.size || '',
+        [extraLabels.color?.label || 'Color_modelo']: product.color || '',
+      } : {};
+
+      const expirationRow = businessConfig.usesExpiration ? {
+        Lote: product.batchNumber || '',
+        Fecha_ingreso: product.entryDate || '',
+        Fecha_caducidad: product.expirationDate || '',
+        Estado_caducidad: expirationText(product).label,
+      } : {};
+
+      return {
+        ...baseRow,
+        ...extraRow,
+        ...expirationRow,
+      };
+    });
+
+    exportToCSV(`inventiq_inventario_${currentUser?.businessType || 'general'}.csv`, rows);
   }
 
   const views = ['Alertas', 'Movimientos', 'Ajuste de stock', 'Resumen'];
