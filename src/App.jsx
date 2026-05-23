@@ -44,6 +44,9 @@ const emptyForm = {
   minStock: '',
   sku: '',
   description: '',
+  batchNumber: '',
+  entryDate: '',
+  expirationDate: '',
   imageUrl: '',
   imageFile: null,
 };
@@ -218,6 +221,9 @@ function mapProductFromDb(product) {
     minStock: Number(product.min_stock || 0),
     status: product.status || 'Activo',
     description: product.description || '',
+    batchNumber: product.batch_number || '',
+    entryDate: product.entry_date || '',
+    expirationDate: product.expiration_date || '',
     imageUrl: product.image_url || '',
   };
 }
@@ -234,6 +240,9 @@ function mapProductToDb(product, userId) {
     min_stock: product.minStock,
     status: product.status,
     description: product.description,
+    batch_number: product.batchNumber || '',
+    entry_date: product.entryDate || null,
+    expiration_date: product.expirationDate || null,
     image_url: product.imageUrl || '',
   };
 }
@@ -908,6 +917,21 @@ export default function App() {
     return { label: 'Disponible', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700' };
   }
 
+  function expirationText(product) {
+    if (!product.expirationDate) return { label: 'Sin caducidad', color: 'text-slate-500', badge: 'bg-slate-50 text-slate-600', days: null };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiration = new Date(product.expirationDate);
+    expiration.setHours(0, 0, 0, 0);
+    const days = Math.ceil((expiration - today) / (1000 * 60 * 60 * 24));
+
+    if (days < 0) return { label: 'Vencido', color: 'text-red-600', badge: 'bg-red-50 text-red-700', days };
+    if (days <= 15) return { label: 'Por vencer', color: 'text-amber-600', badge: 'bg-amber-50 text-amber-700', days };
+    if (days <= 30) return { label: 'Vence pronto', color: 'text-blue-600', badge: 'bg-blue-50 text-blue-700', days };
+    return { label: 'Vigente', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700', days };
+  }
+
   function resetForm() {
     setForm(emptyForm);
     setEditingId(null);
@@ -1068,6 +1092,9 @@ export default function App() {
       minStock,
       status: stock === 0 ? 'Inactivo' : 'Activo',
       description: form.description.trim(),
+      batchNumber: form.batchNumber.trim(),
+      entryDate: form.entryDate || '',
+      expirationDate: form.expirationDate || '',
       imageUrl: uploadedImageUrl,
     };
 
@@ -1127,6 +1154,9 @@ export default function App() {
       minStock: String(product.minStock),
       sku: product.sku,
       description: product.description || '',
+      batchNumber: product.batchNumber || '',
+      entryDate: product.entryDate || '',
+      expirationDate: product.expirationDate || '',
       imageUrl: product.imageUrl || '',
       imageFile: null,
     });
@@ -1891,11 +1921,11 @@ export default function App() {
           {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
-          {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} />}
+          {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
+          {active === 'Inventario' && <InventoryPage products={storeProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
-          {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} />}
+          {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} />}
         </main>
       </div>
@@ -2539,20 +2569,26 @@ function ReceiptModal({ sale, currentUser, onClose }) {
   );
 }
 
-function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
+function ProductsPage({ products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
+  const expiringProducts = products.filter(product => {
+    const exp = expirationText ? expirationText(product) : null;
+    return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
+  });
+
   return (
     <>
       <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon={Package} label="Total productos" value={totalProducts} note="activos" color="emerald" />
         <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
         <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
+        <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
 
       {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-        <ProductTable products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} />
+        <ProductTable products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
         <ProductForm form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
@@ -2569,10 +2605,12 @@ function ProductsPage({ products, filtered, categories, productCategories, categ
   );
 }
 
-function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialProfit, statusText }) {
+function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText }) {
   const alerts = products.filter(p => p.stock <= p.minStock);
   const criticalProducts = products.filter(p => p.stock === 0);
   const availableProducts = products.filter(p => p.stock > p.minStock);
+  const expiredProducts = products.filter(p => expirationText(p).label === 'Vencido');
+  const expiringProducts = products.filter(p => ['Por vencer', 'Vence pronto'].includes(expirationText(p).label));
 
   function exportInventory() {
     exportToCSV('inventiq_inventario.csv', products.map(product => ({
@@ -2584,6 +2622,10 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
       Stock_actual: product.stock,
       Stock_minimo: product.minStock,
       Estado: statusText(product).label,
+      Lote: product.batchNumber || '',
+      Fecha_ingreso: product.entryDate || '',
+      Fecha_caducidad: product.expirationDate || '',
+      Estado_caducidad: expirationText(product).label,
       Valor_inventario: (product.cost * product.stock).toFixed(2),
       Ganancia_potencial: ((product.price - product.cost) * product.stock).toFixed(2),
     })));
@@ -2602,11 +2644,31 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-bold text-emerald-900">Control de inventario</h3>
-            <p className="text-sm text-emerald-800">{availableProducts.length} productos disponibles, {alerts.length} con alerta y {criticalProducts.length} sin stock.</p>
+            <p className="text-sm text-emerald-800">{availableProducts.length} productos disponibles, {alerts.length} con alerta, {criticalProducts.length} sin stock y {expiredProducts.length} vencidos.</p>
           </div>
           <button onClick={exportInventory} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">
             <Download className="mr-2 inline h-5 w-5" />Exportar inventario
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h3 className="mb-5 text-xl font-bold">Alertas de caducidad</h3>
+        <div className="space-y-3">
+          {[...expiredProducts, ...expiringProducts].length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen productos vencidos o próximos a caducar.</p>}
+          {[...expiredProducts, ...expiringProducts].map(product => {
+            const exp = expirationText(product);
+            return (
+              <div key={`exp-${product.id}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
+                <div>
+                  <p className="font-bold">{product.name}</p>
+                  <p className={`text-sm ${exp.color}`}>Caducidad: {product.expirationDate} · {exp.label} {exp.days !== null ? `(${exp.days} días)` : ''}</p>
+                  <p className="text-xs text-slate-500">Lote: {product.batchNumber || 'No registrado'} · Stock: {product.stock}</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${exp.badge}`}>{exp.label}</span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
@@ -2815,7 +2877,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
   );
 }
 
-function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit }) {
+function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit, expirationText }) {
   const completedSales = sales.filter(s => s.status !== 'Anulada');
 
   const salesByProduct = products.map(product => {
@@ -2907,6 +2969,8 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
       Compra_sugerida: product.suggestedPurchase,
       Decision_compra: product.recommendation,
       Marketing: product.marketing,
+      Fecha_caducidad: product.expirationDate || '',
+      Estado_caducidad: expirationText ? expirationText(product).label : '',
     })));
   }
 
@@ -3116,7 +3180,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
   );
 }
 
-function ProductTable({ products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText }) {
+function ProductTable({ products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-5">
@@ -3155,6 +3219,7 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
             <tbody className="divide-y divide-slate-100">
               {filtered.map(product => {
                 const s = statusText(product);
+                const exp = expirationText ? expirationText(product) : null;
                 const isDeleting = pendingDeleteId === product.id;
                 return (
                   <tr key={product.id} className="hover:bg-slate-50/70">
@@ -3168,6 +3233,7 @@ function ProductTable({ products, filtered, categories, category, setCategory, d
                         <div>
                           <p className="font-bold text-slate-900">{product.name}</p>
                           <p className="text-xs text-slate-500">SKU: {product.sku}</p>
+                          {product.expirationDate && <p className={`text-xs ${exp?.color}`}>Caduca: {product.expirationDate} · {exp?.label}</p>}
                         </div>
                       </div>
                     </td>
@@ -3243,6 +3309,11 @@ function ProductForm({ form, setForm, saveProduct, resetForm, editingId, notice,
           <Field label="Stock mínimo" type="number" min="0" value={form.minStock} onChange={v => setForm({ ...form, minStock: v })} placeholder="5" />
         </div>
         <Field label="Código / SKU" value={form.sku} onChange={v => setForm({ ...form, sku: v })} placeholder="Ej: ARROZ001" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Lote" value={form.batchNumber} onChange={v => setForm({ ...form, batchNumber: v })} placeholder="Ej: LOTE-001" />
+          <Field label="Fecha de ingreso" type="date" value={form.entryDate} onChange={v => setForm({ ...form, entryDate: v })} />
+          <Field label="Fecha de caducidad" type="date" value={form.expirationDate} onChange={v => setForm({ ...form, expirationDate: v })} />
+        </div>
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-slate-700">Descripción</span>
           <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Descripción del producto..." />
