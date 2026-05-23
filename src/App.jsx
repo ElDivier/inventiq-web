@@ -2059,7 +2059,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <MobileTopBar currentUser={currentUser} logout={logout} />
+      <MobileTopBar currentUser={currentUser} logout={logout} active={active} />
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
         <aside className="hidden lg:flex flex-col justify-between bg-gradient-to-b from-emerald-950 to-teal-950 text-white p-6">
           <div>
@@ -2106,18 +2106,18 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="p-4 pb-28 pt-20 sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
-          <header className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <main className="p-3 pb-32 pt-20 sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
+          <header className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-white/70 p-3 shadow-sm backdrop-blur sm:mb-8 sm:bg-transparent sm:p-0 sm:shadow-none lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><HeaderIcon className="h-8 w-8" /></div>
               <div>
-                <h2 className="text-3xl font-extrabold lg:text-4xl">{pageInfo.title}</h2>
-                <p className="text-slate-500">{pageInfo.subtitle}</p>
+                <h2 className="text-2xl font-extrabold sm:text-3xl lg:text-4xl">{pageInfo.title}</h2>
+                <p className="text-sm text-slate-500 sm:text-base">{pageInfo.subtitle}</p>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">{currentUser.store} · {currentUser.city}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="relative w-full lg:w-80">
+              <div className="relative hidden w-full sm:block lg:w-80">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                 <input value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 shadow-sm outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar producto, SKU o categoría..." />
               </div>
@@ -2138,7 +2138,7 @@ export default function App() {
         </main>
       </div>
       <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} />
-      <MobileFloatingButton setActive={setActive} />
+      <MobileFloatingButton active={active} setActive={setActive} />
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
   );
@@ -2164,7 +2164,7 @@ function StoreAvatar({ currentUser, size = 'md' }) {
   );
 }
 
-function MobileTopBar({ currentUser, logout }) {
+function MobileTopBar({ currentUser, logout, active }) {
   return (
     <div className="fixed left-0 right-0 top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur lg:hidden">
       <div className="flex items-center justify-between gap-3">
@@ -2172,7 +2172,7 @@ function MobileTopBar({ currentUser, logout }) {
           <StoreAvatar currentUser={currentUser} size="sm" />
           <div>
             <p className="text-lg font-extrabold leading-5">InventiQ</p>
-            <p className="text-xs font-semibold text-emerald-700">{currentUser.store}</p>
+            <p className="max-w-[170px] truncate text-xs font-semibold text-emerald-700">{currentUser.store} · {active}</p>
           </div>
         </div>
         <button onClick={logout} className="rounded-2xl border border-slate-200 p-3 text-slate-600 hover:bg-slate-50">
@@ -2241,10 +2241,10 @@ function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMor
   );
 }
 
-function MobileFloatingButton({ setActive }) {
+function MobileFloatingButton({ active, setActive }) {
   return (
-    <button onClick={() => setActive('Productos')} className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-200 hover:bg-emerald-700 sm:hidden">
-      <Plus className="h-7 w-7" />
+    <button onClick={() => setActive(active === 'Compras' ? 'Compras' : active === 'Productos' ? 'Productos' : 'Ventas')} className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-200 hover:bg-emerald-700 sm:hidden" aria-label="Acción rápida">
+      {active === 'Compras' ? <ClipboardList className="h-7 w-7" /> : active === 'Productos' ? <Plus className="h-7 w-7" /> : <ShoppingCart className="h-7 w-7" />}
     </button>
   );
 }
@@ -2404,7 +2404,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
         <Metric icon={ClipboardList} label="Compras registradas" value={purchases.length} note="historial" color="emerald" />
         <Metric icon={DollarSign} label="Total comprado" value={`$${purchases.reduce((sum, item) => sum + item.total, 0).toFixed(2)}`} note="inversión" color="blue" />
         <Metric icon={Truck} label="Proveedores" value={providers.length} note="registrados" color="amber" />
@@ -2589,7 +2589,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Metric icon={DollarSign} label="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} note="total" color="emerald" />
         <Metric icon={TrendingUp} label="Utilidad estimada" value={`$${totalProfit.toFixed(2)}`} note="ganancia" color="blue" />
         <Metric icon={Percent} label="Descuentos" value={`$${totalDiscount.toFixed(2)}`} note="aplicados" color="amber" />
@@ -3084,7 +3084,7 @@ function InventoryPage({ products, lowStock, noStock, inventoryValue, potentialP
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Metric icon={DollarSign} label="Valor inventario" value={`$${inventoryValue.toFixed(2)}`} note="actual" color="blue" />
         <Metric icon={TrendingUp} label="Ganancia potencial" value={`$${potentialProfit.toFixed(2)}`} note="estimada" color="emerald" />
         <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
@@ -3482,7 +3482,7 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Metric icon={DollarSign} label="Ventas" value={`$${totalSales.toFixed(2)}`} note="acumuladas" color="emerald" />
         <Metric icon={TrendingUp} label="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} note="estimada" color="blue" />
         <Metric icon={Package} label="Producto estrella" value={bestSeller} note="más vendido" color="amber" />
@@ -3847,13 +3847,13 @@ function Metric({ icon: Icon, label, value, note, color }) {
     blue: 'bg-blue-50 text-blue-500',
   };
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className={`flex h-16 w-16 items-center justify-center rounded-full ${colors[color]}`}><Icon className="h-8 w-8" /></div>
-        <div>
-          <p className="text-sm text-slate-500">{label}</p>
-          <p className="text-3xl font-extrabold text-slate-900">{value}</p>
-          <p className="text-sm text-emerald-600">{note}</p>
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-16 sm:w-16 ${colors[color]}`}><Icon className="h-6 w-6 sm:h-8 sm:w-8" /></div>
+        <div className="min-w-0">
+          <p className="truncate text-xs text-slate-500 sm:text-sm">{label}</p>
+          <p className="truncate text-xl font-extrabold text-slate-900 sm:text-3xl">{value}</p>
+          <p className="truncate text-xs text-emerald-600 sm:text-sm">{note}</p>
         </div>
       </div>
     </div>
