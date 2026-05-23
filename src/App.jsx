@@ -2237,7 +2237,7 @@ export default function App() {
             </div>
           </header>
 
-          {active === 'Inicio' && <HomePage totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} />}
+          {active === 'Inicio' && <HomePage currentUser={currentUser} totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} setActive={setActive} expirationText={expirationText} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
@@ -2442,63 +2442,270 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
   );
 }
 
-function HomePage({ totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit }) {
-  const topProducts = products.slice(0, 4);
+function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit, setActive, expirationText }) {
+  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
+  const recentSales = completedSales.slice(0, 5);
+  const lowStockProducts = products.filter(product => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= Number(product.minStock || 0)).slice(0, 5);
+  const expiringProducts = products
+    .filter(product => {
+      const exp = expirationText ? expirationText(product) : null;
+      return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
+    })
+    .slice(0, 5);
+
+  const soldMap = completedSales.reduce((acc, sale) => {
+    if (sale.items?.length > 0) {
+      sale.items.forEach(item => {
+        const key = item.product || 'Producto';
+        acc[key] = acc[key] || { name: key, quantity: 0, total: 0 };
+        acc[key].quantity += Number(item.quantity || 0);
+        acc[key].total += Number(item.subtotal || 0);
+      });
+    } else {
+      const key = sale.product || 'Producto';
+      acc[key] = acc[key] || { name: key, quantity: 0, total: 0 };
+      acc[key].quantity += Number(sale.quantity || 0);
+      acc[key].total += Number(sale.total || 0);
+    }
+    return acc;
+  }, {});
+
+  const topSoldProducts = Object.values(soldMap).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+  const alertCount = lowStock + noStock + expiringProducts.length;
+  const stockOk = products.filter(product => Number(product.stock || 0) > Number(product.minStock || 0)).length;
+  const inventoryHealth = totalProducts > 0 ? Math.round((stockOk / totalProducts) * 100) : 0;
+
   return (
     <div className="space-y-6">
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={DollarSign} label="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} note="registradas" color="emerald" />
-        <Metric icon={TrendingUp} label="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} note="estimada" color="blue" />
-        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="por revisar" color="amber" />
-        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="requiere compra" color="red" />
+      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-500 p-6 text-white shadow-xl shadow-emerald-100 sm:p-7">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-50 backdrop-blur">
+              <Activity className="h-4 w-4" /> Dashboard principal
+            </div>
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Bienvenido, {currentUser?.name || 'Usuario'}</h2>
+            <p className="mt-2 text-sm leading-6 text-emerald-50 sm:text-base">
+              Resumen inteligente de {currentUser?.store || 'tu tienda'}: ventas, inventario, alertas y productos clave en un solo lugar.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[560px]">
+            <DashboardMiniStat icon={DollarSign} label="Ventas" value={`$${totalSales.toFixed(2)}`} />
+            <DashboardMiniStat icon={TrendingUp} label="Utilidad" value={`$${totalProfit.toFixed(2)}`} />
+            <DashboardMiniStat icon={Package} label="Productos" value={totalProducts} />
+            <DashboardMiniStat icon={AlertTriangle} label="Alertas" value={alertCount} />
+          </div>
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-3xl bg-gradient-to-br from-emerald-600 to-emerald-800 p-7 text-white shadow-lg">
-          <p className="text-sm text-emerald-100">Resumen de tienda</p>
-          <h3 className="mt-2 text-3xl font-extrabold">Inventario valorizado en ${inventoryValue.toFixed(2)}</h3>
-          <p className="mt-3 max-w-2xl text-emerald-50">Producto estrella: <strong>{bestSeller}</strong>. Revisa los productos con stock bajo para evitar pérdidas de ventas.</p>
-          <div className="mt-8 grid grid-cols-3 gap-3">
-            <MiniStat label="Ventas" value={`$${totalSales.toFixed(2)}`} />
-            <MiniStat label="Productos" value={totalProducts} />
-            <MiniStat label="Alertas" value={lowStock + noStock} />
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <DashboardKpi icon={DollarSign} title="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} subtitle="registradas" tone="emerald" />
+        <DashboardKpi icon={TrendingUp} title="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} subtitle="estimada" tone="blue" />
+        <DashboardKpi icon={Boxes} title="Stock bajo" value={lowStock} subtitle="por revisar" tone="amber" />
+        <DashboardKpi icon={ShoppingCart} title="Sin stock" value={noStock} subtitle="requiere compra" tone="red" />
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <QuickAction icon={ShoppingCart} label="Nueva venta" onClick={() => setActive('Ventas')} tone="emerald" />
+        <QuickAction icon={ClipboardList} label="Registrar compra" onClick={() => setActive('Compras')} tone="teal" />
+        <QuickAction icon={Plus} label="Agregar producto" onClick={() => setActive('Productos')} tone="blue" />
+        <QuickAction icon={BarChart3} label="Ver reportes" onClick={() => setActive('Reportes')} tone="slate" />
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-[2rem] border border-emerald-100 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-2xl font-extrabold text-slate-900">Resumen de tienda</h3>
+              <p className="text-sm text-slate-500">Control general de inventario y rendimiento.</p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Salud del inventario: {inventoryHealth}%</span>
+          </div>
+
+          <div className="rounded-[1.75rem] bg-gradient-to-br from-emerald-600 to-teal-600 p-6 text-white">
+            <p className="text-sm font-semibold text-emerald-100">Inventario valorizado</p>
+            <h4 className="mt-2 text-4xl font-extrabold">${inventoryValue.toFixed(2)}</h4>
+            <p className="mt-3 text-sm leading-6 text-emerald-50">
+              Producto estrella: <strong>{topSoldProducts[0]?.name || bestSeller || 'Sin ventas'}</strong>. Mantén atención sobre stock bajo, sin stock y caducidades próximas.
+            </p>
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <SummaryBox label="Ventas" value={`$${totalSales.toFixed(2)}`} />
+              <SummaryBox label="Productos" value={totalProducts} />
+              <SummaryBox label="Alertas" value={alertCount} />
+            </div>
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-xl font-bold">Ventas recientes</h3>
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900">Ventas recientes</h3>
+              <p className="text-sm text-slate-500">Últimos movimientos registrados.</p>
+            </div>
+            <button onClick={() => setActive('Ventas')} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Ver todas</button>
+          </div>
           <div className="space-y-3">
-            {sales.slice(0, 4).map(sale => (
-              <div key={sale.id} className="flex items-center justify-between rounded-2xl bg-slate-50 p-4">
-                <div>
-                  <p className="font-semibold">{sale.code}</p>
-                  <p className="text-sm text-slate-500">{sale.product} · {sale.date}</p>
+            {recentSales.length === 0 && <EmptyDashboardMessage text="Todavía no hay ventas registradas." />}
+            {recentSales.map(sale => (
+              <div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4">
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900">{sale.code}</p>
+                  <p className="truncate text-sm text-slate-500">{sale.product} · {sale.date}</p>
                 </div>
-                <p className="font-bold text-emerald-700">${sale.total.toFixed(2)}</p>
+                <p className="shrink-0 font-extrabold text-emerald-700">${Number(sale.total || 0).toFixed(2)}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="mb-4 text-xl font-bold">Productos principales</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          {topProducts.map(product => (
-            <div key={product.id} className="rounded-2xl border border-slate-100 p-4">
-              {product.imageUrl ? (
-                <img src={product.imageUrl} alt={product.name} className="mb-3 h-12 w-12 rounded-xl object-cover shadow-sm" />
-              ) : (
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-xl">📦</div>
-              )}
-              <p className="font-bold">{product.name}</p>
-              <p className="text-sm text-slate-500">Stock: {product.stock}</p>
-            </div>
-          ))}
-        </div>
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <DashboardListCard
+          title="Productos con stock bajo"
+          subtitle="Requieren revisión o reposición"
+          empty="No hay productos con stock bajo."
+          items={lowStockProducts.map(product => ({
+            title: product.name,
+            subtitle: `Stock actual: ${product.stock} · mínimo: ${product.minStock}`,
+            badge: `${product.stock} unidades`,
+            tone: 'amber',
+          }))}
+        />
+        <DashboardListCard
+          title="Próximos a caducar"
+          subtitle="Productos que vencen pronto"
+          empty="No hay productos próximos a caducar."
+          items={expiringProducts.map(product => {
+            const exp = expirationText(product);
+            return {
+              title: product.name,
+              subtitle: `Caduca: ${product.expirationDate || 'Sin fecha'} · ${exp.label}`,
+              badge: exp.days !== null ? `${exp.days} días` : 'Revisar',
+              tone: 'red',
+            };
+          })}
+        />
+        <DashboardListCard
+          title="Productos más vendidos"
+          subtitle="Ranking por unidades vendidas"
+          empty="Todavía no hay ventas suficientes."
+          items={topSoldProducts.map(product => ({
+            title: product.name,
+            subtitle: `${product.quantity} unidades vendidas`,
+            badge: `$${product.total.toFixed(2)}`,
+            tone: 'emerald',
+          }))}
+        />
       </section>
     </div>
   );
+}
+
+function DashboardKpi({ icon: Icon, title, value, subtitle, tone = 'emerald' }) {
+  const styles = {
+    emerald: 'bg-emerald-50 text-emerald-600',
+    blue: 'bg-blue-50 text-blue-600',
+    amber: 'bg-amber-50 text-amber-600',
+    red: 'bg-red-50 text-red-600',
+  };
+
+  return (
+    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${styles[tone]}`}>
+          <Icon className="h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-semibold text-slate-500 sm:text-sm">{title}</p>
+          <p className="truncate text-2xl font-extrabold text-slate-900">{value}</p>
+          <p className="truncate text-xs text-emerald-600">{subtitle}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardMiniStat({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
+      <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-white/15">
+        <Icon className="h-4 w-4 text-emerald-100" />
+      </div>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-100 sm:text-xs">{label}</p>
+      <p className="mt-1 truncate text-lg font-extrabold text-white sm:text-xl">{value}</p>
+    </div>
+  );
+}
+
+function QuickAction({ icon: Icon, label, onClick, tone = 'emerald' }) {
+  const styles = {
+    emerald: 'bg-emerald-50 text-emerald-700',
+    teal: 'bg-teal-50 text-teal-700',
+    blue: 'bg-blue-50 text-blue-700',
+    slate: 'bg-slate-50 text-slate-700',
+  };
+
+  return (
+    <button onClick={onClick} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${styles[tone]}`}>
+        <Icon className="h-6 w-6" />
+      </div>
+      <p className="text-xs font-semibold text-slate-500">Acción rápida</p>
+      <p className="mt-1 text-base font-extrabold text-slate-900 sm:text-lg">{label}</p>
+    </button>
+  );
+}
+
+function SummaryBox({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
+      <p className="text-xs text-emerald-50 sm:text-sm">{label}</p>
+      <p className="truncate text-xl font-extrabold text-white sm:text-2xl">{value}</p>
+    </div>
+  );
+}
+
+function DashboardListCard({ title, subtitle, items = [], empty }) {
+  return (
+    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-extrabold text-slate-900">{title}</h3>
+          <p className="text-sm text-slate-500">{subtitle}</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {items.length === 0 && <EmptyDashboardMessage text={empty} />}
+        {items.map((item, index) => (
+          <DashboardListItem key={`${item.title}-${index}`} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DashboardListItem({ item }) {
+  const badgeStyles = {
+    emerald: 'bg-emerald-50 text-emerald-700',
+    amber: 'bg-amber-50 text-amber-700',
+    red: 'bg-red-50 text-red-700',
+  };
+
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-2xl bg-slate-50 p-4">
+      <div className="min-w-0">
+        <p className="truncate font-bold text-slate-900">{item.title}</p>
+        <p className="text-sm text-slate-500">{item.subtitle}</p>
+      </div>
+      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${badgeStyles[item.tone] || badgeStyles.emerald}`}>
+        {item.badge}
+      </span>
+    </div>
+  );
+}
+
+function EmptyDashboardMessage({ text }) {
+  return <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">{text}</p>;
 }
 
 function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
