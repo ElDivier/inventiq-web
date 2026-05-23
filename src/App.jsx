@@ -11,7 +11,6 @@ import {
   Settings,
   Plus,
   Search,
-  Bell,
   Edit,
   Trash2,
   Store,
@@ -2196,14 +2195,6 @@ export default function App() {
           </div>
 
           <div className="space-y-5">
-            <div className="rounded-3xl bg-white/10 p-5 backdrop-blur">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-400/20">
-                <CheckCircle2 className="h-7 w-7 text-emerald-300" />
-              </div>
-              <h3 className="font-bold">Ahorra tiempo</h3>
-              <p className="mt-2 text-sm text-emerald-100">Automatiza tu inventario y evita quedarte sin stock.</p>
-              <button onClick={() => setActive('Reportes')} className="mt-5 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white">Ver reportes</button>
-            </div>
             <div className="flex items-center gap-3">
               <StoreAvatar currentUser={currentUser} size="md" />
               <div>
@@ -2228,11 +2219,6 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="relative hidden w-full sm:block lg:w-80">
-                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={search} onChange={e => setSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 shadow-sm outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar producto, SKU o categoría..." />
-              </div>
-              <button className="hidden rounded-2xl bg-white p-3 shadow-sm sm:block"><Bell className="h-5 w-5" /></button>
               <button onClick={() => setActive('Productos')} className="hidden rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 sm:inline-flex sm:items-center"><Plus className="mr-2 h-5 w-5" />Agregar producto</button>
             </div>
           </header>
@@ -2249,7 +2235,7 @@ export default function App() {
         </main>
       </div>
       <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
-      <MobileFloatingButton active={active} setActive={setActive} />
+      {/* Botón flotante retirado: el menú inferior ya cubre la navegación móvil. */}
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
   );
@@ -2363,11 +2349,24 @@ function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMor
   );
 }
 
-function MobileFloatingButton({ active, setActive }) {
+function MobileFloatingButton() {
+  return null;
+}
+
+function EmptyState({ icon: Icon = Package, title, text, actionLabel, onAction }) {
   return (
-    <button onClick={() => setActive(active === 'Compras' ? 'Compras' : active === 'Productos' ? 'Productos' : 'Ventas')} className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-200 hover:bg-emerald-700 sm:hidden" aria-label="Acción rápida">
-      {active === 'Compras' ? <ClipboardList className="h-7 w-7" /> : active === 'Productos' ? <Plus className="h-7 w-7" /> : <ShoppingCart className="h-7 w-7" />}
-    </button>
+    <div className="rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+        <Icon className="h-7 w-7" />
+      </div>
+      <h3 className="text-lg font-extrabold text-slate-900">{title}</h3>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{text}</p>
+      {actionLabel && onAction && (
+        <button type="button" onClick={onAction} className="mt-4 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+          {actionLabel}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -2748,7 +2747,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
             <h3 className="flex items-center gap-2 text-xl font-bold"><ClipboardList className="h-5 w-5 text-emerald-600" /> Historial de compras</h3>
           </div>
           <div className="divide-y divide-slate-100">
-            {purchases.length === 0 && <p className="p-5 text-sm text-slate-500">Todavía no existen compras registradas.</p>}
+            {purchases.length === 0 && <div className="p-5"><EmptyState icon={ClipboardList} title="Aún no tienes compras" text="Registra tu primera compra para aumentar stock y controlar mejor tus proveedores." /></div>}
             {purchases.map(purchase => (
               <div key={purchase.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -2871,7 +2870,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <p className="text-3xl font-extrabold text-emerald-900">${total.toFixed(2)}</p>
             </div>
 
-            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Registrar compra y aumentar stock</button>
+            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">Registrar compra</button>
           </div>
         </form>
       </section>
@@ -2959,6 +2958,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               <h3 className="flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Historial de ventas</h3>
             </div>
             <div className="divide-y divide-slate-100">
+              {sales.length === 0 && <div className="p-5"><EmptyState icon={ShoppingCart} title="Aún no tienes ventas" text="Registra tu primera venta para empezar a medir ingresos, utilidad y rotación." /></div>}
               {sales.map(sale => (
                 <div key={sale.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
@@ -3508,7 +3508,7 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
           <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-emerald-600" /> Clientes registrados</h3>
         </div>
         <div className="divide-y divide-slate-100">
-          {clients.length === 0 && <p className="p-5 text-sm text-slate-500">Todavía no existen clientes registrados para esta tienda.</p>}
+          {clients.length === 0 && <div className="p-5"><EmptyState icon={Users} title="Aún no tienes clientes" text="Guarda clientes frecuentes para facturar más rápido y consultar su información." /></div>}
           {clients.map(client => {
             const isDeleting = pendingDeleteClientId === client.id;
             return (
@@ -3576,7 +3576,7 @@ function ClientsPage({ clients, clientForm, setClientForm, saveClient, resetClie
           </label>
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button type="button" onClick={resetClientForm} className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50">Cancelar</button>
-            <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">{editingClientId ? 'Actualizar' : 'Guardar'}</button>
+            <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">{editingClientId ? 'Actualizar cliente' : 'Guardar cliente'}</button>
           </div>
         </div>
       </form>
@@ -3613,7 +3613,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
             <h3 className="flex items-center gap-2 text-xl font-bold"><Truck className="h-5 w-5 text-emerald-600" /> Proveedores registrados</h3>
           </div>
           <div className="divide-y divide-slate-100">
-            {providers.length === 0 && <p className="p-5 text-sm text-slate-500">Todavía no existen proveedores registrados para esta tienda.</p>}
+            {providers.length === 0 && <div className="p-5"><EmptyState icon={Truck} title="Aún no tienes proveedores" text="Registra proveedores para asociarlos con categorías y facilitar reposiciones." /></div>}
             {providers.map(provider => {
               const isDeleting = pendingDeleteProviderId === provider.id;
               return (
@@ -3673,7 +3673,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
             </label>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button type="button" onClick={resetProviderForm} className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50">Cancelar</button>
-              <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">{editingProviderId ? 'Actualizar' : 'Guardar'}</button>
+              <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">{editingProviderId ? 'Actualizar proveedor' : 'Guardar proveedor'}</button>
             </div>
           </div>
         </form>
@@ -3962,23 +3962,28 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
 function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings, settingsNotice, handleStoreLogo }) {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-      <form onSubmit={saveSettings} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Settings className="h-5 w-5 text-emerald-600" /> Datos de la tienda</h3>
-
+      <form onSubmit={saveSettings} className="space-y-5">
         {settingsNotice && (
-          <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${settingsNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          <div className={`rounded-2xl p-4 text-sm font-semibold ${settingsNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
             {settingsNotice.message}
           </div>
         )}
 
-        <div className="space-y-4">
-          <Field label="Nombre de la tienda" value={settingsForm.store} onChange={v => setSettingsForm({ ...settingsForm, store: v })} placeholder="Nombre de la tienda" />
-          <Field label="Propietario / encargado" value={settingsForm.name} onChange={v => setSettingsForm({ ...settingsForm, name: v })} placeholder="Nombre del encargado" />
-          <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
-          <Field label="RUC / identificación de la tienda" value={settingsForm.businessId} onChange={v => setSettingsForm({ ...settingsForm, businessId: v })} placeholder="Ej: 1000000001001" />
-          <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
-          <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
-          <Field label="Correo comercial" type="email" value={settingsForm.commercialEmail} onChange={v => setSettingsForm({ ...settingsForm, commercialEmail: v })} placeholder="Ej: ventas@mitienda.com" />
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Store className="h-5 w-5 text-emerald-600" /> Datos de la tienda</h3>
+          <div className="space-y-4">
+            <Field label="Nombre de la tienda" value={settingsForm.store} onChange={v => setSettingsForm({ ...settingsForm, store: v })} placeholder="Nombre de la tienda" />
+            <Field label="Propietario / encargado" value={settingsForm.name} onChange={v => setSettingsForm({ ...settingsForm, name: v })} placeholder="Nombre del encargado" />
+            <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
+            <Field label="RUC / identificación de la tienda" value={settingsForm.businessId} onChange={v => setSettingsForm({ ...settingsForm, businessId: v })} placeholder="Ej: 1000000001001" />
+            <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
+            <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
+            <Field label="Correo comercial" type="email" value={settingsForm.commercialEmail} onChange={v => setSettingsForm({ ...settingsForm, commercialEmail: v })} placeholder="Ej: ventas@mitienda.com" />
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Package className="h-5 w-5 text-emerald-600" /> Logo de tienda</h3>
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm text-slate-500">
             {settingsForm.logoUrl ? (
               <div className="space-y-3">
@@ -3994,25 +3999,33 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
             )}
             <input type="file" accept="image/*" onChange={e => handleStoreLogo(e.target.files?.[0])} className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" />
           </div>
-          <Field label="Correo de acceso" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Comprobante</h3>
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">Texto al pie del comprobante</span>
             <textarea value={settingsForm.receiptFooter} onChange={e => setSettingsForm({ ...settingsForm, receiptFooter: e.target.value })} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Ej: Gracias por su compra." />
           </label>
+        </section>
 
-          <div className="rounded-2xl bg-slate-50 p-4">
-            <h4 className="mb-3 font-bold text-slate-800">Cambiar contraseña</h4>
-            <div className="space-y-3">
-              <Field label="Contraseña actual" type="password" value={settingsForm.currentPassword} onChange={v => setSettingsForm({ ...settingsForm, currentPassword: v })} placeholder="Contraseña actual" />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Nueva contraseña" type="password" value={settingsForm.newPassword} onChange={v => setSettingsForm({ ...settingsForm, newPassword: v })} placeholder="Nueva contraseña" />
-                <Field label="Confirmar nueva" type="password" value={settingsForm.confirmNewPassword} onChange={v => setSettingsForm({ ...settingsForm, confirmNewPassword: v })} placeholder="Confirmar" />
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Lock className="h-5 w-5 text-emerald-600" /> Acceso y contraseña</h3>
+          <div className="space-y-4">
+            <Field label="Correo de acceso" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <h4 className="mb-3 font-bold text-slate-800">Cambiar contraseña</h4>
+              <div className="space-y-3">
+                <Field label="Contraseña actual" type="password" value={settingsForm.currentPassword} onChange={v => setSettingsForm({ ...settingsForm, currentPassword: v })} placeholder="Contraseña actual" />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Nueva contraseña" type="password" value={settingsForm.newPassword} onChange={v => setSettingsForm({ ...settingsForm, newPassword: v })} placeholder="Nueva contraseña" />
+                  <Field label="Confirmar nueva" type="password" value={settingsForm.confirmNewPassword} onChange={v => setSettingsForm({ ...settingsForm, confirmNewPassword: v })} placeholder="Confirmar" />
+                </div>
               </div>
             </div>
+            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"><Save className="mr-2 inline h-5 w-5" />Guardar cambios</button>
           </div>
-
-          <button type="submit" className="rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white hover:bg-emerald-700"><Save className="mr-2 inline h-5 w-5" />Guardar cambios</button>
-        </div>
+        </section>
       </form>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
