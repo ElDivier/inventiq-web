@@ -4679,6 +4679,34 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Lock className="h-5 w-5 text-emerald-600" /> Privacidad y seguridad</h3>
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800">
+              <p className="font-bold text-emerald-900">Datos protegidos por cuenta</p>
+              <p className="mt-1">Tus productos, ventas, compras, clientes y proveedores solo pertenecen a tu usuario. InventiQ usa reglas de seguridad en Supabase para separar la información de cada tienda.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <p className="font-bold text-slate-900">Contraseña segura</p>
+                <p className="mt-1 text-slate-500">Usa una contraseña única con mayúsculas, minúsculas, números y caracteres especiales.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <p className="font-bold text-slate-900">Correo de recuperación</p>
+                <p className="mt-1 text-slate-500">Mantén actualizado tu correo de acceso para recuperar tu cuenta si olvidas la contraseña.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <p className="font-bold text-slate-900">Uso responsable</p>
+                <p className="mt-1 text-slate-500">No compartas tu contraseña con vendedores, proveedores o terceros no autorizados.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <p className="font-bold text-slate-900">Datos de clientes</p>
+                <p className="mt-1 text-slate-500">Registra datos de clientes solo para ventas, facturación y control interno de tu tienda.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="mb-5 flex items-center gap-2 text-xl font-bold"><Lock className="h-5 w-5 text-emerald-600" /> Acceso y contraseña</h3>
           <div className="space-y-4">
             <Field label="Correo de acceso" type="email" value={settingsForm.username} onChange={v => setSettingsForm({ ...settingsForm, username: v })} placeholder="Correo electrónico" />
@@ -4709,6 +4737,10 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
           <p className="rounded-2xl bg-slate-50 p-4"><strong>Teléfono:</strong> {currentUser.phone || 'No registrado'}</p>
           <div className="rounded-2xl bg-slate-50 p-4"><strong>Logo actual:</strong><div className="mt-3"><StoreAvatar currentUser={currentUser} size="md" /></div></div>
           <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">Estos datos aparecerán en el comprobante visual de ventas y facturas.</p>
+          <div className="rounded-2xl bg-blue-50 p-4 text-blue-700">
+            <p className="font-bold">Privacidad activa</p>
+            <p className="mt-1">La información de esta tienda se mantiene separada de otros usuarios mediante políticas de seguridad en la base de datos.</p>
+          </div>
         </div>
       </section>
     </div>
