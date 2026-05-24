@@ -570,6 +570,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPasswordForm, setResetPasswordForm] = useState({ password: '', confirmPassword: '' });
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
   const [authNotice, setAuthNotice] = useState(null);
   const [active, setActive] = useState('Inicio');
@@ -639,7 +641,6 @@ export default function App() {
             receiptFooter: 'Gracias por su compra.',
             logoUrl: '',
             businessType: 'general',
-            businessType: 'general',
           });
           loadUserProfile(sessionUser);
         }
@@ -655,7 +656,12 @@ export default function App() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       try {
-        if (session?.user) {
+        if (_event === 'PASSWORD_RECOVERY') {
+          setAuthMode('update-password');
+          setAuthNotice({ type: 'success', message: 'Enlace validado. Ingresa tu nueva contraseña.' });
+        }
+
+        if (session?.user && _event !== 'PASSWORD_RECOVERY') {
           setCurrentUser({
             id: session.user.id,
             email: session.user.email,
@@ -983,6 +989,7 @@ export default function App() {
 
     if (data?.user) {
       await loadUserProfile(data.user);
+      setAuthMode('login');
       setAuthNotice(null);
       setLoginForm(emptyLoginForm);
     }
@@ -1041,6 +1048,63 @@ export default function App() {
     setRegisterForm(emptyRegisterForm);
     setAuthMode('login');
     setAuthNotice({ type: 'success', message: 'Cuenta creada correctamente. Ahora inicia sesión con tu correo.' });
+  }
+
+  async function resetPassword(e) {
+    e.preventDefault();
+    const email = resetEmail.trim();
+
+    if (!email || !email.includes('@')) {
+      setAuthNotice({ type: 'error', message: 'Ingresa un correo electrónico válido para recuperar tu contraseña.' });
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+
+    if (error) {
+      setAuthNotice({ type: 'error', message: error.message || 'No se pudo enviar el correo de recuperación.' });
+      return;
+    }
+
+    setAuthMode('login');
+    setLoginForm({ ...loginForm, username: email });
+    setResetEmail('');
+    setAuthNotice({ type: 'success', message: 'Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada o spam.' });
+  }
+
+  async function updateRecoveredPassword(e) {
+    e.preventDefault();
+    const password = resetPasswordForm.password.trim();
+    const confirmPassword = resetPasswordForm.confirmPassword.trim();
+
+    if (!password || !confirmPassword) {
+      setAuthNotice({ type: 'error', message: 'Ingresa y confirma la nueva contraseña.' });
+      return;
+    }
+
+    if (password.length < 8) {
+      setAuthNotice({ type: 'error', message: 'La nueva contraseña debe tener al menos 8 caracteres.' });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setAuthNotice({ type: 'error', message: 'Las contraseñas no coinciden.' });
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      setAuthNotice({ type: 'error', message: error.message || 'No se pudo actualizar la contraseña.' });
+      return;
+    }
+
+    setResetPasswordForm({ password: '', confirmPassword: '' });
+    setAuthMode('login');
+    setAuthNotice({ type: 'success', message: 'Contraseña actualizada correctamente. Ya puedes iniciar sesión.' });
+    await supabase.auth.signOut();
   }
 
   async function logout() {
@@ -2310,7 +2374,7 @@ export default function App() {
     return <SplashScreen />;
   }
 
-  if (!currentUser) {
+  if (!currentUser || authMode === 'update-password') {
     return (
       <AuthPage
         authMode={authMode}
@@ -2323,6 +2387,12 @@ export default function App() {
         setAuthNotice={setAuthNotice}
         login={login}
         register={register}
+        resetEmail={resetEmail}
+        setResetEmail={setResetEmail}
+        resetPassword={resetPassword}
+        resetPasswordForm={resetPasswordForm}
+        setResetPasswordForm={setResetPasswordForm}
+        updateRecoveredPassword={updateRecoveredPassword}
       />
     );
   }
@@ -2530,8 +2600,10 @@ function EmptyState({ icon: Icon = Package, title, text, actionLabel, onAction }
   );
 }
 
-function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm, setRegisterForm, authNotice, setAuthNotice, login, register }) {
+function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm, setRegisterForm, authNotice, setAuthNotice, login, register, resetEmail, setResetEmail, resetPassword, resetPasswordForm, setResetPasswordForm, updateRecoveredPassword }) {
   const isLogin = authMode === 'login';
+  const isReset = authMode === 'reset';
+  const isUpdatePassword = authMode === 'update-password';
 
   function switchMode(mode) {
     setAuthMode(mode);
@@ -2561,8 +2633,8 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
             <div className="mx-auto mb-4 flex justify-center">
               <InventiQIcon className="h-24 w-24 rounded-3xl object-cover shadow-lg" />
             </div>
-            <h2 className="text-3xl font-extrabold">{isLogin ? 'Iniciar sesión' : 'Crear cuenta'}</h2>
-            <p className="mt-2 text-sm text-slate-500">{isLogin ? 'Ingresa para acceder al panel de tu tienda.' : 'Registra tu tienda para usar InventiQ.'}</p>
+            <h2 className="text-3xl font-extrabold">{isUpdatePassword ? 'Crear nueva contraseña' : isReset ? 'Recuperar contraseña' : isLogin ? 'Iniciar sesión' : 'Crear cuenta'}</h2>
+            <p className="mt-2 text-sm text-slate-500">{isUpdatePassword ? 'Ingresa una nueva contraseña para recuperar el acceso.' : isReset ? 'Ingresa tu correo y te enviaremos un enlace de recuperación.' : isLogin ? 'Ingresa para acceder al panel de tu tienda.' : 'Registra tu tienda para usar InventiQ.'}</p>
           </div>
 
           {authNotice && (
@@ -2571,11 +2643,27 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
             </div>
           )}
 
-          {isLogin ? (
+          {isUpdatePassword ? (
+            <form onSubmit={updateRecoveredPassword} className="space-y-4">
+              <Field label="Nueva contraseña" type="password" value={resetPasswordForm.password} onChange={v => setResetPasswordForm({ ...resetPasswordForm, password: v })} placeholder="Mínimo 8 caracteres" />
+              <Field label="Confirmar nueva contraseña" type="password" value={resetPasswordForm.confirmPassword} onChange={v => setResetPasswordForm({ ...resetPasswordForm, confirmPassword: v })} placeholder="Repetir contraseña" />
+              <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Actualizar contraseña</button>
+              <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
+              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Después de actualizarla, vuelve a iniciar sesión con tu nueva contraseña.</p>
+            </form>
+          ) : isReset ? (
+            <form onSubmit={resetPassword} className="space-y-4">
+              <Field label="Correo electrónico" type="email" value={resetEmail} onChange={setResetEmail} placeholder="Ej: tienda@email.com" />
+              <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Enviar enlace de recuperación</button>
+              <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
+              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">El correo puede tardar unos minutos. Revisa también la carpeta de spam.</p>
+            </form>
+          ) : isLogin ? (
             <form onSubmit={login} className="space-y-4">
               <Field label="Correo electrónico" type="email" value={loginForm.username} onChange={v => setLoginForm({ ...loginForm, username: v })} placeholder="Ej: tienda@email.com" />
               <Field label="Contraseña" type="password" value={loginForm.password} onChange={v => setLoginForm({ ...loginForm, password: v })} placeholder="Tu contraseña" />
               <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Ingresar</button>
+              <button type="button" onClick={() => { setResetEmail(loginForm.username || ''); switchMode('reset'); }} className="w-full rounded-2xl border border-transparent px-5 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">¿Olvidaste tu contraseña?</button>
               <p className="text-center text-sm text-slate-500">¿No tienes cuenta?</p>
               <button type="button" onClick={() => switchMode('register')} className="w-full rounded-2xl border border-emerald-200 px-5 py-3 font-bold text-emerald-700 hover:bg-emerald-50">Registrarse</button>
               <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Ahora el acceso funciona con Supabase: usa correo electrónico y contraseña.</p>
