@@ -538,6 +538,26 @@ function getAvatarLetter(user) {
   return source.charAt(0).toUpperCase() || 'I';
 }
 
+function validatePasswordSecurity(password) {
+  const value = String(password || '');
+
+  if (value.length < 8) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (!/[A-ZÁÉÍÓÚÑ]/.test(value)) return 'La contraseña debe incluir al menos una letra mayúscula.';
+  if (!/[a-záéíóúñ]/.test(value)) return 'La contraseña debe incluir al menos una letra minúscula.';
+  if (!/[0-9]/.test(value)) return 'La contraseña debe incluir al menos un número.';
+  if (!/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]/.test(value)) return 'La contraseña debe incluir al menos un carácter especial, como @, #, $, %, &, * o !.';
+
+  return null;
+}
+
+function PasswordSecurityHint() {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
+      La contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.
+    </div>
+  );
+}
+
 function exportToCSV(filename, rows) {
   if (!rows || rows.length === 0) {
     alert('No existen datos para exportar.');
@@ -1020,6 +1040,12 @@ export default function App() {
       return;
     }
 
+    const passwordError = validatePasswordSecurity(password);
+    if (passwordError) {
+      setAuthNotice({ type: 'error', message: passwordError });
+      return;
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -1084,8 +1110,9 @@ export default function App() {
       return;
     }
 
-    if (password.length < 8) {
-      setAuthNotice({ type: 'error', message: 'La nueva contraseña debe tener al menos 8 caracteres.' });
+    const passwordError = validatePasswordSecurity(password);
+    if (passwordError) {
+      setAuthNotice({ type: 'error', message: passwordError });
       return;
     }
 
@@ -2273,6 +2300,12 @@ export default function App() {
         return;
       }
 
+      const passwordValidationError = validatePasswordSecurity(newPassword);
+      if (passwordValidationError) {
+        setSettingsNotice({ type: 'error', message: passwordValidationError });
+        return;
+      }
+
       const { error: reauthError } = await supabase.auth.signInWithPassword({
         email: currentUser.email,
         password: currentPassword,
@@ -2283,9 +2316,9 @@ export default function App() {
         return;
       }
 
-      const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword });
-      if (passwordError) {
-        setSettingsNotice({ type: 'error', message: passwordError.message });
+      const { error: updatePasswordError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updatePasswordError) {
+        setSettingsNotice({ type: 'error', message: updatePasswordError.message });
         return;
       }
     }
@@ -2647,6 +2680,7 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
             <form onSubmit={updateRecoveredPassword} className="space-y-4">
               <Field label="Nueva contraseña" type="password" value={resetPasswordForm.password} onChange={v => setResetPasswordForm({ ...resetPasswordForm, password: v })} placeholder="Mínimo 8 caracteres" />
               <Field label="Confirmar nueva contraseña" type="password" value={resetPasswordForm.confirmPassword} onChange={v => setResetPasswordForm({ ...resetPasswordForm, confirmPassword: v })} placeholder="Repetir contraseña" />
+              <PasswordSecurityHint />
               <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Actualizar contraseña</button>
               <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
               <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Después de actualizarla, vuelve a iniciar sesión con tu nueva contraseña.</p>
@@ -2685,6 +2719,7 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
                 <Field label="Contraseña" type="password" value={registerForm.password} onChange={v => setRegisterForm({ ...registerForm, password: v })} placeholder="Contraseña" />
                 <Field label="Confirmar" type="password" value={registerForm.confirmPassword} onChange={v => setRegisterForm({ ...registerForm, confirmPassword: v })} placeholder="Repetir" />
               </div>
+              <PasswordSecurityHint />
               <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Listo</button>
               <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
             </form>
@@ -4655,6 +4690,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
                   <Field label="Nueva contraseña" type="password" value={settingsForm.newPassword} onChange={v => setSettingsForm({ ...settingsForm, newPassword: v })} placeholder="Nueva contraseña" />
                   <Field label="Confirmar nueva" type="password" value={settingsForm.confirmNewPassword} onChange={v => setSettingsForm({ ...settingsForm, confirmNewPassword: v })} placeholder="Confirmar" />
                 </div>
+                <PasswordSecurityHint />
               </div>
             </div>
             <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"><Save className="mr-2 inline h-5 w-5" />Guardar cambios</button>
