@@ -178,6 +178,7 @@ const emptySaleForm = {
 const menu = [
   { label: 'Inicio', icon: Home },
   { label: 'Ventas', icon: ShoppingCart },
+  { label: 'Caja', icon: DollarSign },
   { label: 'Compras', icon: ClipboardList },
   { label: 'Productos', icon: Package },
   { label: 'Inventario', icon: Boxes },
@@ -2392,6 +2393,7 @@ export default function App() {
   const pageInfo = {
     Inicio: { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home },
     Ventas: { title: 'Ventas', subtitle: 'Registra ventas y revisa el historial reciente.', icon: ShoppingCart },
+    Caja: { title: 'Caja', subtitle: 'Controla cierres, cortes y métodos de pago por periodo.', icon: DollarSign },
     Compras: { title: 'Compras', subtitle: 'Registra compras a proveedores y aumenta stock.', icon: ClipboardList },
     Productos: { title: 'Productos', subtitle: 'Administra los productos de tu tienda fácilmente.', icon: Package },
     Inventario: { title: 'Inventario', subtitle: 'Controla stock, alertas y valor de inventario.', icon: Boxes },
@@ -2488,6 +2490,7 @@ export default function App() {
 
           {active === 'Inicio' && <HomePage currentUser={currentUser} totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} setActive={setActive} expirationText={expirationText} />}
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
+          {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
@@ -2552,7 +2555,7 @@ function MobileTopBar({ currentUser, active }) {
 
 function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMoreOpen, logout }) {
   const primaryLabels = ['Inicio', 'Ventas', 'Productos', 'Inventario'];
-  const moreLabels = ['Compras', 'Reportes', 'Clientes', 'Proveedores', 'Configuración'];
+  const moreLabels = ['Compras', 'Caja', 'Reportes', 'Clientes', 'Proveedores', 'Configuración'];
   const primaryMenu = menu.filter(item => primaryLabels.includes(item.label));
   const moreMenu = menu.filter(item => moreLabels.includes(item.label));
   const isMoreActive = moreLabels.includes(active);
@@ -4321,204 +4324,247 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
   );
 }
 
-function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit, expirationText }) {
-  const completedSales = sales.filter(s => s.status !== 'Anulada');
+function parseInventiqDate(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const lower = text.toLowerCase();
+  const now = new Date();
 
-  const salesByProduct = products.map(product => {
-    const productItems = completedSales.flatMap(sale => {
-      if (sale.items?.length > 0) return sale.items.filter(item => String(item.productId) === String(product.id));
-      return (String(sale.productId) === String(product.id) || sale.product === product.name) ? [{ quantity: sale.quantity, subtotal: sale.total, profit: sale.profit || 0 }] : [];
-    });
-    const unitsSold = productItems.reduce((sum, item) => sum + item.quantity, 0);
-    const revenue = productItems.reduce((sum, item) => sum + (item.subtotal || 0), 0);
-    const profit = productItems.reduce((sum, item) => sum + (item.profit || 0), 0);
-    const suggestedPurchase = Math.max(product.minStock + unitsSold - product.stock, 0);
-
-    let abc = 'C';
-    if (revenue >= totalSales * 0.4 && revenue > 0) abc = 'A';
-    else if (revenue >= totalSales * 0.15 && revenue > 0) abc = 'B';
-
-    let recommendation = 'Mantener compra moderada';
-    if (product.stock === 0) recommendation = 'Comprar urgente: producto sin stock';
-    else if (product.stock <= product.minStock && unitsSold > 0) recommendation = 'Comprar más: stock bajo y tiene ventas';
-    else if (unitsSold === 0) recommendation = 'Comprar menos o promocionar';
-    else if (unitsSold >= 3) recommendation = 'Mantener stock alto';
-
-    let marketing = 'Mantener ubicación actual';
-    const category = String(product.category || '').toLowerCase();
-    const name = String(product.name || '').toLowerCase();
-    if (unitsSold === 0) marketing = 'Mover a zona visible y aplicar promoción';
-    else if (category.includes('snack') || name.includes('papas') || name.includes('coca')) marketing = 'Ubicar cerca de caja como producto de impulso';
-    else if (category.includes('bebida') || category.includes('lácteo')) marketing = 'Colocar cerca de productos complementarios';
-    else if (product.stock <= product.minStock) marketing = 'Ubicar en zona visible hasta reponer stock';
-
-    return {
-      ...product,
-      unitsSold,
-      revenue,
-      profit,
-      suggestedPurchase,
-      abc,
-      recommendation,
-      marketing,
-    };
-  });
-
-  const topSold = [...salesByProduct].sort((a, b) => b.unitsSold - a.unitsSold).slice(0, 5);
-  const lowRotation = [...salesByProduct].sort((a, b) => a.unitsSold - b.unitsSold).slice(0, 5);
-  const topProfit = [...salesByProduct].sort((a, b) => b.profit - a.profit).slice(0, 5);
-  const purchaseSuggestions = salesByProduct.filter(p => p.suggestedPurchase > 0).sort((a, b) => b.suggestedPurchase - a.suggestedPurchase);
-  const typeA = salesByProduct.filter(p => p.abc === 'A').length;
-  const typeB = salesByProduct.filter(p => p.abc === 'B').length;
-  const typeC = salesByProduct.filter(p => p.abc === 'C').length;
-  const totalPurchases = purchases.reduce((sum, purchase) => sum + purchase.total, 0);
-  const netBalance = totalSales - totalPurchases;
-
-  function exportSales() {
-    exportToCSV('inventiq_ventas_resumen.csv', sales.map(sale => ({
-      Codigo: sale.code,
-      Cliente: sale.customer,
-      Productos: sale.product,
-      Cantidad_total: sale.quantity,
-      Subtotal: sale.subtotal,
-      Descuento: sale.discount,
-      Total: sale.total,
-      Utilidad: sale.profit,
-      Estado: sale.status,
-      Factura: sale.invoiceEnabled ? 'Si' : 'No',
-      Metodo_pago: sale.paymentMethod,
-      Fecha: sale.date,
-    })));
+  if (lower.includes('hoy')) return now;
+  if (lower.includes('ayer')) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday;
   }
 
-  function exportSaleDetails() {
-    const detailRows = sales.flatMap(sale => {
-      const items = sale.items?.length > 0
-        ? sale.items
-        : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity, price: sale.subtotal / Math.max(sale.quantity || 1, 1), subtotal: sale.subtotal, profit: sale.profit }];
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct;
 
-      return items.map(item => ({
-        Codigo_venta: sale.code,
-        Fecha: sale.date,
-        Estado: sale.status,
-        Cliente: sale.customer,
-        Factura: sale.invoiceEnabled ? 'Si' : 'No',
-        Metodo_pago: sale.paymentMethod,
-        Producto: item.product,
-        Cantidad: item.quantity,
-        Precio_unitario: Number(item.price || 0).toFixed(2),
-        Subtotal_producto: Number(item.subtotal || 0).toFixed(2),
-        Utilidad_producto: Number(item.profit || 0).toFixed(2),
-        Descuento_general_venta: sale.discount,
-        Total_venta: sale.total,
-      }));
-    });
+  const match = text.match(/([0-9]{1,2})[/-]([0-9]{1,2})[/-]([0-9]{2,4})/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const rawYear = Number(match[3]);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const parsed = new Date(year, month, day);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
 
-    exportToCSV('inventiq_detalle_ventas.csv', detailRows);
+  return null;
+}
+
+function startOfDay(date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date) {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
+function formatPeriodDate(date) {
+  return date.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function getPeriodRange(period, customStart, customEnd) {
+  const now = new Date();
+  let start = startOfDay(now);
+  let end = endOfDay(now);
+
+  if (period === 'week') {
+    start = startOfDay(now);
+    start.setDate(start.getDate() - 6);
+  }
+
+  if (period === '15days') {
+    start = startOfDay(now);
+    start.setDate(start.getDate() - 14);
+  }
+
+  if (period === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = endOfDay(now);
+  }
+
+  if (period === 'previousMonth') {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    end = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
+  }
+
+  if (period === 'custom') {
+    start = customStart ? startOfDay(new Date(customStart)) : start;
+    end = customEnd ? endOfDay(new Date(customEnd)) : end;
+  }
+
+  return { start, end };
+}
+
+function isRecordInPeriod(record, range) {
+  const date = parseInventiqDate(record.date);
+  if (!date) return false;
+  return date >= range.start && date <= range.end;
+}
+
+function CashPage({ sales, purchases }) {
+  const [closePeriod, setClosePeriod] = useState('today');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
+  const cancelledSales = sales.filter(sale => sale.status === 'Anulada');
+  const periodRange = getPeriodRange(closePeriod, customStart, customEnd);
+  const periodSales = completedSales.filter(sale => isRecordInPeriod(sale, periodRange));
+  const periodCancelledSales = cancelledSales.filter(sale => isRecordInPeriod(sale, periodRange));
+  const periodPurchases = purchases.filter(purchase => isRecordInPeriod(purchase, periodRange));
+
+  const periodSalesTotal = periodSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const periodPurchasesTotal = periodPurchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
+  const periodProfit = periodSales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
+  const periodDiscount = periodSales.reduce((sum, sale) => sum + Number(sale.discount || 0), 0);
+  const periodUnits = periodSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
+  const periodBalance = periodSalesTotal - periodPurchasesTotal;
+  const paymentSummary = periodSales.reduce((acc, sale) => {
+    const method = sale.paymentMethod || 'Sin método';
+    acc[method] = (acc[method] || 0) + Number(sale.total || 0);
+    return acc;
+  }, {});
+  const closeLabel = `${formatPeriodDate(periodRange.start)} al ${formatPeriodDate(periodRange.end)}`;
+
+  function exportCashCut() {
+    const rows = [
+      { Concepto: 'Periodo', Valor: closeLabel },
+      { Concepto: 'Ventas completadas', Valor: periodSales.length },
+      { Concepto: 'Ventas anuladas', Valor: periodCancelledSales.length },
+      { Concepto: 'Unidades vendidas', Valor: periodUnits },
+      { Concepto: 'Total vendido', Valor: periodSalesTotal.toFixed(2) },
+      { Concepto: 'Compras registradas', Valor: periodPurchasesTotal.toFixed(2) },
+      { Concepto: 'Balance ventas - compras', Valor: periodBalance.toFixed(2) },
+      { Concepto: 'Utilidad estimada', Valor: periodProfit.toFixed(2) },
+      { Concepto: 'Descuentos aplicados', Valor: periodDiscount.toFixed(2) },
+      ...Object.entries(paymentSummary).map(([method, value]) => ({ Concepto: `Pago - ${method}`, Valor: Number(value || 0).toFixed(2) })),
+    ];
+
+    exportToCSV(`inventiq_cierre_${closePeriod}.csv`, rows);
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">Cierres y cortes por periodo</h3>
+            <p className="text-sm text-slate-500">Revisa ventas, compras, descuentos, utilidad y métodos de pago por día, semana, quincena, mes o rango personalizado.</p>
+            <p className="mt-2 text-sm font-bold text-emerald-700">Periodo seleccionado: {closeLabel}</p>
+          </div>
+          <button onClick={exportCashCut} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700"><Download className="mr-2 inline h-4 w-4" />Exportar cierre</button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          {[
+            ['today', 'Hoy'],
+            ['week', '7 días'],
+            ['15days', '15 días'],
+            ['month', 'Este mes'],
+            ['previousMonth', 'Mes anterior'],
+            ['custom', 'Personalizado'],
+          ].map(([value, label]) => (
+            <button key={value} onClick={() => setClosePeriod(value)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${closePeriod === value ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {closePeriod === 'custom' && (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Desde" type="date" value={customStart} onChange={setCustomStart} />
+            <Field label="Hasta" type="date" value={customEnd} onChange={setCustomEnd} />
+          </div>
+        )}
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric icon={DollarSign} label="Ventas del periodo" value={`$${periodSalesTotal.toFixed(2)}`} note={`${periodSales.length} venta(s)`} color="emerald" />
+        <Metric icon={ClipboardList} label="Compras del periodo" value={`$${periodPurchasesTotal.toFixed(2)}`} note={`${periodPurchases.length} compra(s)`} color="amber" />
+        <Metric icon={TrendingUp} label="Utilidad estimada" value={`$${periodProfit.toFixed(2)}`} note="periodo" color="blue" />
+        <Metric icon={Percent} label="Descuentos" value={`$${periodDiscount.toFixed(2)}`} note={`${periodCancelledSales.length} anulada(s)`} color="red" />
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-bold text-slate-700">Balance ventas - compras</p>
+          <p className={`mt-2 text-4xl font-extrabold ${periodBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>${periodBalance.toFixed(2)}</p>
+          <p className="mt-2 text-sm text-slate-500">Unidades vendidas: {periodUnits}</p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="mb-4 text-sm font-bold text-slate-700">Métodos de pago</p>
+          {Object.keys(paymentSummary).length === 0 && <p className="text-sm text-slate-500">Sin ventas en este periodo.</p>}
+          <div className="space-y-3">
+            {Object.entries(paymentSummary).map(([method, value]) => (
+              <div key={method} className="flex justify-between rounded-2xl bg-slate-50 p-4 text-sm"><span>{method}</span><strong>${Number(value || 0).toFixed(2)}</strong></div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit, expirationText }) {
+  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
+  const totalPurchases = purchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
+  const netBalance = totalSales - totalPurchases;
+  const lowRotation = products.filter(product => !completedSales.some(sale => String(sale.product || '').includes(product.name))).slice(0, 8);
+  const purchaseSuggestions = products.filter(product => Number(product.stock || 0) <= Number(product.minStock || 0)).slice(0, 8);
+
+  function exportSales() {
+    exportToCSV('inventiq_ventas.csv', sales.map(sale => ({
+      Codigo: sale.code,
+      Fecha: sale.date,
+      Cliente: sale.customer,
+      Producto: sale.product,
+      Cantidad: sale.quantity,
+      Subtotal: Number(sale.subtotal || 0).toFixed(2),
+      Descuento: Number(sale.discount || 0).toFixed(2),
+      Total: Number(sale.total || 0).toFixed(2),
+      Utilidad: Number(sale.profit || 0).toFixed(2),
+      Estado: sale.status,
+    })));
   }
 
   function exportPurchases() {
-    exportToCSV('inventiq_compras_resumen.csv', purchases.map(purchase => ({
+    exportToCSV('inventiq_compras.csv', purchases.map(purchase => ({
       Codigo: purchase.code,
-      Producto: purchase.product,
-      Proveedor: purchase.provider,
-      Cantidad_total: purchase.quantity,
-      Costo_unitario: purchase.unitCost,
-      Total: purchase.total,
-      Nota: purchase.note,
       Fecha: purchase.date,
+      Proveedor: purchase.provider,
+      Producto: purchase.product,
+      Cantidad: purchase.quantity,
+      Costo_unitario: Number(purchase.unitCost || 0).toFixed(2),
+      Total: Number(purchase.total || 0).toFixed(2),
+      Nota: purchase.note || '',
     })));
-  }
-
-  function exportPurchaseDetails() {
-    const detailRows = purchases.flatMap(purchase => {
-      const items = purchase.items?.length > 0
-        ? purchase.items
-        : [{ productId: purchase.productId, product: purchase.product, quantity: purchase.quantity, unitCost: purchase.unitCost, total: purchase.total }];
-
-      return items.map(item => ({
-        Codigo_compra: purchase.code,
-        Fecha: purchase.date,
-        Proveedor: purchase.provider,
-        Producto: item.product,
-        Cantidad: item.quantity,
-        Costo_unitario: Number(item.unitCost || 0).toFixed(2),
-        Total_producto: Number(item.total || 0).toFixed(2),
-        Nota_compra: purchase.note || '',
-        Total_compra: purchase.total,
-      }));
-    });
-
-    exportToCSV('inventiq_detalle_compras.csv', detailRows);
-  }
-
-  function exportRecommendations() {
-    exportToCSV('inventiq_recomendaciones.csv', salesByProduct.map(product => ({
-      Producto: product.name,
-      Categoria: product.category,
-      ABC: product.abc,
-      Unidades_vendidas: product.unitsSold,
-      Ingresos: product.revenue.toFixed(2),
-      Utilidad: product.profit.toFixed(2),
-      Stock: product.stock,
-      Stock_minimo: product.minStock,
-      Compra_sugerida: product.suggestedPurchase,
-      Decision_compra: product.recommendation,
-      Marketing: product.marketing,
-      Fecha_caducidad: product.expirationDate || '',
-      Estado_caducidad: expirationText ? expirationText(product).label : '',
-    })));
-  }
-
-  function exportDirectory() {
-    exportToCSV('inventiq_clientes_proveedores.csv', [
-      ...clients.map(client => ({
-        Tipo: 'Cliente',
-        Nombre: client.name,
-        Categoria: client.type,
-        Contacto: client.phone,
-        Correo: client.email,
-        Identificacion: client.identification,
-        Direccion: client.address,
-        Observaciones: client.notes,
-      })),
-      ...providers.map(provider => ({
-        Tipo: 'Proveedor',
-        Nombre: provider.name,
-        Categoria: provider.category,
-        Contacto: provider.contact,
-        Correo: provider.email,
-        Identificacion: '',
-        Direccion: '',
-        Observaciones: `Entrega estimada: ${provider.delivery}. ${provider.notes || ''}`,
-      })),
-    ]);
   }
 
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Metric icon={DollarSign} label="Ventas" value={`$${totalSales.toFixed(2)}`} note="acumuladas" color="emerald" />
-        <Metric icon={TrendingUp} label="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} note="estimada" color="blue" />
-        <Metric icon={Package} label="Producto estrella" value={bestSeller} note="más vendido" color="amber" />
-        <Metric icon={BarChart3} label="ABC" value={`A:${typeA} B:${typeB} C:${typeC}`} note="clasificación" color="red" />
+        <Metric icon={TrendingUp} label="Utilidad" value={`$${totalProfit.toFixed(2)}`} note="estimada" color="blue" />
         <Metric icon={ClipboardList} label="Compras" value={`$${totalPurchases.toFixed(2)}`} note="registradas" color="amber" />
+        <Metric icon={BarChart3} label="Balance" value={`$${netBalance.toFixed(2)}`} note="ventas - compras" color={netBalance >= 0 ? 'emerald' : 'red'} />
       </section>
 
       <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-lg font-bold text-emerald-900">Reportes exportables</h3>
-            <p className="text-sm text-emerald-800">Descarga ventas, compras, recomendaciones y directorio de clientes/proveedores.</p>
-            <p className={`mt-2 text-sm font-bold ${netBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>Balance ventas - compras: ${netBalance.toFixed(2)}</p>
+            <p className="text-sm text-emerald-800">Descarga ventas y compras para análisis externo.</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button onClick={exportSales} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Ventas</button>
-            <button onClick={exportSaleDetails} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Detalle ventas</button>
             <button onClick={exportPurchases} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Compras</button>
-            <button onClick={exportPurchaseDetails} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Detalle compras</button>
-            <button onClick={exportRecommendations} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Recomendaciones</button>
-            <button onClick={exportDirectory} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Directorio</button>
           </div>
         </div>
       </section>
@@ -4526,35 +4572,12 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
-            <h3 className="flex items-center gap-2 text-xl font-bold"><TrendingUp className="h-5 w-5 text-emerald-600" /> Productos más vendidos</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {topSold.map(product => (
-              <ReportRow key={product.id} title={product.name} subtitle={`${product.category} · ${product.unitsSold} unidades vendidas`} right={`$${product.revenue.toFixed(2)}`} badge={`ABC ${product.abc}`} />
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold"><Activity className="h-5 w-5 text-emerald-600" /> Baja rotación o sin movimiento</h3>
           </div>
           <div className="divide-y divide-slate-100">
+            {lowRotation.length === 0 && <p className="p-5 text-sm text-slate-500">No existen productos de baja rotación por el momento.</p>}
             {lowRotation.map(product => (
-              <ReportRow key={product.id} title={product.name} subtitle={`${product.category} · stock actual ${product.stock}`} right={product.unitsSold === 0 ? 'Sin ventas' : `${product.unitsSold} ventas`} badge="Promocionar" />
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-5">
-            <h3 className="flex items-center gap-2 text-xl font-bold"><DollarSign className="h-5 w-5 text-emerald-600" /> Utilidad por producto</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {topProfit.map(product => (
-              <ReportRow key={product.id} title={product.name} subtitle={`Ventas: $${product.revenue.toFixed(2)} · unidades: ${product.unitsSold}`} right={`Utilidad $${product.profit.toFixed(2)}`} badge={`ABC ${product.abc}`} />
+              <ReportRow key={product.id} title={product.name} subtitle={`${product.category} · stock actual ${product.stock}`} right="Sin ventas" badge="Promocionar" />
             ))}
           </div>
         </section>
@@ -4566,56 +4589,10 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
           <div className="divide-y divide-slate-100">
             {purchaseSuggestions.length === 0 && <p className="p-5 text-sm text-slate-500">No existen compras sugeridas por el momento.</p>}
             {purchaseSuggestions.map(product => (
-              <ReportRow key={product.id} title={product.name} subtitle={`Stock ${product.stock} · mínimo ${product.minStock} · vendido ${product.unitsSold}`} right={`Comprar ${product.suggestedPurchase}`} badge="Reposición" />
+              <ReportRow key={product.id} title={product.name} subtitle={`Stock ${product.stock} · mínimo ${product.minStock}`} right={`Comprar ${Math.max((Number(product.minStock || 0) * 2) - Number(product.stock || 0), 1)}`} badge="Reposición" />
             ))}
           </div>
         </section>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 p-5">
-          <h3 className="flex items-center gap-2 text-xl font-bold"><BarChart3 className="h-5 w-5 text-emerald-600" /> Matriz de recomendaciones inteligentes</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-5 py-4">Producto</th>
-                <th className="px-5 py-4">ABC</th>
-                <th className="px-5 py-4">Ventas</th>
-                <th className="px-5 py-4">Stock</th>
-                <th className="px-5 py-4">Compra sugerida</th>
-                <th className="px-5 py-4">Decisión de compra</th>
-                <th className="px-5 py-4">Marketing</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {salesByProduct.map(product => (
-                <tr key={product.id} className="hover:bg-slate-50/70">
-                  <td className="px-5 py-4">
-                    <p className="font-bold text-slate-900">{product.name}</p>
-                    <p className="text-xs text-slate-500">{product.category}</p>
-                  </td>
-                  <td className="px-5 py-4"><AbcBadge value={product.abc} /></td>
-                  <td className="px-5 py-4">{product.unitsSold} unidades<br /><span className="text-xs text-slate-500">${product.revenue.toFixed(2)}</span></td>
-                  <td className="px-5 py-4">{product.stock}<br /><span className="text-xs text-slate-500">mín. {product.minStock}</span></td>
-                  <td className="px-5 py-4 font-bold text-emerald-700">{product.suggestedPurchase}</td>
-                  <td className="px-5 py-4 text-slate-600">{product.recommendation}</td>
-                  <td className="px-5 py-4 text-slate-600">{product.marketing}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
-        <h3 className="mb-3 text-lg font-bold text-emerald-900">Lectura rápida</h3>
-        <p className="text-sm leading-6 text-emerald-900">
-          Los productos tipo <strong>A</strong> son los más importantes para la tienda y deben mantenerse con stock suficiente.
-          Los tipo <strong>B</strong> requieren control periódico. Los tipo <strong>C</strong> pueden necesitar promoción, menor compra o mejor ubicación.
-          La compra sugerida considera stock mínimo, ventas registradas y stock actual.
-        </p>
       </section>
     </div>
   );
