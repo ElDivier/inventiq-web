@@ -2640,25 +2640,70 @@ function EmptyState({ icon: Icon = Package, title, text, actionLabel, onAction }
 function BarcodeScanner({ onScan, onClose }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const detectedRef = useRef(false);
   const animationRef = useRef(null);
   const controlsRef = useRef(null);
+  const lastValueRef = useRef('');
+  const repeatCountRef = useRef(0);
   const [error, setError] = useState('');
   const [scannerMode, setScannerMode] = useState('Preparando cámara...');
+  const [detectedValue, setDetectedValue] = useState('');
+  const [manualValue, setManualValue] = useState('');
+
+  function normalizeScannedCode(value) {
+    return String(value || '')
+      .trim()
+      .split(String.fromCharCode(10)).join('')
+      .split(String.fromCharCode(13)).join('')
+      .split(String.fromCharCode(9)).join('')
+      .split(' ').join('');
+  }
+
+  function stopEverything() {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (controlsRef.current?.stop) controlsRef.current.stop();
+    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  }
+
+  function acceptValue(value) {
+    const normalized = normalizeScannedCode(value);
+    if (!normalized) return;
+    stopEverything();
+    onScan(normalized);
+    onClose();
+  }
+
+  function registerCandidate(value) {
+    const normalized = normalizeScannedCode(value);
+    if (!normalized || normalized.length < 4) return;
+
+    if (lastValueRef.current === normalized) {
+      repeatCountRef.current += 1;
+    } else {
+      lastValueRef.current = normalized;
+      repeatCountRef.current = 1;
+    }
+
+    // Solo acepta cuando lee el mismo valor dos veces seguidas.
+    // Esto reduce lecturas incorrectas por reflejo, inclinación o enfoque.
+    if (repeatCountRef.current >= 2) {
+      stopEverything();
+      setDetectedValue(normalized);
+    }
+  }
 
   useEffect(() => {
     let active = true;
 
-    function stopEverything() {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (controlsRef.current?.stop) controlsRef.current.stop();
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
-    }
-
     async function startNativeScanner() {
       setScannerMode('Escáner nativo');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced: [{ focusMode: 'continuous' }],
+        },
         audio: false,
       });
 
@@ -2674,23 +2719,16 @@ function BarcodeScanner({ onScan, onClose }) {
       }
 
       const detector = new window.BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e'],
       });
 
       const scan = async () => {
-        if (!active || detectedRef.current || !videoRef.current) return;
+        if (!active || detectedValue || !videoRef.current) return;
 
         try {
           const codes = await detector.detect(videoRef.current);
           if (codes.length > 0) {
-            const value = codes[0]?.rawValue || '';
-            if (value) {
-              detectedRef.current = true;
-              onScan(value);
-              stopEverything();
-              onClose();
-              return;
-            }
+            registerCandidate(codes[0]?.rawValue || '');
           }
         } catch {
           // Sigue intentando mientras la cámara esté activa.
@@ -2708,17 +2746,20 @@ function BarcodeScanner({ onScan, onClose }) {
       const codeReader = new BrowserMultiFormatReader();
 
       const controls = await codeReader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            advanced: [{ focusMode: 'continuous' }],
+          },
+          audio: false,
+        },
         videoRef.current,
         (result) => {
-          if (!active || detectedRef.current || !result) return;
+          if (!active || detectedValue || !result) return;
           const value = result.getText?.() || String(result.text || '');
-          if (value) {
-            detectedRef.current = true;
-            onScan(value);
-            stopEverything();
-            onClose();
-          }
+          registerCandidate(value);
         }
       );
 
@@ -2750,7 +2791,15 @@ function BarcodeScanner({ onScan, onClose }) {
       active = false;
       stopEverything();
     };
-  }, [onScan, onClose]);
+  }, []);
+
+  function retryScan() {
+    lastValueRef.current = '';
+    repeatCountRef.current = 0;
+    setDetectedValue('');
+    setManualValue('');
+    onClose();
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm">
@@ -2760,21 +2809,36 @@ function BarcodeScanner({ onScan, onClose }) {
             <h3 className="text-xl font-extrabold text-slate-900">Escanear código</h3>
             <p className="text-sm text-slate-500">Apunta la cámara al código de barras del producto.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
+          <button type="button" onClick={() => { stopEverything(); onClose(); }} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
         </div>
 
         {error ? (
           <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">{error}</div>
+        ) : detectedValue ? (
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 text-center">
+            <p className="text-sm font-bold text-emerald-700">Código detectado</p>
+            <p className="mt-2 break-all text-2xl font-extrabold text-emerald-950">{detectedValue}</p>
+            <p className="mt-2 text-xs text-emerald-700">Confirma que coincida con el número impreso debajo del código.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => acceptValue(detectedValue)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Usar código</button>
+              <button type="button" onClick={retryScan} className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">Reintentar</button>
+            </div>
+          </div>
         ) : (
           <div className="overflow-hidden rounded-3xl bg-slate-950">
             <video ref={videoRef} playsInline muted className="h-72 w-full object-cover" />
           </div>
         )}
 
-        {!error && <p className="mt-3 text-center text-xs font-bold text-emerald-700">{scannerMode}</p>}
-        <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">
-          Si no reconoce el código, puedes escribirlo manualmente en el buscador o campo de código de barras.
-        </p>
+        {!error && !detectedValue && <p className="mt-3 text-center text-xs font-bold text-emerald-700">{scannerMode}</p>}
+
+        <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+          <p className="text-center text-xs text-slate-500">Si la lectura no coincide, escribe el código manualmente.</p>
+          <div className="mt-3 flex gap-2">
+            <input value={manualValue} onChange={e => setManualValue(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Código manual" />
+            <button type="button" onClick={() => acceptValue(manualValue)} className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white">Usar</button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -3258,7 +3322,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
       {purchasesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando compras desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
-        <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
           <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold"><ClipboardList className="h-5 w-5 text-emerald-600" /> Historial de compras</h3>
           </div>
@@ -3280,7 +3344,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
           </div>
         </section>
 
-        <form onSubmit={registerPurchase} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={registerPurchase} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar compra</h3>
@@ -3491,7 +3555,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
       {salesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando ventas desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
-        <div className="space-y-5">
+        <div className="order-2 space-y-5 xl:order-1">
           <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h3 className="flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Historial de ventas</h3>
@@ -3529,7 +3593,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
           </section>
         </div>
 
-        <form onSubmit={registerSale} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={registerSale} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar nueva venta</h3>
@@ -4291,7 +4355,7 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
       </section>
 
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-      <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
         {clientsLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando clientes desde Supabase...</div>}
         <div className="border-b border-slate-100 p-5">
           <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-emerald-600" /> Clientes registrados</h3>
@@ -4333,7 +4397,7 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
         </div>
       </section>
 
-      <form onSubmit={saveClient} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={saveClient} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold">{editingClientId ? 'Editar cliente' : 'Registrar cliente'}</h3>
@@ -4503,7 +4567,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-        <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
           {providersLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando proveedores desde Supabase...</div>}
           <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold"><Truck className="h-5 w-5 text-emerald-600" /> Proveedores registrados</h3>
@@ -4552,7 +4616,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
           </div>
         </section>
 
-        <form onSubmit={saveProvider} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={saveProvider} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">{editingProviderId ? 'Editar proveedor' : 'Registrar proveedor'}</h3>
@@ -5100,7 +5164,7 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
 
 function ProductTable({ businessConfig, products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText }) {
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <div className="order-2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
       <div className="border-b border-slate-100 p-5">
         <h3 className="flex items-center gap-2 text-xl font-bold text-slate-800"><Package className="h-5 w-5 text-emerald-600" /> Lista de productos</h3>
       </div>
@@ -5191,7 +5255,7 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
   const extraLabels = businessConfig?.extraLabels || {};
 
   return (
-    <form onSubmit={saveProduct} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form onSubmit={saveProduct} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h3 className="text-xl font-bold">{editingId ? 'Editar producto' : 'Agregar nuevo producto'}</h3>
