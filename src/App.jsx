@@ -2494,8 +2494,8 @@ export default function App() {
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
-          {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} />}
-          {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} />}
+          {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
+          {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} setActive={setActive} setPurchaseForm={setPurchaseForm} />}
           {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
         </main>
@@ -2640,6 +2640,7 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
   const isLogin = authMode === 'login';
   const isReset = authMode === 'reset';
   const isUpdatePassword = authMode === 'update-password';
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   function switchMode(mode) {
     setAuthMode(mode);
@@ -2727,8 +2728,36 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
               <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
             </form>
           )}
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold text-slate-500">
+            <button type="button" onClick={() => setPrivacyOpen(true)} className="text-emerald-700 hover:underline">Política de privacidad</button>
+            <span>·</span>
+            <span>InventiQ protege la información por cuenta.</span>
+          </div>
         </section>
       </div>
+
+      {privacyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-extrabold text-slate-900">Política de privacidad</h3>
+                <p className="text-sm text-slate-500">Resumen simple para usuarios de InventiQ.</p>
+              </div>
+              <button type="button" onClick={() => setPrivacyOpen(false)} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
+            </div>
+            <div className="space-y-4 text-sm leading-6 text-slate-600">
+              <p><strong>Datos que se registran:</strong> productos, inventario, ventas, compras, clientes, proveedores y datos generales de la tienda.</p>
+              <p><strong>Uso de la información:</strong> la información se usa para control interno, reportes, comprobantes, inventario, facturación referencial y administración del negocio.</p>
+              <p><strong>Separación por cuenta:</strong> cada usuario accede únicamente a la información registrada en su propia cuenta mediante reglas de seguridad en la base de datos.</p>
+              <p><strong>Responsabilidad del usuario:</strong> no compartas tu contraseña y registra datos de clientes solo cuando sean necesarios para ventas, facturación o control interno.</p>
+              <p><strong>Recuperación de acceso:</strong> usa un correo real para poder restablecer tu contraseña si pierdes el acceso.</p>
+            </div>
+            <button type="button" onClick={() => setPrivacyOpen(false)} className="mt-5 w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Entendido</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3012,6 +3041,21 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   const lineTotal = quantity > 0 && unitCost >= 0 ? quantity * unitCost : 0;
   const total = purchaseCart.reduce((sum, item) => sum + item.total, 0);
 
+  function handleProductSearch(value) {
+    setProductSearch(value);
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+
+    const exactProduct = products.find(product =>
+      String(product.barcode || '').trim().toLowerCase() === normalized ||
+      String(product.sku || '').trim().toLowerCase() === normalized
+    );
+
+    if (exactProduct) {
+      selectProduct(exactProduct.id);
+    }
+  }
+
   function selectProduct(productId) {
     const product = products.find(item => String(item.id) === String(productId));
     const provider = product ? providers.find(item => String(item.category || '').toLowerCase() === String(product.category || '').toLowerCase()) : null;
@@ -3111,7 +3155,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o categoría..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
               {productSearch && filteredProducts.length > 0 && (
                 <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
@@ -3213,6 +3257,24 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
     const hasStock = Number(product.stock || 0) > 0;
     return hasStock && (String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.barcode || '').toLowerCase().includes(text) || String(product.brand || '').toLowerCase().includes(text) || String(product.size || '').toLowerCase().includes(text) || String(product.color || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text));
   });
+
+  function handleProductSearch(value) {
+    setProductSearch(value);
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+
+    const exactProduct = products.find(product =>
+      Number(product.stock || 0) > 0 && (
+        String(product.barcode || '').trim().toLowerCase() === normalized ||
+        String(product.sku || '').trim().toLowerCase() === normalized
+      )
+    );
+
+    if (exactProduct) {
+      setSaleForm({ ...saleForm, productId: exactProduct.id });
+      setProductSearch(exactProduct.name);
+    }
+  }
 
   function setSaleType(type) {
     if (type === 'consumidor') {
@@ -3337,7 +3399,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o categoría..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
               {productSearch && filteredProducts.length > 0 && (
                 <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
@@ -4021,7 +4083,30 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
   );
 }
 
-function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading }) {
+function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading, setActive, setSaleForm }) {
+  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
+  const clientsWithStats = clients.map(client => {
+    const clientSales = getClientSales(client);
+    const totalPurchased = clientSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+    const lastSale = clientSales[0];
+    return { ...client, clientSales, totalPurchased, lastSale };
+  });
+  const bestClient = clientsWithStats.sort((a, b) => b.totalPurchased - a.totalPurchased)[0];
+
+  function sellToClient(client) {
+    setSaleForm(prev => ({
+      ...prev,
+      saleType: 'factura',
+      customerId: client.id,
+      customer: client.name,
+      invoiceEnabled: true,
+      invoiceName: client.invoiceName || client.name,
+      invoiceIdentification: client.identification || '',
+      invoiceAddress: client.address || '',
+      invoiceEmail: client.email || '',
+    }));
+    setActive('Ventas');
+  }
   function getClientSales(client) {
     return sales.filter(sale => {
       if (sale.status === 'Anulada') return false;
@@ -4043,6 +4128,14 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
   }
 
   return (
+    <div className="space-y-5">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric icon={Users} label="Clientes" value={clients.length} note="registrados" color="emerald" />
+        <Metric icon={ShoppingCart} label="Ventas con cliente" value={completedSales.filter(sale => sale.customer && sale.customer !== 'Consumidor final').length} note="factura / nombre" color="blue" />
+        <Metric icon={DollarSign} label="Mejor cliente" value={bestClient?.totalPurchased ? `$${bestClient.totalPurchased.toFixed(2)}` : '$0.00'} note={bestClient?.name || 'sin datos'} color="amber" />
+        <Metric icon={ReceiptText} label="Facturan" value={clients.filter(client => client.wantsInvoice).length} note="clientes" color="red" />
+      </section>
+
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
         {clientsLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando clientes desde Supabase...</div>}
@@ -4051,25 +4144,22 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
         </div>
         <div className="divide-y divide-slate-100">
           {clients.length === 0 && <div className="p-5"><EmptyState icon={Users} title="Aún no tienes clientes" text="Guarda clientes frecuentes para facturar más rápido y consultar su información." /></div>}
-          {clients.map(client => {
+          {clientsWithStats.map(client => {
             const isDeleting = pendingDeleteClientId === client.id;
+            const clientSales = client.clientSales;
+            const totalPurchased = client.totalPurchased;
+            const lastSale = client.lastSale;
             return (
               <div key={client.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="font-bold text-slate-900">{client.name}</p>
                   <p className="text-sm text-slate-500">{client.phone} · {client.type}</p>
-                  {(() => {
-                    const clientSales = getClientSales(client);
-                    const totalPurchased = clientSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
-                    const lastSale = clientSales[0];
-                    return (
-                      <div className="mt-1 space-y-1">
-                        <p className="text-xs text-slate-400">{client.email || 'Sin correo'} {client.wantsInvoice ? '· pide factura' : ''}</p>
-                        <p className="text-xs font-semibold text-emerald-700">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
-                        {lastSale && <p className="text-xs text-slate-500">Última compra: {lastSale.code} · {lastSale.date} · ${Number(lastSale.total || 0).toFixed(2)}</p>}
-                      </div>
-                    );
-                  })()}
+                  <div className="mt-1 space-y-1">
+                    <p className="text-xs text-slate-400">{client.email || 'Sin correo'} {client.wantsInvoice ? '· pide factura' : ''}</p>
+                    <p className="text-xs font-semibold text-emerald-700">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
+                    {lastSale && <p className="text-xs text-slate-500">Última compra: {lastSale.code} · {lastSale.date} · ${Number(lastSale.total || 0).toFixed(2)}</p>}
+                    {client.notes && <p className="text-xs text-slate-500">Nota: {client.notes}</p>}
+                  </div>
                 </div>
                 {isDeleting ? (
                   <div className="flex gap-2">
@@ -4078,6 +4168,7 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
                   </div>
                 ) : (
                   <div className="flex gap-2">
+                    <button onClick={() => sellToClient(client)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">Vender</button>
                     <button onClick={() => editClient(client)} className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50"><Edit className="h-4 w-4" /></button>
                     <button onClick={() => setPendingDeleteClientId(client.id)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
                   </div>
@@ -4134,6 +4225,7 @@ function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, re
         </div>
       </form>
     </div>
+    </div>
   );
 }
 
@@ -4177,8 +4269,24 @@ function getProviderEmail(provider) {
   return String(provider?.email || '').trim();
 }
 
-function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider, resetProviderForm, editProvider, deleteProvider, editingProviderId, pendingDeleteProviderId, setPendingDeleteProviderId, providerNotice, productCategories, products, providersLoading }) {
+function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider, resetProviderForm, editProvider, deleteProvider, editingProviderId, pendingDeleteProviderId, setPendingDeleteProviderId, providerNotice, productCategories, products, providersLoading, setActive, setPurchaseForm }) {
   const lowStockProducts = products.filter(product => product.stock <= product.minStock);
+  const providersWithStats = providers.map(provider => {
+    const { pendingProducts } = buildProviderOrder(provider, products);
+    const suppliedProducts = products.filter(product => {
+      const providerCategory = String(provider.category || '').toLowerCase();
+      const productCategory = String(product.category || '').toLowerCase();
+      return providerCategory === 'general' || providerCategory === productCategory;
+    });
+    const estimatedRestock = pendingProducts.reduce((sum, product) => sum + (Number(product.cost || 0) * Number(product.suggested || 0)), 0);
+    return { ...provider, pendingProducts, suppliedProducts, estimatedRestock };
+  });
+  const pendingProviders = providersWithStats.filter(provider => provider.pendingProducts.length > 0);
+
+  function purchaseFromProvider(provider) {
+    setPurchaseForm(prev => ({ ...prev, providerId: provider.id }));
+    setActive('Compras');
+  }
 
   async function copyProviderOrder(provider) {
     const { message } = buildProviderOrder(provider, products);
@@ -4216,6 +4324,13 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
 
   return (
     <div className="space-y-5">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric icon={Truck} label="Proveedores" value={providers.length} note="registrados" color="emerald" />
+        <Metric icon={AlertTriangle} label="Con reposición" value={pendingProviders.length} note="proveedores" color="amber" />
+        <Metric icon={Package} label="Productos bajos" value={lowStockProducts.length} note="pendientes" color="red" />
+        <Metric icon={DollarSign} label="Reposición estimada" value={`$${pendingProviders.reduce((sum, provider) => sum + provider.estimatedRestock, 0).toFixed(2)}`} note="aprox." color="blue" />
+      </section>
+
       <section className="rounded-3xl border border-amber-100 bg-amber-50 p-5">
         <h3 className="mb-3 flex items-center gap-2 text-lg font-bold text-amber-900"><AlertTriangle className="h-5 w-5" /> Proveedores sugeridos para reposición</h3>
         {lowStockProducts.length === 0 && <p className="text-sm text-amber-800">No existen productos con necesidad de reposición.</p>}
@@ -4241,9 +4356,9 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
           </div>
           <div className="divide-y divide-slate-100">
             {providers.length === 0 && <div className="p-5"><EmptyState icon={Truck} title="Aún no tienes proveedores" text="Registra proveedores para asociarlos con categorías y facilitar reposiciones." /></div>}
-            {providers.map(provider => {
+            {providersWithStats.map(provider => {
               const isDeleting = pendingDeleteProviderId === provider.id;
-              const { pendingProducts } = buildProviderOrder(provider, products);
+              const pendingProducts = provider.pendingProducts;
               const hasEmail = Boolean(getProviderEmail(provider));
               const hasPhone = Boolean(normalizeEcuadorPhone(provider.contact));
               return (
@@ -4253,8 +4368,9 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
                       <p className="font-bold text-slate-900">{provider.name}</p>
                       <p className="text-sm text-slate-500">{provider.category} · Tel: {provider.contact}</p>
                       <p className="text-xs text-slate-400">Correo: {provider.email || 'Sin correo'} · Entrega estimada: {provider.delivery}</p>
+                      <p className="text-xs text-slate-400">Productos asociados: {provider.suppliedProducts.length}</p>
                       <p className={`mt-2 text-xs font-bold ${pendingProducts.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                        {pendingProducts.length > 0 ? `Pedido sugerido: ${pendingProducts.length} producto(s)` : 'Sin productos pendientes de reposición'}
+                        {pendingProducts.length > 0 ? `Pedido sugerido: ${pendingProducts.length} producto(s) · $${provider.estimatedRestock.toFixed(2)} aprox.` : 'Sin productos pendientes de reposición'}
                       </p>
                     </div>
                   {isDeleting ? (
@@ -4274,6 +4390,7 @@ function ProvidersPage({ providers, providerForm, setProviderForm, saveProvider,
                     {hasPhone && <button type="button" onClick={() => openProviderWhatsApp(provider)} className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">WhatsApp</button>}
                     {hasEmail && <button type="button" onClick={() => openProviderEmail(provider)} className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700">Correo</button>}
                     <button type="button" onClick={() => copyProviderOrder(provider)} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Copiar pedido</button>
+                    <button type="button" onClick={() => purchaseFromProvider(provider)} className="rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">Registrar compra</button>
                   </div>
                 </div>
               );
@@ -4408,17 +4525,22 @@ function isRecordInPeriod(record, range) {
   return date >= range.start && date <= range.end;
 }
 
-function CashPage({ sales, purchases }) {
+function CashPage({ sales = [], purchases = [] }) {
   const [closePeriod, setClosePeriod] = useState('today');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [cashCounted, setCashCounted] = useState('');
+  const [cashNote, setCashNote] = useState('');
 
-  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
-  const cancelledSales = sales.filter(sale => sale.status === 'Anulada');
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const safePurchases = Array.isArray(purchases) ? purchases : [];
   const periodRange = getPeriodRange(closePeriod, customStart, customEnd);
+
+  const completedSales = safeSales.filter(sale => sale.status !== 'Anulada');
+  const cancelledSales = safeSales.filter(sale => sale.status === 'Anulada');
   const periodSales = completedSales.filter(sale => isRecordInPeriod(sale, periodRange));
   const periodCancelledSales = cancelledSales.filter(sale => isRecordInPeriod(sale, periodRange));
-  const periodPurchases = purchases.filter(purchase => isRecordInPeriod(purchase, periodRange));
+  const periodPurchases = safePurchases.filter(purchase => isRecordInPeriod(purchase, periodRange));
 
   const periodSalesTotal = periodSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   const periodPurchasesTotal = periodPurchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
@@ -4426,11 +4548,15 @@ function CashPage({ sales, purchases }) {
   const periodDiscount = periodSales.reduce((sum, sale) => sum + Number(sale.discount || 0), 0);
   const periodUnits = periodSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
   const periodBalance = periodSalesTotal - periodPurchasesTotal;
+  const cashExpected = periodSales.filter(sale => sale.paymentMethod === 'Efectivo').reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+  const cashDifference = cashCounted === '' ? 0 : Number(cashCounted || 0) - cashExpected;
+
   const paymentSummary = periodSales.reduce((acc, sale) => {
     const method = sale.paymentMethod || 'Sin método';
     acc[method] = (acc[method] || 0) + Number(sale.total || 0);
     return acc;
   }, {});
+
   const closeLabel = `${formatPeriodDate(periodRange.start)} al ${formatPeriodDate(periodRange.end)}`;
 
   function exportCashCut() {
@@ -4444,11 +4570,24 @@ function CashPage({ sales, purchases }) {
       { Concepto: 'Balance ventas - compras', Valor: periodBalance.toFixed(2) },
       { Concepto: 'Utilidad estimada', Valor: periodProfit.toFixed(2) },
       { Concepto: 'Descuentos aplicados', Valor: periodDiscount.toFixed(2) },
+      { Concepto: 'Efectivo esperado', Valor: cashExpected.toFixed(2) },
+      { Concepto: 'Efectivo contado', Valor: cashCounted === '' ? '' : Number(cashCounted || 0).toFixed(2) },
+      { Concepto: 'Diferencia de caja', Valor: cashCounted === '' ? '' : cashDifference.toFixed(2) },
+      { Concepto: 'Observacion del cierre', Valor: cashNote || '' },
       ...Object.entries(paymentSummary).map(([method, value]) => ({ Concepto: `Pago - ${method}`, Valor: Number(value || 0).toFixed(2) })),
     ];
 
     exportToCSV(`inventiq_cierre_${closePeriod}.csv`, rows);
   }
+
+  const periodOptions = [
+    ['today', 'Hoy'],
+    ['week', '7 días'],
+    ['15days', '15 días'],
+    ['month', 'Este mes'],
+    ['previousMonth', 'Mes anterior'],
+    ['custom', 'Personalizado'],
+  ];
 
   return (
     <div className="space-y-5">
@@ -4456,22 +4595,17 @@ function CashPage({ sales, purchases }) {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-xl font-extrabold text-slate-900">Cierres y cortes por periodo</h3>
-            <p className="text-sm text-slate-500">Revisa ventas, compras, descuentos, utilidad y métodos de pago por día, semana, quincena, mes o rango personalizado.</p>
+            <p className="text-sm text-slate-500">Controla ventas, compras, descuentos, utilidad y métodos de pago por periodo.</p>
             <p className="mt-2 text-sm font-bold text-emerald-700">Periodo seleccionado: {closeLabel}</p>
           </div>
-          <button onClick={exportCashCut} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700"><Download className="mr-2 inline h-4 w-4" />Exportar cierre</button>
+          <button type="button" onClick={exportCashCut} className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+            <Download className="mr-2 inline h-4 w-4" />Exportar cierre
+          </button>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {[
-            ['today', 'Hoy'],
-            ['week', '7 días'],
-            ['15days', '15 días'],
-            ['month', 'Este mes'],
-            ['previousMonth', 'Mes anterior'],
-            ['custom', 'Personalizado'],
-          ].map(([value, label]) => (
-            <button key={value} onClick={() => setClosePeriod(value)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${closePeriod === value ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+          {periodOptions.map(([value, label]) => (
+            <button key={value} type="button" onClick={() => setClosePeriod(value)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${closePeriod === value ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
               {label}
             </button>
           ))}
@@ -4494,16 +4628,36 @@ function CashPage({ sales, purchases }) {
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-bold text-slate-700">Cierre de efectivo</p>
+          <p className="mt-2 text-sm text-slate-500">Compara el efectivo esperado contra el efectivo contado físicamente.</p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-bold text-slate-500">Efectivo esperado</p>
+              <p className="text-2xl font-extrabold text-slate-900">${cashExpected.toFixed(2)}</p>
+            </div>
+            <Field label="Efectivo contado" type="number" min="0" step="0.01" value={cashCounted} onChange={setCashCounted} placeholder="0.00" />
+          </div>
+          {cashCounted !== '' && <p className={`mt-3 rounded-2xl p-4 text-sm font-bold ${cashDifference === 0 ? 'bg-emerald-50 text-emerald-700' : cashDifference > 0 ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700'}`}>Diferencia de caja: ${cashDifference.toFixed(2)}</p>}
+          <label className="mt-4 block">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">Observación del cierre</span>
+            <textarea value={cashNote} onChange={e => setCashNote(e.target.value)} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Ej: faltante por cambio, sobrante, retiro de efectivo..." />
+          </label>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-bold text-slate-700">Balance ventas - compras</p>
           <p className={`mt-2 text-4xl font-extrabold ${periodBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>${periodBalance.toFixed(2)}</p>
           <p className="mt-2 text-sm text-slate-500">Unidades vendidas: {periodUnits}</p>
         </div>
+
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="mb-4 text-sm font-bold text-slate-700">Métodos de pago</p>
           {Object.keys(paymentSummary).length === 0 && <p className="text-sm text-slate-500">Sin ventas en este periodo.</p>}
           <div className="space-y-3">
             {Object.entries(paymentSummary).map(([method, value]) => (
-              <div key={method} className="flex justify-between rounded-2xl bg-slate-50 p-4 text-sm"><span>{method}</span><strong>${Number(value || 0).toFixed(2)}</strong></div>
+              <div key={method} className="flex justify-between rounded-2xl bg-slate-50 p-4 text-sm">
+                <span>{method}</span>
+                <strong>${Number(value || 0).toFixed(2)}</strong>
+              </div>
             ))}
           </div>
         </div>
@@ -4547,6 +4701,68 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
     })));
   }
 
+  function exportProducts() {
+    exportToCSV('inventiq_productos.csv', products.map(product => ({
+      SKU: product.sku,
+      Codigo_barras: product.barcode || '',
+      Producto: product.name,
+      Categoria: product.category,
+      Precio_venta: Number(product.price || 0).toFixed(2),
+      Costo_unitario: Number(product.cost || 0).toFixed(2),
+      Stock_actual: product.stock,
+      Stock_minimo: product.minStock,
+      Estado: product.status,
+      Marca: product.brand || '',
+      Talla_medida: product.size || '',
+      Color_modelo: product.color || '',
+      Lote: product.batchNumber || '',
+      Fecha_ingreso: product.entryDate || '',
+      Fecha_caducidad: product.expirationDate || '',
+      Descripcion: product.description || '',
+      Valor_inventario: (Number(product.cost || 0) * Number(product.stock || 0)).toFixed(2),
+      Ganancia_potencial: ((Number(product.price || 0) - Number(product.cost || 0)) * Number(product.stock || 0)).toFixed(2),
+    })));
+  }
+
+  function exportClients() {
+    exportToCSV('inventiq_clientes.csv', clients.map(client => ({
+      Cliente: client.name,
+      Telefono: client.phone,
+      Correo: client.email || '',
+      Cedula_RUC: client.identification || '',
+      Direccion: client.address || '',
+      Nombre_factura: client.invoiceName || '',
+      Solicita_factura: client.wantsInvoice ? 'Sí' : 'No',
+      Tipo: client.type,
+      Compras_registradas: client.purchases || 0,
+      Observaciones: client.notes || '',
+    })));
+  }
+
+  function exportProviders() {
+    exportToCSV('inventiq_proveedores.csv', providers.map(provider => ({
+      Proveedor: provider.name,
+      Categoria: provider.category,
+      Telefono_WhatsApp: provider.contact,
+      Correo: provider.email || '',
+      Entrega_estimada: provider.delivery || '',
+      Observaciones: provider.notes || '',
+    })));
+  }
+
+  function exportLowStock() {
+    exportToCSV('inventiq_reposicion_sugerida.csv', purchaseSuggestions.map(product => ({
+      SKU: product.sku,
+      Producto: product.name,
+      Categoria: product.category,
+      Stock_actual: product.stock,
+      Stock_minimo: product.minStock,
+      Cantidad_sugerida: Math.max((Number(product.minStock || 0) * 2) - Number(product.stock || 0), 1),
+      Costo_unitario: Number(product.cost || 0).toFixed(2),
+      Inversion_estimada: (Math.max((Number(product.minStock || 0) * 2) - Number(product.stock || 0), 1) * Number(product.cost || 0)).toFixed(2),
+    })));
+  }
+
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
@@ -4560,11 +4776,15 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-lg font-bold text-emerald-900">Reportes exportables</h3>
-            <p className="text-sm text-emerald-800">Descarga ventas y compras para análisis externo.</p>
+            <p className="text-sm text-emerald-800">Descarga ventas, compras, productos, clientes, proveedores y reposición sugerida para análisis externo.</p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <button onClick={exportSales} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Ventas</button>
             <button onClick={exportPurchases} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Compras</button>
+            <button onClick={exportProducts} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Productos</button>
+            <button onClick={exportClients} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Clientes</button>
+            <button onClick={exportProviders} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Proveedores</button>
+            <button onClick={exportLowStock} className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"><Download className="mr-2 inline h-4 w-4" />Reposición</button>
           </div>
         </div>
       </section>
