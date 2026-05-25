@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import {
   Home,
@@ -31,6 +31,7 @@ import {
   User,
   MoreHorizontal,
   Download,
+  Camera,
 } from 'lucide-react';
 
 const businessTypes = [
@@ -2636,6 +2637,111 @@ function EmptyState({ icon: Icon = Package, title, text, actionLabel, onAction }
   );
 }
 
+function BarcodeScanner({ onScan, onClose }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const detectedRef = useRef(false);
+  const animationRef = useRef(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+
+    async function startScanner() {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setError('Este navegador no permite acceder a la cámara. Prueba desde Chrome, Edge o Safari actualizado con la página en HTTPS.');
+          return;
+        }
+
+        if (!('BarcodeDetector' in window)) {
+          setError('Tu navegador todavía no soporta lectura automática de código de barras. Puedes usar un lector físico o escribir el código manualmente.');
+          return;
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+
+        if (!active) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        const detector = new window.BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
+        });
+
+        const scan = async () => {
+          if (!active || detectedRef.current || !videoRef.current) return;
+
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length > 0) {
+              const value = codes[0]?.rawValue || '';
+              if (value) {
+                detectedRef.current = true;
+                onScan(value);
+                onClose();
+                return;
+              }
+            }
+          } catch {
+            // Sigue intentando mientras la cámara esté activa.
+          }
+
+          animationRef.current = requestAnimationFrame(scan);
+        };
+
+        scan();
+      } catch (err) {
+        setError('No se pudo abrir la cámara. Revisa permisos del navegador y vuelve a intentar.');
+      }
+    }
+
+    startScanner();
+
+    return () => {
+      active = false;
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    };
+  }, [onScan, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[2rem] bg-white p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-900">Escanear código</h3>
+            <p className="text-sm text-slate-500">Apunta la cámara al código de barras del producto.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
+        </div>
+
+        {error ? (
+          <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">{error}</div>
+        ) : (
+          <div className="overflow-hidden rounded-3xl bg-slate-950">
+            <video ref={videoRef} playsInline muted className="h-72 w-full object-cover" />
+          </div>
+        )}
+
+        <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">
+          Si no reconoce el código, puedes escribirlo manualmente en el buscador o campo de código de barras.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm, setRegisterForm, authNotice, setAuthNotice, login, register, resetEmail, setResetEmail, resetPassword, resetPasswordForm, setResetPasswordForm, updateRecoveredPassword }) {
   const isLogin = authMode === 'login';
   const isReset = authMode === 'reset';
@@ -3030,6 +3136,7 @@ function EmptyDashboardMessage({ text }) {
 
 function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
   const [productSearch, setProductSearch] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
   const filteredProducts = products.filter(product => {
     const text = productSearch.toLowerCase();
@@ -3157,6 +3264,10 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                 <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
+              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+                <Camera className="h-4 w-4" /> Escanear con cámara
+              </button>
+              {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
               {productSearch && filteredProducts.length > 0 && (
                 <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
                   {filteredProducts.slice(0, 8).map(product => (
@@ -3251,6 +3362,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 
 function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const [productSearch, setProductSearch] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
   const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
   const filteredProducts = products.filter(product => {
     const text = productSearch.toLowerCase();
@@ -3401,6 +3513,10 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
                 <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
+              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+                <Camera className="h-4 w-4" /> Escanear con cámara
+              </button>
+              {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
               {productSearch && filteredProducts.length > 0 && (
                 <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
                   {filteredProducts.slice(0, 8).map(product => (
@@ -5032,6 +5148,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
 }
 
 function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, editingId, notice, productCategories, handleProductImage }) {
+  const [scannerOpen, setScannerOpen] = useState(false);
   const isNewCategory = form.category === '__new__';
   const extraLabels = businessConfig?.extraLabels || {};
 
@@ -5075,7 +5192,13 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
           <Field label="Stock mínimo" type="number" min="0" value={form.minStock} onChange={v => setForm({ ...form, minStock: v })} placeholder="5" />
         </div>
         <Field label="Código / SKU" value={form.sku} onChange={v => setForm({ ...form, sku: v })} placeholder="Ej: PROD001" />
-        <Field label="Código de barras" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} placeholder="Ej: 7861234567890" />
+        <div>
+          <Field label="Código de barras" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} placeholder="Ej: 7861234567890" />
+          <button type="button" onClick={() => setScannerOpen(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+            <Camera className="h-4 w-4" /> Escanear código con cámara
+          </button>
+          {scannerOpen && <BarcodeScanner onScan={value => setForm({ ...form, barcode: value })} onClose={() => setScannerOpen(false)} />}
+        </div>
         {businessConfig?.productExtraFields && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label={extraLabels.brand?.label || 'Marca'} value={form.brand} onChange={v => setForm({ ...form, brand: v })} placeholder={extraLabels.brand?.placeholder || 'Ej: Marca'} />
