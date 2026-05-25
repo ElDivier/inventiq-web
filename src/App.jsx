@@ -2642,67 +2642,105 @@ function BarcodeScanner({ onScan, onClose }) {
   const streamRef = useRef(null);
   const detectedRef = useRef(false);
   const animationRef = useRef(null);
+  const controlsRef = useRef(null);
   const [error, setError] = useState('');
+  const [scannerMode, setScannerMode] = useState('Preparando cámara...');
 
   useEffect(() => {
     let active = true;
 
+    function stopEverything() {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (controlsRef.current?.stop) controlsRef.current.stop();
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    }
+
+    async function startNativeScanner() {
+      setScannerMode('Escáner nativo');
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+
+      if (!active) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
+      });
+
+      const scan = async () => {
+        if (!active || detectedRef.current || !videoRef.current) return;
+
+        try {
+          const codes = await detector.detect(videoRef.current);
+          if (codes.length > 0) {
+            const value = codes[0]?.rawValue || '';
+            if (value) {
+              detectedRef.current = true;
+              onScan(value);
+              stopEverything();
+              onClose();
+              return;
+            }
+          }
+        } catch {
+          // Sigue intentando mientras la cámara esté activa.
+        }
+
+        animationRef.current = requestAnimationFrame(scan);
+      };
+
+      scan();
+    }
+
+    async function startZxingScanner() {
+      setScannerMode('Escáner compatible con iPhone');
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const codeReader = new BrowserMultiFormatReader();
+
+      const controls = await codeReader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        videoRef.current,
+        (result) => {
+          if (!active || detectedRef.current || !result) return;
+          const value = result.getText?.() || String(result.text || '');
+          if (value) {
+            detectedRef.current = true;
+            onScan(value);
+            stopEverything();
+            onClose();
+          }
+        }
+      );
+
+      controlsRef.current = controls;
+    }
+
     async function startScanner() {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
-          setError('Este navegador no permite acceder a la cámara. Prueba desde Chrome, Edge o Safari actualizado con la página en HTTPS.');
+          setError('Este navegador no permite acceder a la cámara. Prueba desde un navegador actualizado y con la página en HTTPS.');
           return;
         }
 
-        if (!('BarcodeDetector' in window)) {
-          setError('Tu navegador todavía no soporta lectura automática de código de barras. Puedes usar un lector físico o escribir el código manualmente.');
+        if ('BarcodeDetector' in window) {
+          await startNativeScanner();
           return;
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        });
-
-        if (!active) {
-          stream.getTracks().forEach(track => track.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        const detector = new window.BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'],
-        });
-
-        const scan = async () => {
-          if (!active || detectedRef.current || !videoRef.current) return;
-
-          try {
-            const codes = await detector.detect(videoRef.current);
-            if (codes.length > 0) {
-              const value = codes[0]?.rawValue || '';
-              if (value) {
-                detectedRef.current = true;
-                onScan(value);
-                onClose();
-                return;
-              }
-            }
-          } catch {
-            // Sigue intentando mientras la cámara esté activa.
-          }
-
-          animationRef.current = requestAnimationFrame(scan);
-        };
-
-        scan();
+        await startZxingScanner();
       } catch (err) {
-        setError('No se pudo abrir la cámara. Revisa permisos del navegador y vuelve a intentar.');
+        console.error('Error iniciando escáner:', err);
+        setError('No se pudo abrir el escáner. Revisa permisos de cámara, usa la página oficial en HTTPS y vuelve a intentar.');
       }
     }
 
@@ -2710,8 +2748,7 @@ function BarcodeScanner({ onScan, onClose }) {
 
     return () => {
       active = false;
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+      stopEverything();
     };
   }, [onScan, onClose]);
 
@@ -2734,6 +2771,7 @@ function BarcodeScanner({ onScan, onClose }) {
           </div>
         )}
 
+        {!error && <p className="mt-3 text-center text-xs font-bold text-emerald-700">{scannerMode}</p>}
         <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">
           Si no reconoce el código, puedes escribirlo manualmente en el buscador o campo de código de barras.
         </p>
