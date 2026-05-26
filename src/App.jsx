@@ -32,6 +32,7 @@ import {
   MoreHorizontal,
   Download,
   Camera,
+  Printer,
 } from 'lucide-react';
 
 const businessTypes = [
@@ -567,13 +568,14 @@ function exportToCSV(filename, rows) {
   }
 
   const headers = Object.keys(rows[0]);
-  const csv = [
+  const csvLines = [
     headers.join(';'),
     ...rows.map(row => headers.map(header => {
       const value = row[header] ?? '';
       return `"${String(value).replace(/"/g, '""')}"`;
     }).join(';')),
-  ].join('\n');
+  ];
+  const csv = csvLines.join(String.fromCharCode(10));
 
   const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -584,6 +586,149 @@ function exportToCSV(filename, rows) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function getBarcodePrefix(businessType = 'general') {
+  const prefixes = {
+    ropa: 'ROP',
+    general: 'INV',
+    cafeteria: 'CAF',
+    ferreteria: 'FER',
+    taller: 'TAL',
+    otro: 'INV',
+  };
+  return prefixes[businessType] || 'INV';
+}
+
+function generateInternalBarcode(businessType = 'general') {
+  const prefix = getBarcodePrefix(businessType);
+  const timePart = String(Date.now()).slice(-6);
+  const randomPart = String(Math.floor(Math.random() * 999)).padStart(3, '0');
+  return `${prefix}${timePart}${randomPart}`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function buildBarcodeLabelHtml(productsToPrint, options = {}) {
+  const columns = Number(options.columns || 2);
+  const copies = Math.max(Number(options.copies || 1), 1);
+  const labelWidth = Number(options.labelWidth || 44);
+  const labelHeight = Number(options.labelHeight || 33);
+  const pageWidth = labelWidth * columns;
+  const labels = [];
+
+  for (let i = 0; i < copies; i += 1) {
+    productsToPrint.forEach(product => {
+      const code = String(product?.barcode || product?.sku || '').trim();
+      if (!code) return;
+      labels.push({ code });
+    });
+  }
+
+  const pages = [];
+  for (let i = 0; i < labels.length; i += columns) {
+    pages.push(labels.slice(i, i + columns));
+  }
+
+  const pageBlocks = pages.map(row => {
+    const cells = Array.from({ length: columns }).map((_, index) => {
+      const item = row[index];
+      if (!item) return '<div class="label empty"></div>';
+      const safeCode = escapeHtml(item.code);
+      return `
+        <div class="label">
+          <div class="inner">
+            <svg class="barcode" data-code="${safeCode}"></svg>
+            <div class="code">${safeCode}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `<section class="page">${cells}</section>`;
+  }).join('');
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Etiquetas InventiQ</title>
+        <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+        <style>
+          @page { size: ${pageWidth}mm ${labelHeight}mm; margin: 0; }
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
+          .page { width: ${pageWidth}mm; height: ${labelHeight}mm; display: grid; grid-template-columns: repeat(${columns}, ${labelWidth}mm); page-break-after: always; break-after: page; }
+          .label { width: ${labelWidth}mm; height: ${labelHeight}mm; display: flex; align-items: center; justify-content: center; padding: 2mm; overflow: hidden; }
+          .label.empty { background: white; }
+          .inner { width: 100%; text-align: center; }
+          svg { width: ${Math.max(labelWidth - 4, 20)}mm; max-height: ${Math.max(labelHeight - 12, 12)}mm; }
+          .code { margin-top: 1mm; font-size: 9px; font-weight: 700; letter-spacing: 0.4px; }
+          .no-print { margin: 10px; text-align: center; }
+          .no-print button { background: #059669; color: white; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        ${pageBlocks}
+        <div class="no-print"><button onclick="window.print()">Imprimir etiquetas</button></div>
+        <script>
+          document.querySelectorAll('.barcode').forEach(svg => {
+            JsBarcode(svg, svg.dataset.code, {
+              format: 'CODE128',
+              displayValue: false,
+              margin: 0,
+              width: 1.35,
+              height: 48
+            });
+          });
+          window.onload = () => setTimeout(() => window.print(), 400);
+        </script>
+      </body>
+    </html>
+  `;
+}
+
+function openPrintWindow(html) {
+  const printWindow = window.open('', '_blank', 'width=700,height=500');
+  if (!printWindow) {
+    alert('Permite ventanas emergentes para imprimir las etiquetas.');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+function printProductBarcodeLabel(product) {
+  const code = String(product?.barcode || product?.sku || '').trim();
+
+  if (!code) {
+    alert('Este producto no tiene código de barras ni SKU para imprimir.');
+    return;
+  }
+
+  openPrintWindow(buildBarcodeLabelHtml([product], { columns: 1, copies: 1, labelWidth: 44, labelHeight: 33 }));
+}
+
+function printSelectedBarcodeLabels(productsToPrint, options = {}) {
+  const validProducts = productsToPrint.filter(product => String(product?.barcode || product?.sku || '').trim());
+
+  if (validProducts.length === 0) {
+    alert('Selecciona al menos un producto con código de barras o SKU.');
+    return;
+  }
+
+  openPrintWindow(buildBarcodeLabelHtml(validProducts, options));
 }
 
 export default function App() {
@@ -5163,10 +5308,53 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
 }
 
 function ProductTable({ businessConfig, products, filtered, categories, category, setCategory, deleteProduct, editProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText }) {
+  const [selectedLabelIds, setSelectedLabelIds] = useState([]);
+  const [labelColumns, setLabelColumns] = useState('2');
+  const [labelCopies, setLabelCopies] = useState('1');
+  const selectedProducts = filtered.filter(product => selectedLabelIds.includes(product.id));
+  const allVisibleSelected = filtered.length > 0 && filtered.every(product => selectedLabelIds.includes(product.id));
+
+  function toggleLabelProduct(productId) {
+    setSelectedLabelIds(prev => prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]);
+  }
+
+  function toggleAllVisibleProducts() {
+    if (allVisibleSelected) {
+      setSelectedLabelIds(prev => prev.filter(id => !filtered.some(product => product.id === id)));
+      return;
+    }
+
+    setSelectedLabelIds(prev => Array.from(new Set([...prev, ...filtered.map(product => product.id)])));
+  }
+
+  function printSelectedLabels() {
+    printSelectedBarcodeLabels(selectedProducts, {
+      columns: Number(labelColumns || 2),
+      copies: Number(labelCopies || 1),
+      labelWidth: 44,
+      labelHeight: 33,
+    });
+  }
+
   return (
     <div className="order-2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
       <div className="border-b border-slate-100 p-5">
-        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-800"><Package className="h-5 w-5 text-emerald-600" /> Lista de productos</h3>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-xl font-bold text-slate-800"><Package className="h-5 w-5 text-emerald-600" /> Lista de productos</h3>
+            <p className="mt-1 text-sm text-slate-500">Selecciona productos y genera etiquetas por columnas.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 xl:w-[520px]">
+            <select value={labelColumns} onChange={e => setLabelColumns(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200">
+              <option value="1">1 columna</option>
+              <option value="2">2 columnas</option>
+              <option value="3">3 columnas</option>
+            </select>
+            <input type="number" min="1" value={labelCopies} onChange={e => setLabelCopies(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Copias" />
+            <button type="button" onClick={toggleAllVisibleProducts} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allVisibleSelected ? 'Quitar visibles' : 'Seleccionar visibles'}</button>
+            <button type="button" onClick={printSelectedLabels} className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"><Printer className="mr-1 inline h-4 w-4" />Imprimir {selectedProducts.length}</button>
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr]">
         <aside className="border-b border-slate-100 p-4 lg:border-b-0 lg:border-r">
@@ -5190,6 +5378,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
+                <th className="px-5 py-4">Etiq.</th>
                 <th className="px-5 py-4">Producto</th>
                 <th className="px-5 py-4">Categoría</th>
                 <th className="px-5 py-4">Precio</th>
@@ -5205,6 +5394,9 @@ function ProductTable({ businessConfig, products, filtered, categories, category
                 const isDeleting = pendingDeleteId === product.id;
                 return (
                   <tr key={product.id} className="hover:bg-slate-50/70">
+                    <td className="px-5 py-4">
+                      <input type="checkbox" checked={selectedLabelIds.includes(product.id)} onChange={() => toggleLabelProduct(product.id)} className="h-4 w-4" />
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {product.imageUrl ? (
@@ -5232,6 +5424,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
                         </div>
                       ) : (
                         <div className="flex gap-2">
+                          <button onClick={() => printProductBarcodeLabel(product)} className="rounded-xl border border-emerald-100 p-2 text-emerald-600 hover:bg-emerald-50" title="Imprimir código"><Printer className="h-4 w-4" /></button>
                           <button onClick={() => editProduct(product)} className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50"><Edit className="h-4 w-4" /></button>
                           <button onClick={() => setPendingDeleteId(product.id)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
                         </div>
@@ -5242,7 +5435,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
               })}
             </tbody>
           </table>
-          <div className="border-t border-slate-100 px-5 py-4 text-sm text-slate-500">Mostrando {filtered.length} de {products.length} productos</div>
+          <div className="border-t border-slate-100 px-5 py-4 text-sm text-slate-500">Mostrando {filtered.length} de {products.length} productos · Seleccionados para etiquetas: {selectedProducts.length}</div>
         </div>
       </div>
     </div>
@@ -5253,6 +5446,12 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
   const [scannerOpen, setScannerOpen] = useState(false);
   const isNewCategory = form.category === '__new__';
   const extraLabels = businessConfig?.extraLabels || {};
+
+  function generateProductBarcode() {
+    const businessType = businessConfig?.label === 'Tienda de ropa' ? 'ropa' : 'general';
+    const code = generateInternalBarcode(businessType);
+    setForm({ ...form, sku: form.sku || code, barcode: code });
+  }
 
   return (
     <form onSubmit={saveProduct} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
@@ -5294,12 +5493,18 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
           <Field label="Stock mínimo" type="number" min="0" value={form.minStock} onChange={v => setForm({ ...form, minStock: v })} placeholder="5" />
         </div>
         <Field label="Código / SKU" value={form.sku} onChange={v => setForm({ ...form, sku: v })} placeholder="Ej: PROD001" />
-        <div>
-          <Field label="Código de barras" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} placeholder="Ej: 7861234567890" />
-          <button type="button" onClick={() => setScannerOpen(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-            <Camera className="h-4 w-4" /> Escanear código con cámara
-          </button>
-          {scannerOpen && <BarcodeScanner onScan={value => setForm({ ...form, barcode: value })} onClose={() => setScannerOpen(false)} />}
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <Field label="Código de barras" value={form.barcode} onChange={v => setForm({ ...form, barcode: v })} placeholder="Escribe el código existente o genera uno nuevo" />
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" onClick={generateProductBarcode} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+              <Plus className="h-4 w-4" /> Generar código
+            </button>
+            <button type="button" onClick={() => setScannerOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+              <Camera className="h-4 w-4" /> Escanear existente
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">Puedes generar un código interno para InventiQ o escribir/escanear el código que el producto ya trae.</p>
+          {scannerOpen && <BarcodeScanner onScan={value => setForm({ ...form, barcode: value, sku: form.sku || value })} onClose={() => setScannerOpen(false)} />}
         </div>
         {businessConfig?.productExtraFields && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
