@@ -313,6 +313,40 @@ function saveToStorage(key, value) {
   }
 }
 
+function getDraftKey(userId, name) {
+  return `inventiq_draft_${userId || 'demo'}_${name}`;
+}
+
+function saveDraft(userId, name, value) {
+  if (!userId) return;
+  saveToStorage(getDraftKey(userId, name), value);
+}
+
+function loadDraft(userId, name, fallback) {
+  if (!userId) return fallback;
+  return loadFromStorage(getDraftKey(userId, name), fallback);
+}
+
+function clearDraft(userId, name) {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(getDraftKey(userId, name));
+  } catch (error) {
+    console.error('No se pudo limpiar borrador:', error);
+  }
+}
+
+function hasDraftData(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (!value || typeof value !== 'object') return Boolean(value);
+  return Object.values(value).some(item => {
+    if (typeof item === 'boolean') return item;
+    if (typeof item === 'number') return item !== 0 && item !== 1;
+    if (Array.isArray(item)) return item.length > 0;
+    return String(item || '').trim() !== '';
+  });
+}
+
 function getUsersFromStorage() {
   const storedUsers = loadFromStorage(STORAGE_KEYS.users, null);
   if (Array.isArray(storedUsers) && storedUsers.length > 0) {
@@ -870,6 +904,56 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser?.id) {
+      setForm(loadDraft(currentUser.id, 'productForm', emptyForm));
+      setClientForm(loadDraft(currentUser.id, 'clientForm', emptyClientForm));
+      setProviderForm(loadDraft(currentUser.id, 'providerForm', emptyProviderForm));
+      setSaleForm(loadDraft(currentUser.id, 'saleForm', emptySaleForm));
+      setSaleCart(loadDraft(currentUser.id, 'saleCart', []));
+      setPurchaseForm(loadDraft(currentUser.id, 'purchaseForm', emptyPurchaseForm));
+      setPurchaseCart(loadDraft(currentUser.id, 'purchaseCart', []));
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'productForm', form);
+  }, [currentUser?.id, form]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'clientForm', clientForm);
+  }, [currentUser?.id, clientForm]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'providerForm', providerForm);
+  }, [currentUser?.id, providerForm]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'saleForm', saleForm);
+  }, [currentUser?.id, saleForm]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'saleCart', saleCart);
+  }, [currentUser?.id, saleCart]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'purchaseForm', purchaseForm);
+  }, [currentUser?.id, purchaseForm]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'purchaseCart', purchaseCart);
+  }, [currentUser?.id, purchaseCart]);
+
+  // Configuración no se guarda como borrador para evitar sobrescribir datos reales de la tienda.
+  // Siempre se carga desde currentUser / Supabase.
+
+  useEffect(() => {
+    if (currentUser?.id) {
       loadProductsFromSupabase(currentUser.id);
     }
   }, [currentUser?.id]);
@@ -1085,6 +1169,7 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
+      clearDraft(currentUser.id, 'settingsForm');
       setSettingsForm({
         name: currentUser.name || '',
         store: currentUser.store || '',
@@ -1097,7 +1182,7 @@ export default function App() {
         receiptFooter: currentUser.receiptFooter || 'Gracias por su compra.',
         logoUrl: currentUser.logoUrl || '',
         logoFile: null,
-        username: currentUser.username || '',
+        username: currentUser.username || currentUser.email || '',
         currentPassword: '',
         newPassword: '',
         confirmNewPassword: '',
@@ -1360,6 +1445,7 @@ export default function App() {
     setForm(emptyForm);
     setEditingId(null);
     setNotice(null);
+    clearDraft(currentUser?.id, 'productForm');
   }
 
   function validateProduct(finalCategory, price, cost, stock, minStock) {
@@ -1607,6 +1693,7 @@ export default function App() {
 
     setForm(emptyForm);
     setEditingId(null);
+    clearDraft(currentUser?.id, 'productForm');
   }
 
   function editProduct(product) {
@@ -1953,6 +2040,8 @@ export default function App() {
 
     setPurchaseForm(emptyPurchaseForm);
     setPurchaseCart([]);
+    clearDraft(currentUser?.id, 'purchaseForm');
+    clearDraft(currentUser?.id, 'purchaseCart');
     setPurchaseNotice({ type: 'success', message: `Compra ${newPurchase.code} registrada con ${purchaseCart.length} producto(s). Stock actualizado en Supabase.` });
     await loadPurchasesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
@@ -1962,6 +2051,8 @@ export default function App() {
     setPurchaseForm(emptyPurchaseForm);
     setPurchaseCart([]);
     setPurchaseNotice(null);
+    clearDraft(currentUser?.id, 'purchaseForm');
+    clearDraft(currentUser?.id, 'purchaseCart');
   }
 
   async function registerSale(e) {
@@ -2064,6 +2155,8 @@ export default function App() {
 
     setSaleForm(emptySaleForm);
     setSaleCart([]);
+    clearDraft(currentUser?.id, 'saleForm');
+    clearDraft(currentUser?.id, 'saleCart');
     setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${saleCart.length} producto(s).` });
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
@@ -2117,6 +2210,8 @@ export default function App() {
     setSaleForm(emptySaleForm);
     setSaleCart([]);
     setSaleNotice(null);
+    clearDraft(currentUser?.id, 'saleForm');
+    clearDraft(currentUser?.id, 'saleCart');
   }
 
   async function deleteProduct(id) {
@@ -2168,6 +2263,7 @@ export default function App() {
     setClientForm(emptyClientForm);
     setEditingClientId(null);
     setClientNotice(null);
+    clearDraft(currentUser?.id, 'clientForm');
   }
 
   async function saveClient(e) {
@@ -2239,6 +2335,7 @@ export default function App() {
 
     setClientForm(emptyClientForm);
     setEditingClientId(null);
+    clearDraft(currentUser?.id, 'clientForm');
     await loadClientsFromSupabase(currentUser.id, false);
   }
 
@@ -2284,6 +2381,7 @@ export default function App() {
     setProviderForm(emptyProviderForm);
     setEditingProviderId(null);
     setProviderNotice(null);
+    clearDraft(currentUser?.id, 'providerForm');
   }
 
   async function saveProvider(e) {
@@ -2356,6 +2454,7 @@ export default function App() {
 
     setProviderForm(emptyProviderForm);
     setEditingProviderId(null);
+    clearDraft(currentUser?.id, 'providerForm');
     await loadProvidersFromSupabase(currentUser.id, false);
   }
 
