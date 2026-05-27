@@ -5298,15 +5298,15 @@ function SettingsPage({ currentUser, settingsForm, setSettingsForm, saveSettings
             <Field label="Ciudad" value={settingsForm.city} onChange={v => setSettingsForm({ ...settingsForm, city: v })} placeholder="Ciudad" />
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de negocio</span>
-              <select value={settingsForm.businessType} onChange={e => setSettingsForm({ ...settingsForm, businessType: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+              <select value={settingsForm.businessType} disabled className="w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-slate-500 outline-none">
                 {businessTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
               </select>
-              <p className="mt-2 text-xs text-slate-500">Al cambiarlo, InventiQ ajusta los campos visibles para productos e inventario.</p>
             </label>
             <Field label="RUC / identificación de la tienda" value={settingsForm.businessId} onChange={v => setSettingsForm({ ...settingsForm, businessId: v })} placeholder="Ej: 1000000001001" />
             <Field label="Dirección comercial" value={settingsForm.address} onChange={v => setSettingsForm({ ...settingsForm, address: v })} placeholder="Ej: Av. Principal y Calle 10" />
             <Field label="Teléfono de la tienda" value={settingsForm.phone} onChange={v => setSettingsForm({ ...settingsForm, phone: v })} placeholder="Ej: 099 000 0000" />
             <Field label="Correo comercial" type="email" value={settingsForm.commercialEmail} onChange={v => setSettingsForm({ ...settingsForm, commercialEmail: v })} placeholder="Ej: ventas@mitienda.com" />
+            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Guardar cambios</button>
           </div>
         </section>
 
