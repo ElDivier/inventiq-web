@@ -575,6 +575,25 @@ function getAvatarLetter(user) {
   return source.charAt(0).toUpperCase() || 'I';
 }
 
+function getProductDisplayName(product) {
+  if (!product) return 'Producto';
+  const name = String(product.name || 'Producto').trim();
+  const details = [product.brand, product.size, product.color]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+
+  return details ? `${name} - ${details}` : name;
+}
+
+function getProductVariantText(product) {
+  if (!product) return '';
+  return [product.brand, product.size, product.color]
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
 function validatePasswordSecurity(password) {
   const value = String(password || '');
 
@@ -1884,7 +1903,7 @@ export default function App() {
         ...saleCart,
         {
           productId: product.id,
-          product: product.name,
+          product: getProductDisplayName(product),
           quantity,
           price: product.price,
           cost: product.cost,
@@ -1943,7 +1962,7 @@ export default function App() {
         ...purchaseCart,
         {
           productId: product.id,
-          product: product.name,
+          product: getProductDisplayName(product),
           quantity,
           unitCost,
           total: quantity * unitCost,
@@ -3622,12 +3641,12 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
                       key={product.id}
                       onClick={() => {
                         selectProduct(product.id);
-                        setProductSearch(product.name);
+                        setProductSearch(getProductDisplayName(product));
                       }}
                       className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
                     >
                       <span>
-                        <strong className="text-slate-900">{product.name}</strong>
+                        <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
                         <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
                       </span>
                       <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
@@ -3638,14 +3657,14 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <span className="mb-2 block text-sm font-semibold text-slate-700">Producto comprado</span>
               <select value={purchaseForm.productId} onChange={e => selectProduct(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                 <option value="">Seleccionar producto</option>
-                {filteredProducts.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku || 'Sin SKU'} · Stock actual {product.stock}</option>)}
+                {filteredProducts.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · {product.sku || 'Sin SKU'} · Stock actual {product.stock}</option>)}
               </select>
               {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} resultado(s).</p>}
             </label>
 
             {selectedProduct && (
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold">{selectedProduct.name}</p>
+                <p className="font-bold">{getProductDisplayName(selectedProduct)}</p>
                 <p className="text-sm text-slate-500">Categoría: {selectedProduct.category} · Stock actual: {selectedProduct.stock}</p>
                 {suggestedProvider && <p className="mt-2 text-sm font-semibold text-emerald-700">Proveedor sugerido: {suggestedProvider.name}</p>}
               </div>
@@ -3730,7 +3749,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
 
     if (exactProduct) {
       setSaleForm({ ...saleForm, productId: exactProduct.id });
-      setProductSearch(exactProduct.name);
+      setProductSearch(getProductDisplayName(exactProduct));
     }
   }
 
@@ -3871,12 +3890,12 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                       key={product.id}
                       onClick={() => {
                         setSaleForm({ ...saleForm, productId: product.id });
-                        setProductSearch(product.name);
+                        setProductSearch(getProductDisplayName(product));
                       }}
                       className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
                     >
                       <span>
-                        <strong className="text-slate-900">{product.name}</strong>
+                        <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
                         <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
                       </span>
                       <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
@@ -3887,14 +3906,14 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               <span className="mb-2 block text-sm font-semibold text-slate-700">Producto</span>
               <select value={saleForm.productId} onChange={e => setSaleForm({ ...saleForm, productId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                 <option value="">Seleccionar producto</option>
-                {filteredProducts.map(product => <option key={product.id} value={product.id}>{product.name} · {product.sku || 'Sin SKU'} · Stock {product.stock}</option>)}
+                {filteredProducts.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · {product.sku || 'Sin SKU'} · Stock {product.stock}</option>)}
               </select>
               {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} producto(s) con stock.</p>}
             </label>
 
             {product && (
               <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold">{product.name}</p>
+                <p className="font-bold">{getProductDisplayName(product)}</p>
                 <p className="text-sm text-slate-500">Precio: ${product.price.toFixed(2)} · Costo: ${product.cost.toFixed(2)} · Stock disponible: {product.stock}</p>
               </div>
             )}
@@ -4503,7 +4522,7 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Producto</span>
                 <select value={adjustForm.productId} onChange={e => setAdjustForm({ ...adjustForm, productId: e.target.value, stock: products.find(p => String(p.id) === String(e.target.value))?.stock ?? '' })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                   <option value="">Seleccionar producto</option>
-                  {products.map(product => <option key={product.id} value={product.id}>{product.name} · Stock {product.stock}</option>)}
+                  {products.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · Stock {product.stock}</option>)}
                 </select>
               </label>
               <Field label="Stock contado físicamente" type="number" min="0" value={adjustForm.stock} onChange={v => setAdjustForm({ ...adjustForm, stock: v })} placeholder="Ej: 18" />
@@ -5516,7 +5535,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
                         <div>
                           <p className="font-bold text-slate-900">{product.name}</p>
                           <p className="text-xs text-slate-500">SKU: {product.sku}{product.barcode ? ` · Barra: ${product.barcode}` : ''}</p>
-                          {businessConfig?.productExtraFields && <p className="text-xs text-slate-500">{[product.brand, product.size, product.color].filter(Boolean).join(' · ') || 'Sin variante'}</p>}
+                          {businessConfig?.productExtraFields && <p className="text-xs font-semibold text-emerald-700">{getProductVariantText(product) || 'Sin variante'}</p>}
                           {businessConfig?.usesExpiration && product.expirationDate && <p className={`text-xs ${exp?.color}`}>Caduca: {product.expirationDate} · {exp?.label}</p>}
                         </div>
                       </div>
