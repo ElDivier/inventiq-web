@@ -5410,8 +5410,18 @@ function ProductTable({ businessConfig, products, filtered, categories, category
   const [selectedLabelIds, setSelectedLabelIds] = useState([]);
   const [labelColumns, setLabelColumns] = useState('2');
   const [labelCopies, setLabelCopies] = useState('1');
+  const [currentPage, setCurrentPage] = useState(1);
+  const productsPerPage = 15;
+  const totalPages = Math.max(Math.ceil(filtered.length / productsPerPage), 1);
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * productsPerPage;
+  const paginatedProducts = filtered.slice(startIndex, startIndex + productsPerPage);
   const selectedProducts = filtered.filter(product => selectedLabelIds.includes(product.id));
-  const allVisibleSelected = filtered.length > 0 && filtered.every(product => selectedLabelIds.includes(product.id));
+  const allVisibleSelected = paginatedProducts.length > 0 && paginatedProducts.every(product => selectedLabelIds.includes(product.id));
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [category, filtered.length]);
 
   function toggleLabelProduct(productId) {
     setSelectedLabelIds(prev => prev.includes(productId) ? prev.filter(id => id !== productId) : [...prev, productId]);
@@ -5419,11 +5429,11 @@ function ProductTable({ businessConfig, products, filtered, categories, category
 
   function toggleAllVisibleProducts() {
     if (allVisibleSelected) {
-      setSelectedLabelIds(prev => prev.filter(id => !filtered.some(product => product.id === id)));
+      setSelectedLabelIds(prev => prev.filter(id => !paginatedProducts.some(product => product.id === id)));
       return;
     }
 
-    setSelectedLabelIds(prev => Array.from(new Set([...prev, ...filtered.map(product => product.id)])));
+    setSelectedLabelIds(prev => Array.from(new Set([...prev, ...paginatedProducts.map(product => product.id)])));
   }
 
   function printSelectedLabels() {
@@ -5450,7 +5460,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
               <option value="3">3 columnas</option>
             </select>
             <input type="number" min="1" value={labelCopies} onChange={e => setLabelCopies(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Copias" />
-            <button type="button" onClick={toggleAllVisibleProducts} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allVisibleSelected ? 'Quitar visibles' : 'Seleccionar visibles'}</button>
+            <button type="button" onClick={toggleAllVisibleProducts} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allVisibleSelected ? 'Quitar página' : 'Seleccionar página'}</button>
             <button type="button" onClick={printSelectedLabels} className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"><Printer className="mr-1 inline h-4 w-4" />Imprimir {selectedProducts.length}</button>
           </div>
         </div>
@@ -5487,7 +5497,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map(product => {
+              {paginatedProducts.map(product => {
                 const s = statusText(product);
                 const exp = expirationText ? expirationText(product) : null;
                 const isDeleting = pendingDeleteId === product.id;
@@ -5534,7 +5544,14 @@ function ProductTable({ businessConfig, products, filtered, categories, category
               })}
             </tbody>
           </table>
-          <div className="border-t border-slate-100 px-5 py-4 text-sm text-slate-500">Mostrando {filtered.length} de {products.length} productos · Seleccionados para etiquetas: {selectedProducts.length}</div>
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 lg:flex-row lg:items-center lg:justify-between">
+            <span>Mostrando {filtered.length === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + productsPerPage, filtered.length)} de {filtered.length} filtrados · Total {products.length} productos · Seleccionados para etiquetas: {selectedProducts.length}</span>
+            <div className="flex items-center gap-2">
+              <button type="button" disabled={safePage <= 1} onClick={() => setCurrentPage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+              <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safePage} de {totalPages}</span>
+              <button type="button" disabled={safePage >= totalPages} onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
