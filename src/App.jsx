@@ -33,7 +33,15 @@ import {
   Download,
   Camera,
   Printer,
+  Upload,
 } from 'lucide-react';
+
+const ADMIN_EMAILS = ['revelodiego19@gmail.com'];
+
+function isInventiQAdmin(user) {
+  const email = String(user?.email || user?.username || '').trim().toLowerCase();
+  return ADMIN_EMAILS.includes(email);
+}
 
 const businessTypes = [
   { value: 'general', label: 'Tienda general / minimarket' },
@@ -212,6 +220,16 @@ const emptyRegisterForm = {
   city: '',
   businessType: 'general',
   username: '',
+  password: '',
+  confirmPassword: '',
+};
+
+const emptyAdminCreateUserForm = {
+  name: '',
+  store: '',
+  city: '',
+  businessType: 'ropa',
+  email: '',
   password: '',
   confirmPassword: '',
 };
@@ -784,6 +802,143 @@ function printSelectedBarcodeLabels(productsToPrint, options = {}) {
   openPrintWindow(buildBarcodeLabelHtml(validProducts, options));
 }
 
+function normalizeExcelHeader(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+function normalizeExcelRow(row) {
+  return Object.entries(row || {}).reduce((acc, [key, value]) => {
+    acc[normalizeExcelHeader(key)] = value;
+    return acc;
+  }, {});
+}
+
+function getExcelValue(row, aliases, fallback = '') {
+  for (const alias of aliases) {
+    const key = normalizeExcelHeader(alias);
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key];
+  }
+  return fallback;
+}
+
+function excelText(value) {
+  return String(value ?? '').trim();
+}
+
+function excelNumber(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const cleaned = String(value).replace(/\$/g, '').replace(/,/g, '.').replace(/[^0-9.-]/g, '');
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function excelDate(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value).trim();
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct.toISOString().slice(0, 10);
+  return '';
+}
+
+function downloadProductExcelTemplate(businessType = 'general') {
+  const isClothing = businessType === 'ropa';
+  const rows = isClothing ? [
+    {
+      'NOMBRE DEL PRODUCTO': 'CAMISA',
+      'CATEGORIA': 'Camisas',
+      'PRECIO DE VENTA': '57.00',
+      'COSTO (OPCIONAL)': '',
+      'STOCK ACTUAL': '1',
+      'STOCK MINIMO': '1',
+      'MARCA': 'PAUL FREDRICK',
+      'TALLA': '15 1/2-36',
+      'COLOR': 'ROSADA/AZUL',
+      'DESCRIPCION': 'RAYAS-MANGA LARGA',
+      'FOTO PRODUCTO': '',
+      'CODIGO ALMACEN': 'SK1348',
+      'CODIGO DE BARRAS': '',
+    },
+  ] : [
+    {
+      'NOMBRE DEL PRODUCTO': 'Arroz 1kg',
+      'CATEGORIA': 'Víveres',
+      'PRECIO DE VENTA': '1.25',
+      'COSTO': '0.90',
+      'STOCK ACTUAL': '10',
+      'STOCK MINIMO': '3',
+      'MARCA': '',
+      'TALLA': '',
+      'COLOR': '',
+      'DESCRIPCION': 'Producto de ejemplo',
+      'FOTO PRODUCTO': '',
+      'CODIGO ALMACEN': 'PROD001',
+      'CODIGO DE BARRAS': '',
+      'FECHA DE CADUCIDAD': '',
+      'LOTE': '',
+    },
+  ];
+
+  exportToCSV(`inventiq_formato_productos_${businessType || 'general'}.csv`, rows);
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = error => {
+      URL.revokeObjectURL(url);
+      reject(error);
+    };
+    img.src = url;
+  });
+}
+
+async function optimizeImageFile(file, options = {}) {
+  const maxWidth = options.maxWidth || 1200;
+  const maxHeight = options.maxHeight || 1200;
+  const quality = options.quality || 0.82;
+  const outputType = options.outputType || 'image/jpeg';
+  const outputName = `${String(file.name || 'imagen').replace(/\.[^.]+$/, '')}.jpg`;
+
+  const image = await loadImageFromFile(file);
+  const ratio = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+  const width = Math.max(Math.round(image.width * ratio), 1);
+  const height = Math.max(Math.round(image.height * ratio), 1);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, quality));
+  if (!blob) return file;
+
+  return new File([blob], outputName, { type: outputType, lastModified: Date.now() });
+}
+
 export default function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -833,6 +988,9 @@ export default function App() {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 768;
   });
+  const [excelImportPreview, setExcelImportPreview] = useState(null);
+  const [adminCreateUserForm, setAdminCreateUserForm] = useState(emptyAdminCreateUserForm);
+  const [adminNotice, setAdminNotice] = useState(null);
 
   useEffect(() => {
     if (!showSplash) return;
@@ -996,21 +1154,22 @@ export default function App() {
           refreshProducts();
         }
       )
-      .subscribe(status => {
-        console.log('Realtime products status:', status);
-      });
+      .subscribe();
 
-    // Respaldo fuerte para celular: sincroniza cada 2 segundos aunque el WebSocket se pause.
-    const syncInterval = setInterval(refreshProducts, 2000);
+    // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
+    const syncInterval = setInterval(refreshProducts, 45000);
 
-    // También sincroniza cuando el celular vuelve a enfocar la pestaña.
+    // También sincroniza cuando el usuario vuelve a la pestaña.
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshProducts();
+    };
     window.addEventListener('focus', refreshProducts);
-    document.addEventListener('visibilitychange', refreshProducts);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(syncInterval);
       window.removeEventListener('focus', refreshProducts);
-      document.removeEventListener('visibilitychange', refreshProducts);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -1054,20 +1213,21 @@ export default function App() {
           refreshSales();
         }
       )
-      .subscribe(status => {
-        console.log('Realtime sales status:', status);
-      });
+      .subscribe();
 
-    // Respaldo fuerte para celular: sincroniza ventas y stock aunque el WebSocket se pause.
-    const syncInterval = setInterval(refreshSales, 2000);
+    // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
+    const syncInterval = setInterval(refreshSales, 45000);
 
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshSales();
+    };
     window.addEventListener('focus', refreshSales);
-    document.addEventListener('visibilitychange', refreshSales);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(syncInterval);
       window.removeEventListener('focus', refreshSales);
-      document.removeEventListener('visibilitychange', refreshSales);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -1097,14 +1257,19 @@ export default function App() {
           refreshClients();
         }
       )
-      .subscribe(status => {
-        console.log('Realtime clients status:', status);
-      });
+      .subscribe();
 
-    const syncInterval = setInterval(refreshClients, 3000);
+    const syncInterval = setInterval(refreshClients, 60000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshClients();
+    };
+    window.addEventListener('focus', refreshClients);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(syncInterval);
+      window.removeEventListener('focus', refreshClients);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -1140,14 +1305,19 @@ export default function App() {
           refreshProviders();
         }
       )
-      .subscribe(status => {
-        console.log('Realtime providers status:', status);
-      });
+      .subscribe();
 
-    const syncInterval = setInterval(refreshProviders, 3000);
+    const syncInterval = setInterval(refreshProviders, 60000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshProviders();
+    };
+    window.addEventListener('focus', refreshProviders);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(syncInterval);
+      window.removeEventListener('focus', refreshProviders);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -1174,14 +1344,19 @@ export default function App() {
           refreshPurchases();
         }
       )
-      .subscribe(status => {
-        console.log('Realtime purchases status:', status);
-      });
+      .subscribe();
 
-    const syncInterval = setInterval(refreshPurchases, 3000);
+    const syncInterval = setInterval(refreshPurchases, 60000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refreshPurchases();
+    };
+    window.addEventListener('focus', refreshPurchases);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       clearInterval(syncInterval);
+      window.removeEventListener('focus', refreshPurchases);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
@@ -1268,63 +1443,88 @@ export default function App() {
 
   async function register(e) {
     e.preventDefault();
-    const name = registerForm.name.trim();
-    const store = registerForm.store.trim();
-    const city = registerForm.city.trim();
-    const businessType = registerForm.businessType || 'general';
-    const email = registerForm.username.trim();
-    const password = registerForm.password.trim();
-    const confirmPassword = registerForm.confirmPassword.trim();
+    setAuthNotice({ type: 'error', message: 'El registro público está desactivado. Solicita la creación de tu cuenta al administrador de InventiQ.' });
+  }
 
-    if (!name || !store || !email || !password || !confirmPassword) {
-      setAuthNotice({ type: 'error', message: 'Completa todos los campos obligatorios.' });
+  async function createClientAccount(e) {
+    e.preventDefault();
+
+    if (!isInventiQAdmin(currentUser)) {
+      setAdminNotice({ type: 'error', message: 'No tienes permisos para crear cuentas.' });
+      return;
+    }
+
+    const name = adminCreateUserForm.name.trim();
+    const store = adminCreateUserForm.store.trim();
+    const city = adminCreateUserForm.city.trim();
+    const businessType = adminCreateUserForm.businessType || 'general';
+    const email = adminCreateUserForm.email.trim().toLowerCase();
+    const password = adminCreateUserForm.password.trim();
+    const confirmPassword = adminCreateUserForm.confirmPassword.trim();
+
+    if (!name || !store || !city || !email || !password || !confirmPassword) {
+      setAdminNotice({ type: 'error', message: 'Completa todos los campos para crear la cuenta del cliente.' });
       return;
     }
 
     if (!email.includes('@')) {
-      setAuthNotice({ type: 'error', message: 'Ingresa un correo electrónico válido.' });
+      setAdminNotice({ type: 'error', message: 'Ingresa un correo electrónico válido para el cliente.' });
       return;
     }
 
     if (password !== confirmPassword) {
-      setAuthNotice({ type: 'error', message: 'Las contraseñas no coinciden.' });
+      setAdminNotice({ type: 'error', message: 'Las contraseñas no coinciden.' });
       return;
     }
 
     const passwordError = validatePasswordSecurity(password);
     if (passwordError) {
-      setAuthNotice({ type: 'error', message: passwordError });
+      setAdminNotice({ type: 'error', message: passwordError });
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      setAdminNotice({ type: 'success', message: 'Creando cuenta del cliente...' });
 
-    if (error) {
-      setAuthNotice({ type: 'error', message: error.message });
-      return;
-    }
-
-    if (data?.user) {
-      const { error: profileError } = await supabase.from('profiles').upsert({
-        id: data.user.id,
-        store_name: store,
-        owner_name: name,
-        city: city || 'Sin ciudad registrada',
-        business_type: businessType,
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            owner_name: name,
+            store_name: store,
+            city,
+            business_type: businessType,
+          },
+        },
       });
 
-      if (profileError) {
-        setAuthNotice({ type: 'error', message: 'La cuenta se creó, pero no se pudo guardar el perfil. Revisa si la confirmación por correo está desactivada.' });
+      if (error) {
+        setAdminNotice({ type: 'error', message: error.message });
         return;
       }
-    }
 
-    setRegisterForm(emptyRegisterForm);
-    setAuthMode('login');
-    setAuthNotice({ type: 'success', message: 'Cuenta creada correctamente. Ahora inicia sesión con tu correo.' });
+      if (data?.user) {
+        const { error: profileError } = await supabase.from('profiles').upsert({
+          id: data.user.id,
+          store_name: store,
+          owner_name: name,
+          city,
+          business_type: businessType,
+        });
+
+        if (profileError) {
+          setAdminNotice({ type: 'error', message: `La cuenta se creó, pero no se pudo guardar el perfil: ${profileError.message}` });
+          return;
+        }
+      }
+
+      setAdminCreateUserForm(emptyAdminCreateUserForm);
+      setAdminNotice({ type: 'success', message: `Cuenta creada para ${store}. El cliente podrá ingresar con ${email}.` });
+    } catch (error) {
+      console.error('Error creando cuenta de cliente:', error);
+      setAdminNotice({ type: 'error', message: `No se pudo crear la cuenta: ${error.message}` });
+    }
   }
 
   async function resetPassword(e) {
@@ -1395,49 +1595,56 @@ export default function App() {
   }
 
   const storeKey = currentUser?.id || 'demo';
-  const storeProducts = products.filter(product => (product.storeId || 'demo') === storeKey);
-  const storeSales = sales.filter(sale => (sale.storeId || 'demo') === storeKey);
-  const storeClients = clients.filter(client => (client.storeId || 'demo') === storeKey);
-  const storeProviders = providers.filter(provider => (provider.storeId || 'demo') === storeKey);
+  const storeProducts = useMemo(() => products.filter(product => (product.storeId || 'demo') === storeKey), [products, storeKey]);
+  const storeSales = useMemo(() => sales.filter(sale => (sale.storeId || 'demo') === storeKey), [sales, storeKey]);
+  const storeClients = useMemo(() => clients.filter(client => (client.storeId || 'demo') === storeKey), [clients, storeKey]);
+  const storeProviders = useMemo(() => providers.filter(provider => (provider.storeId || 'demo') === storeKey), [providers, storeKey]);
 
-  const categories = useMemo(() => ['Todas', ...Array.from(new Set(storeProducts.map(p => p.category)))], [storeProducts]);
-  const productCategories = categories.filter(cat => cat !== 'Todas');
+  const categories = useMemo(() => ['Todas', ...Array.from(new Set(storeProducts.map(p => p.category).filter(Boolean)))], [storeProducts]);
+  const productCategories = useMemo(() => categories.filter(cat => cat !== 'Todas'), [categories]);
 
-  const filtered = storeProducts.filter(p => {
-    const text = search.toLowerCase();
-    const productName = String(p.name || '').toLowerCase();
-    const productSku = String(p.sku || '').toLowerCase();
-    const productBarcode = String(p.barcode || '').toLowerCase();
-    const productBrand = String(p.brand || '').toLowerCase();
-    const productSize = String(p.size || '').toLowerCase();
-    const productColor = String(p.color || '').toLowerCase();
-    const productCategory = String(p.category || '').toLowerCase();
-    const matchSearch =
-      productName.includes(text) ||
-      productSku.includes(text) ||
-      productBarcode.includes(text) ||
-      productBrand.includes(text) ||
-      productSize.includes(text) ||
-      productColor.includes(text) ||
-      productCategory.includes(text);
-    const matchCategory = category === 'Todas' || p.category === category;
-    return matchSearch && matchCategory;
-  });
+  const filtered = useMemo(() => {
+    const text = search.trim().toLowerCase();
 
-  const totalProducts = storeProducts.length;
-  const lowStock = storeProducts.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
-  const noStock = storeProducts.filter(p => p.stock === 0).length;
-  const inventoryValue = storeProducts.reduce((sum, p) => sum + p.cost * p.stock, 0);
-  const potentialProfit = storeProducts.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
-  const totalSales = storeSales.reduce((sum, s) => sum + s.total, 0);
-  const totalProfit = storeSales.reduce((sum, s) => sum + (s.profit || 0), 0);
-  const totalDiscount = storeSales.reduce((sum, s) => sum + (s.discount || 0), 0);
-  const totalUnitsSold = storeSales.reduce((sum, s) => sum + s.quantity, 0);
-  const topProduct = storeSales.reduce((acc, sale) => {
-    acc[sale.product] = (acc[sale.product] || 0) + sale.quantity;
-    return acc;
-  }, {});
-  const bestSeller = Object.entries(topProduct).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Sin ventas';
+    return storeProducts.filter(p => {
+      const matchSearch = !text || [
+        p.name,
+        p.sku,
+        p.barcode,
+        p.brand,
+        p.size,
+        p.color,
+        p.category,
+      ].some(value => String(value || '').toLowerCase().includes(text));
+      const matchCategory = category === 'Todas' || p.category === category;
+      return matchSearch && matchCategory;
+    });
+  }, [storeProducts, search, category]);
+
+  const inventoryStats = useMemo(() => {
+    const totalProducts = storeProducts.length;
+    const lowStock = storeProducts.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
+    const noStock = storeProducts.filter(p => p.stock === 0).length;
+    const inventoryValue = storeProducts.reduce((sum, p) => sum + p.cost * p.stock, 0);
+    const potentialProfit = storeProducts.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
+    return { totalProducts, lowStock, noStock, inventoryValue, potentialProfit };
+  }, [storeProducts]);
+
+  const salesStats = useMemo(() => {
+    const totalSales = storeSales.reduce((sum, s) => sum + s.total, 0);
+    const totalProfit = storeSales.reduce((sum, s) => sum + (s.profit || 0), 0);
+    const totalDiscount = storeSales.reduce((sum, s) => sum + (s.discount || 0), 0);
+    const totalUnitsSold = storeSales.reduce((sum, s) => sum + s.quantity, 0);
+    const topProduct = storeSales.reduce((acc, sale) => {
+      acc[sale.product] = (acc[sale.product] || 0) + sale.quantity;
+      return acc;
+    }, {});
+    const bestSeller = Object.entries(topProduct).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Sin ventas';
+    return { totalSales, totalProfit, totalDiscount, totalUnitsSold, bestSeller };
+  }, [storeSales]);
+
+  const { totalProducts, lowStock, noStock, inventoryValue, potentialProfit } = inventoryStats;
+  const { totalSales, totalProfit, totalDiscount, totalUnitsSold, bestSeller } = salesStats;
 
   function statusText(product) {
     if (product.stock === 0) return { label: 'Sin stock', color: 'text-red-600', badge: 'bg-red-50 text-red-700' };
@@ -1471,10 +1678,10 @@ export default function App() {
     if (!form.name.trim()) return 'Ingresa el nombre del producto.';
     if (!finalCategory.trim()) return 'Selecciona o crea una categoría.';
     if (Number.isNaN(price) || price <= 0) return 'El precio de venta debe ser mayor a 0.';
-    if (Number.isNaN(cost) || cost < 0) return 'El costo no puede ser negativo.';
+    if (Number.isNaN(cost) || cost < 0) return 'El costo no puede ser negativo. Si no lo conoces, déjalo vacío.';
     if (Number.isNaN(stock) || stock < 0) return 'El stock no puede ser negativo.';
     if (Number.isNaN(minStock) || minStock < 0) return 'El stock mínimo no puede ser negativo.';
-    if (cost > price) return 'El costo no debería ser mayor al precio de venta.';
+    if (cost > 0 && cost > price) return 'El costo no debería ser mayor al precio de venta.';
     return null;
   }
 
@@ -1715,6 +1922,131 @@ export default function App() {
     clearDraft(currentUser?.id, 'productForm');
   }
 
+  async function importProductsFromExcel(file) {
+    if (!file || !currentUser?.id) return;
+
+    try {
+      setNotice({ type: 'success', message: 'Leyendo Excel de productos...' });
+      const XLSX = await import('xlsx');
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const businessType = currentUser.businessType || 'general';
+      const businessConfig = getBusinessConfig(businessType);
+      const normalizedRows = rawRows.map(normalizeExcelRow);
+      const existingCodes = new Set(storeProducts.flatMap(product => [product.sku, product.barcode]).filter(Boolean).map(value => String(value).trim().toLowerCase()));
+      const productsToImport = [];
+      const skippedRows = [];
+
+      normalizedRows.forEach((row, index) => {
+        const name = excelText(getExcelValue(row, ['nombre del producto', 'producto', 'nombre', 'nombre_producto']));
+        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], businessType === 'ropa' ? 'Ropa' : 'General'));
+        const price = excelNumber(getExcelValue(row, ['precio de venta', 'precio venta', 'precio_venta', 'precio', 'pvp']), 0);
+        const cost = excelNumber(getExcelValue(row, ['costo unitario', 'costo', 'costo opcional', 'precio costo', 'precio_costo']), 0);
+        const stock = excelNumber(getExcelValue(row, ['stock actual', 'stock', 'cantidad', 'existencia']), 0);
+        const minStock = excelNumber(getExcelValue(row, ['stock minimo', 'stock mínimo', 'minimo', 'mínimo', 'stock_minimo']), 1);
+        const skuRaw = excelText(getExcelValue(row, ['sku', 'codigo almacen', 'código almacén', 'codigo', 'código', 'codigo interno', 'codigo sku']));
+        const barcodeRaw = excelText(getExcelValue(row, ['codigo de barras', 'código de barras', 'barcode', 'barra']));
+        const generatedCode = skuRaw || barcodeRaw || generateInternalBarcode(businessType);
+        const sku = skuRaw || generatedCode;
+        const barcode = barcodeRaw || generatedCode;
+
+        if (!name) {
+          skippedRows.push(`Fila ${index + 2}: sin nombre de producto`);
+          return;
+        }
+
+        if (!category) {
+          skippedRows.push(`Fila ${index + 2}: sin categoría`);
+          return;
+        }
+
+        if (price <= 0) {
+          skippedRows.push(`Fila ${index + 2}: precio de venta inválido`);
+          return;
+        }
+
+        const codeKey = String(barcode || sku).trim().toLowerCase();
+        if (codeKey && existingCodes.has(codeKey)) {
+          skippedRows.push(`Fila ${index + 2}: código duplicado (${barcode || sku})`);
+          return;
+        }
+        if (codeKey) existingCodes.add(codeKey);
+
+        productsToImport.push({
+          storeId: storeKey,
+          storeName: currentUser.store,
+          sku,
+          barcode,
+          brand: excelText(getExcelValue(row, ['marca', 'brand'])),
+          size: excelText(getExcelValue(row, ['talla', 'medida', 'presentacion', 'presentación', 'size'])),
+          color: excelText(getExcelValue(row, ['color', 'modelo', 'especificacion', 'especificación'])),
+          name,
+          category,
+          price,
+          cost,
+          stock,
+          minStock,
+          status: stock === 0 ? 'Inactivo' : 'Activo',
+          description: excelText(getExcelValue(row, ['descripcion', 'descripción', 'detalle', 'description'])),
+          batchNumber: excelText(getExcelValue(row, ['lote', 'batch', 'batch number'])),
+          entryDate: excelDate(getExcelValue(row, ['fecha de ingreso', 'fecha ingreso', 'ingreso'])),
+          expirationDate: businessConfig.usesExpiration ? excelDate(getExcelValue(row, ['fecha de caducidad', 'fecha caducidad', 'caducidad', 'vencimiento'])) : '',
+          imageUrl: excelText(getExcelValue(row, ['foto producto', 'foto', 'imagen', 'image_url', 'url imagen'])),
+        });
+      });
+
+      if (productsToImport.length === 0) {
+        setExcelImportPreview(null);
+        setNotice({ type: 'error', message: `No se encontró ningún producto válido. ${skippedRows.slice(0, 3).join(' · ')}` });
+        return;
+      }
+
+      setExcelImportPreview({
+        fileName: file.name,
+        totalRows: rawRows.length,
+        products: productsToImport,
+        skippedRows,
+      });
+      setNotice({ type: 'success', message: `Vista previa lista: ${productsToImport.length} producto(s) válidos. Revisa y confirma antes de importar.` });
+    } catch (error) {
+      console.error('Error leyendo Excel:', error);
+      setExcelImportPreview(null);
+      setNotice({ type: 'error', message: `No se pudo leer el Excel. Revisa el formato del archivo o instala la librería xlsx. Detalle: ${error.message}` });
+    }
+  }
+
+  async function confirmExcelImport() {
+    if (!excelImportPreview?.products?.length || !currentUser?.id) return;
+
+    try {
+      setNotice({ type: 'success', message: 'Importando productos a Supabase...' });
+      const payload = excelImportPreview.products.map(product => mapProductToDb(product, currentUser.id));
+      const { data, error } = await supabase.from('products').insert(payload).select();
+
+      if (error) {
+        console.error('Error importando productos:', error);
+        setNotice({ type: 'error', message: `No se pudieron importar los productos: ${error.message}` });
+        return;
+      }
+
+      setProducts([...(data || []).map(mapProductFromDb), ...products]);
+      await loadProductsFromSupabase(currentUser.id, false);
+      const skippedMessage = excelImportPreview.skippedRows.length > 0 ? ` Se omitieron ${excelImportPreview.skippedRows.length} fila(s).` : '';
+      setNotice({ type: 'success', message: `Se importaron ${excelImportPreview.products.length} producto(s) correctamente.${skippedMessage}` });
+      setExcelImportPreview(null);
+    } catch (error) {
+      console.error('Error confirmando importación:', error);
+      setNotice({ type: 'error', message: `No se pudo completar la importación: ${error.message}` });
+    }
+  }
+
+  function cancelExcelImport() {
+    setExcelImportPreview(null);
+    setNotice({ type: 'success', message: 'Importación cancelada. No se guardó ningún producto.' });
+  }
+
   function editProduct(product) {
     setActive('Productos');
     setEditingId(product.id);
@@ -1767,7 +2099,7 @@ export default function App() {
     return data.publicUrl;
   }
 
-  function handleStoreLogo(file) {
+  async function handleStoreLogo(file) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -1775,16 +2107,16 @@ export default function App() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setSettingsNotice({ type: 'error', message: 'El logo no debe superar los 2MB.' });
-      return;
+    try {
+      setSettingsNotice({ type: 'success', message: 'Optimizando logo...' });
+      const optimizedFile = await optimizeImageFile(file, { maxWidth: 600, maxHeight: 600, quality: 0.85 });
+      const previewUrl = await fileToDataUrl(optimizedFile);
+      setSettingsForm(prev => ({ ...prev, logoUrl: previewUrl, logoFile: optimizedFile }));
+      setSettingsNotice({ type: 'success', message: `Logo optimizado. Peso final: ${(optimizedFile.size / 1024).toFixed(0)} KB.` });
+    } catch (error) {
+      console.error('Error optimizando logo:', error);
+      setSettingsNotice({ type: 'error', message: 'No se pudo optimizar el logo. Intenta con otra imagen.' });
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSettingsForm(prev => ({ ...prev, logoUrl: reader.result, logoFile: file }));
-    };
-    reader.readAsDataURL(file);
   }
 
   async function uploadProductImage(file, productName) {
@@ -1813,7 +2145,7 @@ export default function App() {
     return data.publicUrl;
   }
 
-  function handleProductImage(file) {
+  async function handleProductImage(file) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -1821,16 +2153,16 @@ export default function App() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      setNotice({ type: 'error', message: 'La imagen no debe superar los 2MB.' });
-      return;
+    try {
+      setNotice({ type: 'success', message: 'Optimizando imagen del producto...' });
+      const optimizedFile = await optimizeImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.82 });
+      const previewUrl = await fileToDataUrl(optimizedFile);
+      setForm(prev => ({ ...prev, imageUrl: previewUrl, imageFile: optimizedFile }));
+      setNotice({ type: 'success', message: `Imagen optimizada. Peso final: ${(optimizedFile.size / 1024).toFixed(0)} KB.` });
+    } catch (error) {
+      console.error('Error optimizando imagen:', error);
+      setNotice({ type: 'error', message: 'No se pudo optimizar la imagen. Intenta con otra foto.' });
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm(prev => ({ ...prev, imageUrl: reader.result, imageFile: file }));
-    };
-    reader.readAsDataURL(file);
   }
 
   function calculateSalePreview() {
@@ -2665,7 +2997,10 @@ export default function App() {
     Proveedores: { title: 'Proveedores', subtitle: 'Organiza proveedores y entregas estimadas.', icon: Truck },
     Reportes: { title: 'Reportes', subtitle: 'Analiza ventas, utilidad y decisiones de compra.', icon: BarChart3 },
     Configuración: { title: 'Configuración', subtitle: 'Ajusta datos generales de la tienda.', icon: Settings },
-  }[active];
+    Admin: { title: 'Panel administrador', subtitle: 'Crea y controla cuentas de clientes de InventiQ.', icon: UserPlus },
+  }[active] || { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home };
+
+  const visibleMenu = isInventiQAdmin(currentUser) ? [...menu, { label: 'Admin', icon: UserPlus }] : menu;
 
   const HeaderIcon = pageInfo.icon;
 
@@ -2710,7 +3045,7 @@ export default function App() {
               </div>
             </div>
             <nav className="space-y-2">
-              {menu.map(item => {
+              {visibleMenu.map(item => {
                 const Icon = item.icon;
                 const isActive = active === item.label;
                 return (
@@ -2756,15 +3091,16 @@ export default function App() {
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} />}
+          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} importProductsFromExcel={importProductsFromExcel} excelImportPreview={excelImportPreview} confirmExcelImport={confirmExcelImport} cancelExcelImport={cancelExcelImport} />}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} setActive={setActive} setPurchaseForm={setPurchaseForm} />}
-          {active === 'Reportes' && <ReportsPage products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
+          {active === 'Reportes' && <ReportsPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
           {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
+          {active === 'Admin' && isInventiQAdmin(currentUser) && <AdminPage form={adminCreateUserForm} setForm={setAdminCreateUserForm} notice={adminNotice} createClientAccount={createClientAccount} />}
         </main>
       </div>
-      <MobileBottomNav menu={menu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
+      <MobileBottomNav menu={visibleMenu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
       {/* Botón flotante retirado: el menú inferior ya cubre la navegación móvil. */}
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
@@ -3173,31 +3509,15 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
               <Field label="Contraseña" type="password" value={loginForm.password} onChange={v => setLoginForm({ ...loginForm, password: v })} placeholder="Tu contraseña" />
               <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Ingresar</button>
               <button type="button" onClick={() => { setResetEmail(loginForm.username || ''); switchMode('reset'); }} className="w-full rounded-2xl border border-transparent px-5 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">¿Olvidaste tu contraseña?</button>
-              <p className="text-center text-sm text-slate-500">¿No tienes cuenta?</p>
-              <button type="button" onClick={() => switchMode('register')} className="w-full rounded-2xl border border-emerald-200 px-5 py-3 font-bold text-emerald-700 hover:bg-emerald-50">Registrarse</button>
-              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Ahora el acceso funciona con Supabase: usa correo electrónico y contraseña.</p>
+              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">El registro público está desactivado. Las cuentas son creadas por el administrador de InventiQ.</p>
             </form>
           ) : (
-            <form onSubmit={register} className="space-y-4">
-              <Field label="Nombre del encargado" value={registerForm.name} onChange={v => setRegisterForm({ ...registerForm, name: v })} placeholder="Ej: Ana Rodríguez" />
-              <Field label="Nombre de la tienda" value={registerForm.store} onChange={v => setRegisterForm({ ...registerForm, store: v })} placeholder="Ej: Minimarket La Esquina" />
-              <Field label="Ciudad" value={registerForm.city} onChange={v => setRegisterForm({ ...registerForm, city: v })} placeholder="Ej: Ibarra" />
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de negocio</span>
-                <select value={registerForm.businessType} onChange={e => setRegisterForm({ ...registerForm, businessType: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                  {businessTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-                <p className="mt-2 text-xs text-slate-500">InventiQ adaptará campos y alertas según el tipo de negocio.</p>
-              </label>
-              <Field label="Correo electrónico" type="email" value={registerForm.username} onChange={v => setRegisterForm({ ...registerForm, username: v })} placeholder="Ej: tienda@email.com" />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Contraseña" type="password" value={registerForm.password} onChange={v => setRegisterForm({ ...registerForm, password: v })} placeholder="Contraseña" />
-                <Field label="Confirmar" type="password" value={registerForm.confirmPassword} onChange={v => setRegisterForm({ ...registerForm, confirmPassword: v })} placeholder="Repetir" />
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                El registro público está desactivado. Solicita al administrador de InventiQ la creación de tu cuenta.
               </div>
-              <PasswordSecurityHint />
-              <button type="submit" className="w-full rounded-2xl bg-emerald-700 px-5 py-3 font-bold text-white hover:bg-emerald-800">Listo</button>
               <button type="button" onClick={() => switchMode('login')} className="w-full rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Volver al login</button>
-            </form>
+            </div>
           )}
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold text-slate-500">
@@ -3234,15 +3554,20 @@ function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm
 }
 
 function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit, setActive, expirationText }) {
+  const businessConfig = getBusinessConfig(currentUser?.businessType);
   const completedSales = sales.filter(sale => sale.status !== 'Anulada');
   const recentSales = completedSales.slice(0, 5);
-  const lowStockProducts = products.filter(product => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= Number(product.minStock || 0)).slice(0, 5);
-  const expiringProducts = products
-    .filter(product => {
-      const exp = expirationText ? expirationText(product) : null;
-      return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
-    })
+  const lowStockProducts = products
+    .filter(product => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= Number(product.minStock || 0))
     .slice(0, 5);
+  const expiringProducts = businessConfig.usesExpiration
+    ? products
+      .filter(product => {
+        const exp = expirationText ? expirationText(product) : null;
+        return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
+      })
+      .slice(0, 5)
+    : [];
 
   const soldMap = completedSales.reduce((acc, sale) => {
     if (sale.items?.length > 0) {
@@ -3317,7 +3642,7 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
             <p className="text-sm font-semibold text-emerald-100">Inventario valorizado</p>
             <h4 className="mt-2 text-4xl font-extrabold">${inventoryValue.toFixed(2)}</h4>
             <p className="mt-3 text-sm leading-6 text-emerald-50">
-              Producto estrella: <strong>{topSoldProducts[0]?.name || bestSeller || 'Sin ventas'}</strong>. Mantén atención sobre stock bajo, sin stock y caducidades próximas.
+              Producto estrella: <strong>{topSoldProducts[0]?.name || bestSeller || 'Sin ventas'}</strong>. Mantén atención sobre stock bajo, sin stock{businessConfig.usesExpiration ? ' y caducidades próximas' : ''}.
             </p>
             <div className="mt-6 grid grid-cols-3 gap-3">
               <SummaryBox label="Ventas" value={`$${totalSales.toFixed(2)}`} />
@@ -3350,7 +3675,7 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+      <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
         <DashboardListCard
           title="Productos con stock bajo"
           subtitle="Requieren revisión o reposición"
@@ -3362,7 +3687,7 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
             tone: 'amber',
           }))}
         />
-        <DashboardListCard
+        {businessConfig.usesExpiration && <DashboardListCard
           title="Próximos a caducar"
           subtitle="Productos que vencen pronto"
           empty="No hay productos próximos a caducar."
@@ -3375,7 +3700,7 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
               tone: 'red',
             };
           })}
-        />
+        />}
         <DashboardListCard
           title="Productos más vendidos"
           subtitle="Ranking por unidades vendidas"
@@ -4263,8 +4588,9 @@ function ReceiptModal({ sale, currentUser, onClose }) {
   );
 }
 
-function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading }) {
-  const businessConfig = getBusinessConfig(currentUser?.businessType);
+function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading, importProductsFromExcel, excelImportPreview, confirmExcelImport, cancelExcelImport }) {
+  const businessType = currentUser?.businessType || 'general';
+  const businessConfig = getBusinessConfig(businessType);
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
     const exp = expirationText ? expirationText(product) : null;
     return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
@@ -4272,15 +4598,35 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
 
   return (
     <>
-      <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className={`mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 ${businessConfig.usesExpiration ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
         <Metric icon={Package} label="Total productos" value={totalProducts} note="activos" color="emerald" />
         <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
         <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
-        <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />
+        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />}
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
 
       {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
+
+      <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
+            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional; si viene vacío, se guardará como $0.00.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+              <Download className="mr-2 inline h-4 w-4" />Descargar formato
+            </button>
+            <label className="cursor-pointer rounded-2xl bg-emerald-600 px-5 py-3 text-center text-sm font-bold text-white hover:bg-emerald-700">
+              Seleccionar Excel
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) importProductsFromExcel(file); e.target.value = ''; }} />
+            </label>
+          </div>
+        </div>
+      </section>
+
+      {excelImportPreview && <ExcelImportPreviewModal preview={excelImportPreview} onConfirm={confirmExcelImport} onCancel={cancelExcelImport} />}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <ProductTable businessConfig={businessConfig} products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
@@ -4297,6 +4643,91 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
         </div>
       </section>
     </>
+  );
+}
+
+function ExcelImportPreviewModal({ preview, onConfirm, onCancel }) {
+  const sampleProducts = preview.products.slice(0, 8);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-2xl font-extrabold text-slate-900">Vista previa de importación</h3>
+            <p className="mt-1 text-sm text-slate-500">Archivo: {preview.fileName}</p>
+          </div>
+          <button type="button" onClick={onCancel} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50">Cerrar</button>
+        </div>
+
+        <div className="space-y-5 p-5">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase text-slate-500">Filas leídas</p>
+              <p className="text-3xl font-extrabold text-slate-900">{preview.totalRows}</p>
+            </div>
+            <div className="rounded-2xl bg-emerald-50 p-4">
+              <p className="text-xs font-bold uppercase text-emerald-700">Listos para importar</p>
+              <p className="text-3xl font-extrabold text-emerald-900">{preview.products.length}</p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 p-4">
+              <p className="text-xs font-bold uppercase text-amber-700">Omitidos / con error</p>
+              <p className="text-3xl font-extrabold text-amber-900">{preview.skippedRows.length}</p>
+            </div>
+          </section>
+
+          {preview.skippedRows.length > 0 && (
+            <section className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+              <p className="font-bold text-amber-900">Filas que no se importarán</p>
+              <div className="mt-2 max-h-32 overflow-y-auto text-sm text-amber-800">
+                {preview.skippedRows.slice(0, 20).map((row, index) => <p key={`${row}-${index}`}>• {row}</p>)}
+                {preview.skippedRows.length > 20 && <p>• Y {preview.skippedRows.length - 20} error(es) más...</p>}
+              </div>
+            </section>
+          )}
+
+          <section className="overflow-hidden rounded-2xl border border-slate-200">
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+              <p className="font-bold text-slate-900">Primeros productos detectados</p>
+              <p className="text-xs text-slate-500">Revisa que los datos estén correctos antes de guardar en Supabase.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left text-sm">
+                <thead className="bg-white text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Producto</th>
+                    <th className="px-4 py-3">Categoría</th>
+                    <th className="px-4 py-3">Precio</th>
+                    <th className="px-4 py-3">Costo opcional</th>
+                    <th className="px-4 py-3">Stock</th>
+                    <th className="px-4 py-3">Variante</th>
+                    <th className="px-4 py-3">Código</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sampleProducts.map((product, index) => (
+                    <tr key={`${product.sku}-${index}`}>
+                      <td className="px-4 py-3 font-bold text-slate-900">{product.name}</td>
+                      <td className="px-4 py-3 text-slate-600">{product.category}</td>
+                      <td className="px-4 py-3">${Number(product.price || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3">{Number(product.cost || 0) > 0 ? `$${Number(product.cost || 0).toFixed(2)}` : 'No registrado'}</td>
+                      <td className="px-4 py-3">{product.stock}</td>
+                      <td className="px-4 py-3 text-slate-600">{getProductVariantText(product) || 'Sin variante'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{product.barcode || product.sku}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+            <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+            <button type="button" onClick={onConfirm} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Importar {preview.products.length} producto(s)</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4531,7 +4962,7 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
                 <select value={adjustForm.reason} onChange={e => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
                   <option>Conteo físico</option>
                   <option>Pérdida / daño</option>
-                  <option>Producto vencido</option>
+                  {businessConfig.usesExpiration && <option>Producto vencido</option>}
                   <option>Corrección de inventario</option>
                   <option>Otro</option>
                 </select>
@@ -4548,7 +4979,7 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
 
           <section className="rounded-3xl border border-amber-100 bg-amber-50 p-6">
             <h3 className="mb-3 text-xl font-bold text-amber-900">Uso recomendado</h3>
-            <p className="text-sm leading-6 text-amber-900">El ajuste manual debe usarse solo cuando se realiza conteo físico, se identifica pérdida/daño, producto vencido o una corrección puntual. Las compras y ventas deben registrarse desde sus secciones correspondientes para mantener la trazabilidad.</p>
+            <p className="text-sm leading-6 text-amber-900">El ajuste manual debe usarse solo cuando se realiza conteo físico, se identifica pérdida/daño{businessConfig.usesExpiration ? ', producto vencido' : ''} o una corrección puntual. Las compras y ventas deben registrarse desde sus secciones correspondientes para mantener la trazabilidad.</p>
           </section>
         </section>
       )}
@@ -5147,7 +5578,8 @@ function CashPage({ sales = [], purchases = [] }) {
   );
 }
 
-function ReportsPage({ products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit, expirationText }) {
+function ReportsPage({ currentUser, products, sales, purchases, clients, providers, totalSales, inventoryValue, potentialProfit, bestSeller, totalProfit, expirationText }) {
+  const businessConfig = getBusinessConfig(currentUser?.businessType);
   const completedSales = sales.filter(sale => sale.status !== 'Anulada');
   const totalPurchases = purchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
   const netBalance = totalSales - totalPurchases;
@@ -5183,26 +5615,34 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
   }
 
   function exportProducts() {
-    exportToCSV('inventiq_productos.csv', products.map(product => ({
-      SKU: product.sku,
-      Codigo_barras: product.barcode || '',
-      Producto: product.name,
-      Categoria: product.category,
-      Precio_venta: Number(product.price || 0).toFixed(2),
-      Costo_unitario: Number(product.cost || 0).toFixed(2),
-      Stock_actual: product.stock,
-      Stock_minimo: product.minStock,
-      Estado: product.status,
-      Marca: product.brand || '',
-      Talla_medida: product.size || '',
-      Color_modelo: product.color || '',
-      Lote: product.batchNumber || '',
-      Fecha_ingreso: product.entryDate || '',
-      Fecha_caducidad: product.expirationDate || '',
-      Descripcion: product.description || '',
-      Valor_inventario: (Number(product.cost || 0) * Number(product.stock || 0)).toFixed(2),
-      Ganancia_potencial: ((Number(product.price || 0) - Number(product.cost || 0)) * Number(product.stock || 0)).toFixed(2),
-    })));
+    exportToCSV('inventiq_productos.csv', products.map(product => {
+      const baseRow = {
+        SKU: product.sku,
+        Codigo_barras: product.barcode || '',
+        Producto: product.name,
+        Categoria: product.category,
+        Precio_venta: Number(product.price || 0).toFixed(2),
+        Costo_unitario: Number(product.cost || 0).toFixed(2),
+        Stock_actual: product.stock,
+        Stock_minimo: product.minStock,
+        Estado: product.status,
+        Marca: product.brand || '',
+        Talla_medida: product.size || '',
+        Color_modelo: product.color || '',
+        Descripcion: product.description || '',
+        Valor_inventario: (Number(product.cost || 0) * Number(product.stock || 0)).toFixed(2),
+        Ganancia_potencial: ((Number(product.price || 0) - Number(product.cost || 0)) * Number(product.stock || 0)).toFixed(2),
+      };
+
+      if (!businessConfig.usesExpiration) return baseRow;
+
+      return {
+        ...baseRow,
+        Lote: product.batchNumber || '',
+        Fecha_ingreso: product.entryDate || '',
+        Fecha_caducidad: product.expirationDate || '',
+      };
+    }));
   }
 
   function exportClients() {
@@ -5294,6 +5734,53 @@ function ReportsPage({ products, sales, purchases, clients, providers, totalSale
             ))}
           </div>
         </section>
+      </section>
+    </div>
+  );
+}
+
+function AdminPage({ form, setForm, notice, createClientAccount }) {
+  return (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
+      <form onSubmit={createClientAccount} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-6">
+          <h3 className="flex items-center gap-2 text-xl font-extrabold text-slate-900"><UserPlus className="h-5 w-5 text-emerald-600" /> Crear cuenta de cliente</h3>
+          <p className="mt-1 text-sm text-slate-500">Desde aquí se crean las cuentas de las tiendas. El registro público queda desactivado para clientes.</p>
+        </div>
+
+        {notice && (
+          <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {notice.message}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <Field label="Nombre del encargado" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Ej: Ana Rodríguez" />
+          <Field label="Nombre de la tienda" value={form.store} onChange={v => setForm({ ...form, store: v })} placeholder="Ej: Gallito Store" />
+          <Field label="Ciudad" value={form.city} onChange={v => setForm({ ...form, city: v })} placeholder="Ej: Ibarra" />
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de negocio</span>
+            <select value={form.businessType} onChange={e => setForm({ ...form, businessType: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+              {businessTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+            </select>
+          </label>
+          <Field label="Correo del cliente" type="email" value={form.email} onChange={v => setForm({ ...form, email: v })} placeholder="Ej: cliente@email.com" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Contraseña temporal" type="password" value={form.password} onChange={v => setForm({ ...form, password: v })} placeholder="Contraseña" />
+            <Field label="Confirmar" type="password" value={form.confirmPassword} onChange={v => setForm({ ...form, confirmPassword: v })} placeholder="Repetir" />
+          </div>
+          <PasswordSecurityHint />
+          <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Crear cuenta</button>
+        </div>
+      </form>
+
+      <section className="rounded-3xl border border-amber-100 bg-amber-50 p-6 shadow-sm">
+        <h3 className="text-xl font-extrabold text-amber-900">Importante</h3>
+        <div className="mt-4 space-y-3 text-sm leading-6 text-amber-900">
+          <p>El cliente ya no podrá registrarse por su cuenta desde el login.</p>
+          <p>La cuenta se crea con una contraseña temporal. Luego el cliente puede cambiarla desde Configuración o usar recuperación de contraseña.</p>
+          <p>Para máxima seguridad, más adelante conviene mover esta creación a una función segura de Supabase, para que el panel no dependa de registro público.</p>
+        </div>
       </section>
     </div>
   );
@@ -5621,7 +6108,7 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Precio de venta" type="number" min="0" step="0.01" value={form.price} onChange={v => setForm({ ...form, price: v })} placeholder="$ 0.00" />
-          <Field label="Costo" type="number" min="0" step="0.01" value={form.cost} onChange={v => setForm({ ...form, cost: v })} placeholder="$ 0.00" />
+          <Field label="Costo (opcional)" type="number" min="0" step="0.01" value={form.cost} onChange={v => setForm({ ...form, cost: v })} placeholder="Puede quedar vacío" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Stock actual" type="number" min="0" value={form.stock} onChange={v => setForm({ ...form, stock: v })} placeholder="0" />
@@ -5668,7 +6155,7 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
           ) : (
             <div>
               <p className="font-semibold text-slate-700">Subir imagen</p>
-              <p>PNG, JPG hasta 2MB</p>
+              <p>PNG, JPG o WEBP. InventiQ optimiza la imagen automáticamente.</p>
             </div>
           )}
           <input type="file" accept="image/*" onChange={e => handleProductImage(e.target.files?.[0])} className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" />
