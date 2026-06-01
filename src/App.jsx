@@ -37,6 +37,9 @@ import {
 } from 'lucide-react';
 
 const ADMIN_EMAILS = ['revelodiego19@gmail.com'];
+const IMPORT_BATCH_SIZE = 200;
+const PRODUCT_SEARCH_LIMIT = 12;
+const MAX_LABELS_WITHOUT_CONFIRM = 300;
 
 function isInventiQAdmin(user) {
   const email = String(user?.email || user?.username || '').trim().toLowerCase();
@@ -612,6 +615,56 @@ function getProductVariantText(product) {
     .join(' · ');
 }
 
+function productMatchesSearch(product, text, onlyWithStock = false) {
+  if (onlyWithStock && Number(product.stock || 0) <= 0) return false;
+  const normalized = String(text || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return [product.name, product.sku, product.barcode, product.brand, product.size, product.color, product.category]
+    .some(value => String(value || '').toLowerCase().includes(normalized));
+}
+
+function searchProductsForPicker(products, text, options = {}) {
+  const normalized = String(text || '').trim().toLowerCase();
+  const limit = options.limit || PRODUCT_SEARCH_LIMIT;
+  const onlyWithStock = Boolean(options.onlyWithStock);
+  if (!normalized) return [];
+
+  const exactMatches = products.filter(product => {
+    if (onlyWithStock && Number(product.stock || 0) <= 0) return false;
+    return String(product.barcode || '').trim().toLowerCase() === normalized || String(product.sku || '').trim().toLowerCase() === normalized;
+  });
+
+  if (exactMatches.length > 0) return exactMatches.slice(0, limit);
+  if (normalized.length < 2) return [];
+
+  return products
+    .filter(product => productMatchesSearch(product, normalized, onlyWithStock))
+    .sort((a, b) => {
+      const aName = String(a.name || '').toLowerCase();
+      const bName = String(b.name || '').toLowerCase();
+      const aStarts = aName.startsWith(normalized) ? 0 : 1;
+      const bStarts = bName.startsWith(normalized) ? 0 : 1;
+      return aStarts - bStarts || aName.localeCompare(bName);
+    })
+    .slice(0, limit);
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function validateExcelFile(file) {
+  const name = String(file?.name || '').toLowerCase();
+  const validExtension = ['.xlsx', '.xls', '.csv'].some(extension => name.endsWith(extension));
+  if (!validExtension) return 'Selecciona un archivo Excel o CSV válido.';
+  if (file.size > 10 * 1024 * 1024) return 'El archivo es demasiado grande. Divide el inventario en archivos menores a 10MB.';
+  return null;
+}
+
 function validatePasswordSecurity(password) {
   const value = String(password || '');
 
@@ -989,6 +1042,7 @@ export default function App() {
     return window.innerWidth < 768;
   });
   const [excelImportPreview, setExcelImportPreview] = useState(null);
+  const [excelImportProgress, setExcelImportProgress] = useState(null);
   const [adminCreateUserForm, setAdminCreateUserForm] = useState(emptyAdminCreateUserForm);
   const [adminNotice, setAdminNotice] = useState(null);
 
@@ -1925,6 +1979,12 @@ export default function App() {
   async function importProductsFromExcel(file) {
     if (!file || !currentUser?.id) return;
 
+    const fileError = validateExcelFile(file);
+    if (fileError) {
+      setNotice({ type: 'error', message: fileError });
+      return;
+    }
+
     try {
       setNotice({ type: 'success', message: 'Leyendo Excel de productos...' });
       const XLSX = await import('xlsx');
@@ -2020,30 +2080,46 @@ export default function App() {
   async function confirmExcelImport() {
     if (!excelImportPreview?.products?.length || !currentUser?.id) return;
 
-    try {
-      setNotice({ type: 'success', message: 'Importando productos a Supabase...' });
-      const payload = excelImportPreview.products.map(product => mapProductToDb(product, currentUser.id));
-      const { data, error } = await supabase.from('products').insert(payload).select();
+    const total = excelImportPreview.products.length;
+    const chunks = chunkArray(excelImportPreview.products, IMPORT_BATCH_SIZE);
+    let imported = 0;
 
-      if (error) {
-        console.error('Error importando productos:', error);
-        setNotice({ type: 'error', message: `No se pudieron importar los productos: ${error.message}` });
-        return;
+    try {
+      setExcelImportProgress({ imported: 0, total, batch: 0, batches: chunks.length });
+      setNotice({ type: 'success', message: `Importando ${total} producto(s) por bloques...` });
+
+      for (let index = 0; index < chunks.length; index += 1) {
+        const payload = chunks[index].map(product => mapProductToDb(product, currentUser.id));
+        const { error } = await supabase.from('products').insert(payload);
+
+        if (error) {
+          console.error('Error importando bloque:', error);
+          setNotice({ type: 'error', message: `No se pudo importar el bloque ${index + 1} de ${chunks.length}: ${error.message}. Productos importados antes del error: ${imported}.` });
+          setExcelImportProgress(null);
+          await loadProductsFromSupabase(currentUser.id, false);
+          return;
+        }
+
+        imported += chunks[index].length;
+        setExcelImportProgress({ imported, total, batch: index + 1, batches: chunks.length });
+        await new Promise(resolve => setTimeout(resolve, 80));
       }
 
-      setProducts([...(data || []).map(mapProductFromDb), ...products]);
       await loadProductsFromSupabase(currentUser.id, false);
       const skippedMessage = excelImportPreview.skippedRows.length > 0 ? ` Se omitieron ${excelImportPreview.skippedRows.length} fila(s).` : '';
-      setNotice({ type: 'success', message: `Se importaron ${excelImportPreview.products.length} producto(s) correctamente.${skippedMessage}` });
+      setNotice({ type: 'success', message: `Se importaron ${imported} producto(s) correctamente por bloques.${skippedMessage}` });
       setExcelImportPreview(null);
+      setExcelImportProgress(null);
     } catch (error) {
       console.error('Error confirmando importación:', error);
+      setExcelImportProgress(null);
       setNotice({ type: 'error', message: `No se pudo completar la importación: ${error.message}` });
     }
   }
 
   function cancelExcelImport() {
     setExcelImportPreview(null);
+    setExcelImportProgress(null);
     setNotice({ type: 'success', message: 'Importación cancelada. No se guardó ningún producto.' });
   }
 
@@ -3035,8 +3111,8 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <MobileTopBar currentUser={currentUser} logout={logout} active={active} />
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
-        <aside className="hidden lg:flex flex-col justify-between bg-gradient-to-b from-emerald-950 to-teal-950 text-white p-6">
-          <div>
+        <aside className="sticky top-0 hidden h-screen overflow-y-auto lg:flex flex-col bg-gradient-to-b from-emerald-950 to-teal-950 text-white p-6">
+          <div className="flex-1">
             <div className="mb-10 flex items-center gap-3">
               <InventiQIcon className="h-14 w-14 rounded-2xl object-cover shadow-md" />
               <div>
@@ -3058,12 +3134,12 @@ export default function App() {
             </nav>
           </div>
 
-          <div className="space-y-5">
+          <div className="sticky bottom-0 mt-6 space-y-5 border-t border-white/10 bg-teal-950/95 pt-5 backdrop-blur">
             <div className="flex items-center gap-3">
               <StoreAvatar currentUser={currentUser} size="md" />
-              <div>
-                <p className="font-semibold">{currentUser.name}</p>
-                <p className="text-sm text-emerald-100">{currentUser.store}</p>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{currentUser.name}</p>
+                <p className="truncate text-sm text-emerald-100">{currentUser.store}</p>
               </div>
             </div>
             <button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-emerald-50 hover:bg-white/10">
@@ -3091,7 +3167,7 @@ export default function App() {
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} importProductsFromExcel={importProductsFromExcel} excelImportPreview={excelImportPreview} confirmExcelImport={confirmExcelImport} cancelExcelImport={cancelExcelImport} />}
+          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} importProductsFromExcel={importProductsFromExcel} excelImportPreview={excelImportPreview} confirmExcelImport={confirmExcelImport} cancelExcelImport={cancelExcelImport} excelImportProgress={excelImportProgress} />}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} setActive={setActive} setPurchaseForm={setPurchaseForm} />}
@@ -3827,16 +3903,23 @@ function EmptyDashboardMessage({ text }) {
 function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
   const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [purchasePage, setPurchasePage] = useState(1);
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
-  const filteredProducts = products.filter(product => {
-    const text = productSearch.toLowerCase();
-    return String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.barcode || '').toLowerCase().includes(text) || String(product.brand || '').toLowerCase().includes(text) || String(product.size || '').toLowerCase().includes(text) || String(product.color || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text);
-  });
+  const filteredProducts = useMemo(() => searchProductsForPicker(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT }), [products, productSearch]);
   const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
   const quantity = Number(purchaseForm.quantity || 0);
   const unitCost = Number(purchaseForm.unitCost || selectedProduct?.cost || 0);
   const lineTotal = quantity > 0 && unitCost >= 0 ? quantity * unitCost : 0;
   const total = purchaseCart.reduce((sum, item) => sum + item.total, 0);
+  const purchasesPerPage = 20;
+  const purchaseTotalPages = Math.max(Math.ceil(purchases.length / purchasesPerPage), 1);
+  const safePurchasePage = Math.min(purchasePage, purchaseTotalPages);
+  const purchaseStartIndex = (safePurchasePage - 1) * purchasesPerPage;
+  const paginatedPurchases = purchases.slice(purchaseStartIndex, purchaseStartIndex + purchasesPerPage);
+
+  useEffect(() => {
+    setPurchasePage(1);
+  }, [purchases.length]);
 
   function handleProductSearch(value) {
     setProductSearch(value);
@@ -3916,7 +3999,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
           </div>
           <div className="divide-y divide-slate-100">
             {purchases.length === 0 && <div className="p-5"><EmptyState icon={ClipboardList} title="Aún no tienes compras" text="Registra tu primera compra para aumentar stock y controlar mejor tus proveedores." /></div>}
-            {purchases.map(purchase => (
+            {paginatedPurchases.map(purchase => (
               <div key={purchase.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="font-bold text-slate-900">{purchase.code}</p>
@@ -3930,6 +4013,16 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               </div>
             ))}
           </div>
+          {purchases.length > purchasesPerPage && (
+            <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <span>Mostrando {purchaseStartIndex + 1}-{Math.min(purchaseStartIndex + purchasesPerPage, purchases.length)} de {purchases.length} compras</span>
+              <div className="flex items-center gap-2">
+                <button type="button" disabled={safePurchasePage <= 1} onClick={() => setPurchasePage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+                <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safePurchasePage} de {purchaseTotalPages}</span>
+                <button type="button" disabled={safePurchasePage >= purchaseTotalPages} onClick={() => setPurchasePage(page => Math.min(page + 1, purchaseTotalPages))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
+              </div>
+            </div>
+          )}
         </section>
 
         <form onSubmit={registerPurchase} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
@@ -3979,12 +4072,21 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
                   ))}
                 </div>
               )}
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Producto comprado</span>
-              <select value={purchaseForm.productId} onChange={e => selectProduct(e.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                <option value="">Seleccionar producto</option>
-                {filteredProducts.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · {product.sku || 'Sin SKU'} · Stock actual {product.stock}</option>)}
-              </select>
-              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} resultado(s).</p>}
+              {selectedProduct ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
+                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
+                      <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · {selectedProduct.category} · Stock actual {selectedProduct.stock}</p>
+                    </div>
+                    <button type="button" onClick={() => { setPurchaseForm({ ...purchaseForm, productId: '', unitCost: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para agregarlo a la compra.</div>
+              )}
+              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} resultado(s). Escribe al menos 2 letras o escanea el código.</p>}
             </label>
 
             {selectedProduct && (
@@ -4053,12 +4155,18 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [salesPage, setSalesPage] = useState(1);
   const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
-  const filteredProducts = products.filter(product => {
-    const text = productSearch.toLowerCase();
-    const hasStock = Number(product.stock || 0) > 0;
-    return hasStock && (String(product.name || '').toLowerCase().includes(text) || String(product.sku || '').toLowerCase().includes(text) || String(product.barcode || '').toLowerCase().includes(text) || String(product.brand || '').toLowerCase().includes(text) || String(product.size || '').toLowerCase().includes(text) || String(product.color || '').toLowerCase().includes(text) || String(product.category || '').toLowerCase().includes(text));
-  });
+  const filteredProducts = useMemo(() => searchProductsForPicker(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }), [products, productSearch]);
+  const salesPerPage = 20;
+  const salesTotalPages = Math.max(Math.ceil(sales.length / salesPerPage), 1);
+  const safeSalesPage = Math.min(salesPage, salesTotalPages);
+  const salesStartIndex = (safeSalesPage - 1) * salesPerPage;
+  const paginatedSales = sales.slice(salesStartIndex, salesStartIndex + salesPerPage);
+
+  useEffect(() => {
+    setSalesPage(1);
+  }, [sales.length]);
 
   function handleProductSearch(value) {
     setProductSearch(value);
@@ -4150,7 +4258,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
             </div>
             <div className="divide-y divide-slate-100">
               {sales.length === 0 && <div className="p-5"><EmptyState icon={ShoppingCart} title="Aún no tienes ventas" text="Registra tu primera venta para empezar a medir ingresos, utilidad y rotación." /></div>}
-              {sales.map(sale => (
+              {paginatedSales.map(sale => (
                 <div key={sale.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><ShoppingCart className="h-5 w-5" /></div>
@@ -4178,6 +4286,16 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                 </div>
               ))}
             </div>
+            {sales.length > salesPerPage && (
+              <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <span>Mostrando {salesStartIndex + 1}-{Math.min(salesStartIndex + salesPerPage, sales.length)} de {sales.length} ventas</span>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={safeSalesPage <= 1} onClick={() => setSalesPage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+                  <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safeSalesPage} de {salesTotalPages}</span>
+                  <button type="button" disabled={safeSalesPage >= salesTotalPages} onClick={() => setSalesPage(page => Math.min(page + 1, salesTotalPages))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
+                </div>
+              </div>
+            )}
           </section>
         </div>
 
@@ -4228,12 +4346,21 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                   ))}
                 </div>
               )}
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Producto</span>
-              <select value={saleForm.productId} onChange={e => setSaleForm({ ...saleForm, productId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                <option value="">Seleccionar producto</option>
-                {filteredProducts.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · {product.sku || 'Sin SKU'} · Stock {product.stock}</option>)}
-              </select>
-              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando {filteredProducts.length} producto(s) con stock.</p>}
+              {product ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
+                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(product)}</p>
+                      <p className="text-sm text-emerald-800">{product.sku || 'Sin SKU'} · Stock disponible {product.stock}</p>
+                    </div>
+                    <button type="button" onClick={() => { setSaleForm({ ...saleForm, productId: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para agregarlo a la venta.</div>
+              )}
+              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} producto(s) con stock. Escribe al menos 2 letras o escanea el código.</p>}
             </label>
 
             {product && (
@@ -4588,7 +4715,7 @@ function ReceiptModal({ sale, currentUser, onClose }) {
   );
 }
 
-function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading, importProductsFromExcel, excelImportPreview, confirmExcelImport, cancelExcelImport }) {
+function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading, importProductsFromExcel, excelImportPreview, confirmExcelImport, cancelExcelImport, excelImportProgress }) {
   const businessType = currentUser?.businessType || 'general';
   const businessConfig = getBusinessConfig(businessType);
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
@@ -4612,7 +4739,7 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
-            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional; si viene vacío, se guardará como $0.00.</p>
+            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
@@ -4626,7 +4753,7 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
         </div>
       </section>
 
-      {excelImportPreview && <ExcelImportPreviewModal preview={excelImportPreview} onConfirm={confirmExcelImport} onCancel={cancelExcelImport} />}
+      {excelImportPreview && <ExcelImportPreviewModal preview={excelImportPreview} progress={excelImportProgress} onConfirm={confirmExcelImport} onCancel={cancelExcelImport} />}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <ProductTable businessConfig={businessConfig} products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
@@ -4646,7 +4773,7 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
   );
 }
 
-function ExcelImportPreviewModal({ preview, onConfirm, onCancel }) {
+function ExcelImportPreviewModal({ preview, progress, onConfirm, onCancel }) {
   const sampleProducts = preview.products.slice(0, 8);
 
   return (
@@ -4721,9 +4848,21 @@ function ExcelImportPreviewModal({ preview, onConfirm, onCancel }) {
             </div>
           </section>
 
+          {progress && (
+            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="flex items-center justify-between text-sm font-bold text-emerald-800">
+                <span>Importando bloque {progress.batch} de {progress.batches}</span>
+                <span>{progress.imported} / {progress.total}</span>
+              </div>
+              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+                <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.round((progress.imported / Math.max(progress.total, 1)) * 100)}%` }} />
+              </div>
+            </section>
+          )}
+
           <div className="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
-            <button type="button" onClick={onConfirm} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Importar {preview.products.length} producto(s)</button>
+            <button type="button" disabled={Boolean(progress)} onClick={onCancel} className="rounded-2xl border border-slate-200 px-5 py-3 font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">Cancelar</button>
+            <button type="button" disabled={Boolean(progress)} onClick={onConfirm} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">{progress ? 'Importando...' : `Importar ${preview.products.length} producto(s)`}</button>
           </div>
         </div>
       </div>
@@ -4735,6 +4874,7 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
   const [inventoryView, setInventoryView] = useState('Alertas');
   const [adjustForm, setAdjustForm] = useState({ productId: '', stock: '', reason: 'Conteo físico' });
   const [adjustNotice, setAdjustNotice] = useState(null);
+  const [adjustProductSearch, setAdjustProductSearch] = useState('');
 
   const businessConfig = getBusinessConfig(currentUser?.businessType);
   const alerts = products.filter(p => p.stock <= p.minStock);
@@ -4743,6 +4883,27 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
   const expiredProducts = businessConfig.usesExpiration ? products.filter(p => expirationText(p).label === 'Vencido') : [];
   const expiringProducts = businessConfig.usesExpiration ? products.filter(p => ['Por vencer', 'Vence pronto'].includes(expirationText(p).label)) : [];
   const selectedProduct = products.find(product => String(product.id) === String(adjustForm.productId));
+  const adjustSearchResults = useMemo(() => searchProductsForPicker(products, adjustProductSearch, { limit: PRODUCT_SEARCH_LIMIT }), [products, adjustProductSearch]);
+
+  function selectAdjustProduct(productId) {
+    const product = products.find(item => String(item.id) === String(productId));
+    if (!product) return;
+    setAdjustForm({ ...adjustForm, productId: product.id, stock: product.stock });
+    setAdjustProductSearch(getProductDisplayName(product));
+  }
+
+  function handleAdjustProductSearch(value) {
+    setAdjustProductSearch(value);
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+
+    const exactProduct = products.find(product =>
+      String(product.barcode || '').trim().toLowerCase() === normalized ||
+      String(product.sku || '').trim().toLowerCase() === normalized
+    );
+
+    if (exactProduct) selectAdjustProduct(exactProduct.id);
+  }
 
   const inventoryMovements = useMemo(() => {
     const purchaseMovements = purchases.flatMap(purchase => {
@@ -4792,6 +4953,7 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
       await adjustProductStock(selectedProduct.id, adjustForm.stock, adjustForm.reason);
       setAdjustNotice({ type: 'success', message: `Stock de ${selectedProduct.name} ajustado correctamente.` });
       setAdjustForm({ productId: '', stock: '', reason: 'Conteo físico' });
+      setAdjustProductSearch('');
     } catch (error) {
       setAdjustNotice({ type: 'error', message: `No se pudo ajustar el stock: ${error.message}` });
     }
@@ -4950,11 +5112,39 @@ function InventoryPage({ currentUser, products, sales, purchases, lowStock, noSt
 
             <div className="space-y-4">
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">Producto</span>
-                <select value={adjustForm.productId} onChange={e => setAdjustForm({ ...adjustForm, productId: e.target.value, stock: products.find(p => String(p.id) === String(e.target.value))?.stock ?? '' })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                  <option value="">Seleccionar producto</option>
-                  {products.map(product => <option key={product.id} value={product.id}>{getProductDisplayName(product)} · Stock {product.stock}</option>)}
-                </select>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+                  <input value={adjustProductSearch} onChange={e => handleAdjustProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o código de barras..." />
+                </div>
+                {adjustProductSearch && adjustSearchResults.length > 0 && !selectedProduct && (
+                  <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
+                    {adjustSearchResults.map(product => (
+                      <button type="button" key={product.id} onClick={() => selectAdjustProduct(product.id)} className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50">
+                        <span>
+                          <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
+                          <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
+                        </span>
+                        <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedProduct ? (
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
+                        <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
+                        <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · Stock actual {selectedProduct.stock}</p>
+                      </div>
+                      <button type="button" onClick={() => { setAdjustForm({ ...adjustForm, productId: '', stock: '' }); setAdjustProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para ajustar el stock.</div>
+                )}
+                {adjustProductSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} resultado(s). Escribe al menos 2 letras o escanea el código.</p>}
               </label>
               <Field label="Stock contado físicamente" type="number" min="0" value={adjustForm.stock} onChange={v => setAdjustForm({ ...adjustForm, stock: v })} placeholder="Ej: 18" />
               <label className="block">
@@ -5943,6 +6133,8 @@ function ProductTable({ businessConfig, products, filtered, categories, category
   }
 
   function printSelectedLabels() {
+    const totalLabels = selectedProducts.length * Math.max(Number(labelCopies || 1), 1);
+    if (totalLabels > MAX_LABELS_WITHOUT_CONFIRM && !window.confirm(`Vas a generar ${totalLabels} etiquetas. Esto puede tardar y abrir una impresión pesada. ¿Deseas continuar?`)) return;
     printSelectedBarcodeLabels(selectedProducts, {
       columns: Number(labelColumns || 2),
       copies: Number(labelCopies || 1),
@@ -6015,7 +6207,7 @@ function ProductTable({ businessConfig, products, filtered, categories, category
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
+                          <img src={product.imageUrl} alt={product.name} loading="lazy" className="h-12 w-12 rounded-xl object-cover shadow-sm" />
                         ) : (
                           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl">📦</div>
                         )}
