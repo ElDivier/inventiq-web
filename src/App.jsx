@@ -47,6 +47,9 @@ import {
   isRecordInPeriod,
   formatPeriodDate,
 } from './utils/dates';
+import Field from './components/Field';
+import Metric from './components/Metric';
+import EmptyState from './components/EmptyState';
 import {
   Home,
   ShoppingCart,
@@ -2823,23 +2826,6 @@ function MobileBottomNav({ menu, active, setActive, mobileMoreOpen, setMobileMor
 
 function MobileFloatingButton() {
   return null;
-}
-
-function EmptyState({ icon: Icon = Package, title, text, actionLabel, onAction }) {
-  return (
-    <div className="rounded-[1.75rem] border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
-      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
-        <Icon className="h-7 w-7" />
-      </div>
-      <h3 className="text-lg font-extrabold text-slate-900">{title}</h3>
-      <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{text}</p>
-      {actionLabel && onAction && (
-        <button type="button" onClick={onAction} className="mt-4 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
-          {actionLabel}
-        </button>
-      )}
-    </div>
-  );
 }
 
 function BarcodeScanner({ onScan, onClose }) {
@@ -5804,36 +5790,6 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
         </div>
       </div>
     </form>
-  );
-}
-
-function Metric({ icon: Icon, label, value, note, color }) {
-  const colors = {
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber: 'bg-amber-50 text-amber-500',
-    red: 'bg-red-50 text-red-500',
-    blue: 'bg-blue-50 text-blue-500',
-  };
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-      <div className="flex items-center gap-3 sm:gap-4">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-16 sm:w-16 ${colors[color]}`}><Icon className="h-6 w-6 sm:h-8 sm:w-8" /></div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-slate-500 sm:text-sm">{label}</p>
-          <p className="truncate text-xl font-extrabold text-slate-900 sm:text-3xl">{value}</p>
-          <p className="truncate text-xs text-emerald-600 sm:text-sm">{note}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, placeholder, type = 'text', min, step }) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-semibold text-slate-700">{label}</span>
-      <input type={type} min={min} step={step} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" />
-    </label>
   );
 }
 
