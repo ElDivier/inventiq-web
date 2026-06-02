@@ -53,7 +53,10 @@ import {
   expirationText,
 } from './utils/inventory';
 
-import { validatePasswordSecurity } from './utils/auth';
+import {
+  isInventiQAdmin,
+  validatePasswordSecurity,
+} from './utils/auth';
 import {
   mapProductFromDb,
   mapProductToDb,
@@ -117,6 +120,7 @@ import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import CashPage from './pages/CashPage';
 import ReportsPage from './pages/ReportsPage';
+import { menu } from './config/menu';
 import {
   Home,
   ShoppingCart,
@@ -152,25 +156,6 @@ import {
   Printer,
   Upload,
 } from 'lucide-react';
-
-
-function isInventiQAdmin(user) {
-  const email = String(user?.email || user?.username || '').trim().toLowerCase();
-  return ADMIN_EMAILS.includes(email);
-}
-
-const menu = [
-  { label: 'Inicio', icon: Home },
-  { label: 'Ventas', icon: ShoppingCart },
-  { label: 'Caja', icon: DollarSign },
-  { label: 'Compras', icon: ClipboardList },
-  { label: 'Productos', icon: Package },
-  { label: 'Inventario', icon: Boxes },
-  { label: 'Clientes', icon: Users },
-  { label: 'Proveedores', icon: Truck },
-  { label: 'Reportes', icon: BarChart3 },
-  { label: 'Configuración', icon: Settings },
-];
 
 function getAvatarLetter(user) {
   const source = String(user?.store || user?.name || user?.email || 'InventiQ').trim();

@@ -1,3 +1,10 @@
+import { ADMIN_EMAILS } from '../config/constants';
+
+export function isInventiQAdmin(user) {
+  const email = String(user?.email || user?.username || '').trim().toLowerCase();
+  return ADMIN_EMAILS.includes(email);
+}
+
 export function validatePasswordSecurity(password) {
   const value = String(password || '');
 
