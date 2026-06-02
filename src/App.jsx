@@ -68,6 +68,10 @@ import Metric from './components/Metric';
 import EmptyState from './components/EmptyState';
 import PasswordSecurityHint from './components/PasswordSecurityHint';
 import Benefit from './components/Benefit';
+import MiniStat from './components/MiniStat';
+import TableCard from './components/TableCard';
+import ListRow from './components/ListRow';
+import ReportRow from './components/ReportRow';
 import InventiQIcon from './components/InventiQIcon';
 import SplashScreen from './components/SplashScreen';
 import StoreAvatar from './components/StoreAvatar';
@@ -5025,53 +5029,6 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
         </div>
       </div>
     </form>
-  );
-}
-
-function MiniStat({ label, value }) {
-  return (
-    <div className="rounded-2xl bg-white/10 p-4">
-      <p className="text-sm text-emerald-100">{label}</p>
-      <p className="text-2xl font-extrabold text-white">{value}</p>
-    </div>
-  );
-}
-
-function TableCard({ title, icon: Icon, children }) {
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 p-5">
-        <h3 className="flex items-center gap-2 text-xl font-bold"><Icon className="h-5 w-5 text-emerald-600" />{title}</h3>
-      </div>
-      <div className="divide-y divide-slate-100">{children}</div>
-    </section>
-  );
-}
-
-function ListRow({ title, subtitle, right }) {
-  return (
-    <div className="flex items-center justify-between p-5">
-      <div>
-        <p className="font-bold">{title}</p>
-        <p className="text-sm text-slate-500">{subtitle}</p>
-      </div>
-      <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">{right}</span>
-    </div>
-  );
-}
-
-function ReportRow({ title, subtitle, right, badge }) {
-  return (
-    <div className="flex items-center justify-between gap-4 p-5">
-      <div>
-        <p className="font-bold text-slate-900">{title}</p>
-        <p className="text-sm text-slate-500">{subtitle}</p>
-      </div>
-      <div className="text-right">
-        <p className="font-bold text-slate-900">{right}</p>
-        <span className="mt-1 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{badge}</span>
-      </div>
-    </div>
   );
 }
 
