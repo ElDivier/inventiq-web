@@ -66,6 +66,8 @@ import {
 import Field from './components/Field';
 import Metric from './components/Metric';
 import EmptyState from './components/EmptyState';
+import PasswordSecurityHint from './components/PasswordSecurityHint';
+import Benefit from './components/Benefit';
 import InventiQIcon from './components/InventiQIcon';
 import SplashScreen from './components/SplashScreen';
 import StoreAvatar from './components/StoreAvatar';
@@ -290,14 +292,6 @@ function validatePasswordSecurity(password) {
   if (!/[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9]/.test(value)) return 'La contraseña debe incluir al menos un carácter especial, como @, #, $, %, &, * o !.';
 
   return null;
-}
-
-function PasswordSecurityHint() {
-  return (
-    <div className="rounded-2xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-      La contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.
-    </div>
-  );
 }
 
 function getUsersFromStorage() {
@@ -5031,15 +5025,6 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
         </div>
       </div>
     </form>
-  );
-}
-
-function Benefit({ icon: Icon, title, text }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="rounded-2xl bg-white p-3 text-emerald-600"><Icon className="h-6 w-6" /></div>
-      <div><p className="font-semibold text-slate-900">{title}</p><p className="text-sm text-slate-600">{text}</p></div>
-    </div>
   );
 }
 
