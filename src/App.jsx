@@ -78,6 +78,7 @@ import QuickAction from './components/QuickAction';
 import SummaryBox from './components/SummaryBox';
 import DashboardListCard from './components/DashboardListCard';
 import EmptyDashboardMessage from './components/EmptyDashboardMessage';
+import AbcBadge from './components/AbcBadge';
 import InventiQIcon from './components/InventiQIcon';
 import SplashScreen from './components/SplashScreen';
 import StoreAvatar from './components/StoreAvatar';
@@ -4833,16 +4834,6 @@ function ProductForm({ businessConfig, form, setForm, saveProduct, resetForm, ed
       </div>
     </form>
   );
-}
-
-function AbcBadge({ value }) {
-  const styles = {
-    A: 'bg-emerald-50 text-emerald-700',
-    B: 'bg-blue-50 text-blue-700',
-    C: 'bg-amber-50 text-amber-700',
-  };
-
-  return <span className={`rounded-full px-3 py-1 text-xs font-bold ${styles[value] || styles.C}`}>Tipo {value}</span>;
 }
 
 export default App;
