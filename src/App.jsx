@@ -2501,10 +2501,6 @@ function App() {
   );
 }
 
-function MobileFloatingButton() {
-  return null;
-}
-
 function AuthPage({ authMode, setAuthMode, loginForm, setLoginForm, registerForm, setRegisterForm, authNotice, setAuthNotice, login, register, resetEmail, setResetEmail, resetPassword, resetPasswordForm, setResetPasswordForm, updateRecoveredPassword }) {
   const isLogin = authMode === 'login';
   const isReset = authMode === 'reset';
