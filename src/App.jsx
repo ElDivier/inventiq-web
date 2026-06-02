@@ -47,6 +47,11 @@ import {
   isRecordInPeriod,
   formatPeriodDate,
 } from './utils/dates';
+
+import {
+  statusText,
+  expirationText,
+} from './utils/inventory';
 import {
   mapProductFromDb,
   mapProductToDb,
@@ -63,6 +68,23 @@ import {
   mapPurchaseItemFromDb,
   mapPurchaseItemToDb,
 } from './utils/mappers';
+
+import {
+  emptyForm,
+  initialProducts,
+  initialSales,
+  initialClients,
+  initialProviders,
+  initialUsers,
+  emptyLoginForm,
+  emptyRegisterForm,
+  emptyAdminCreateUserForm,
+  emptyClientForm,
+  emptyProviderForm,
+  emptySettingsForm,
+  emptyPurchaseForm,
+  emptySaleForm,
+} from './data/initialData';
 import Field from './components/Field';
 import Metric from './components/Metric';
 import EmptyState from './components/EmptyState';
@@ -129,70 +151,6 @@ function isInventiQAdmin(user) {
   return ADMIN_EMAILS.includes(email);
 }
 
-
-const emptyForm = {
-  name: '',
-  category: '',
-  customCategory: '',
-  price: '',
-  cost: '',
-  stock: '',
-  minStock: '',
-  sku: '',
-  barcode: '',
-  brand: '',
-  size: '',
-  color: '',
-  description: '',
-  batchNumber: '',
-  entryDate: '',
-  expirationDate: '',
-  imageUrl: '',
-  imageFile: null,
-};
-
-const initialProducts = [
-  { id: 1, sku: 'BEB001', name: 'Coca Cola 600ml', category: 'Bebidas', price: 1.25, cost: 0.75, stock: 25, minStock: 8, status: 'Activo', description: 'Bebida gaseosa personal.' },
-  { id: 2, sku: 'SNA002', name: 'Papas Lays Clásicas', category: 'Snacks', price: 1.1, cost: 0.65, stock: 7, minStock: 10, status: 'Activo', description: 'Snack de alta rotación.' },
-  { id: 3, sku: 'LIM003', name: 'Jabón Protex', category: 'Limpieza', price: 1.75, cost: 1.05, stock: 0, minStock: 5, status: 'Inactivo', description: 'Producto de limpieza y cuidado.' },
-  { id: 4, sku: 'LAC004', name: 'Leche Entera 1L', category: 'Lácteos', price: 1.5, cost: 0.95, stock: 12, minStock: 6, status: 'Activo', description: 'Producto lácteo de consumo diario.' },
-  { id: 5, sku: 'PER005', name: 'Colgate Triple Acción', category: 'Cuidado personal', price: 2.2, cost: 1.35, stock: 18, minStock: 7, status: 'Activo', description: 'Producto de cuidado personal.' },
-];
-
-const initialSales = [
-  { id: 1, code: 'V-0001', productId: 1, product: 'Coca Cola 600ml', quantity: 3, subtotal: 3.75, discount: 0, total: 3.75, profit: 1.5, date: 'Hoy, 09:15 AM', status: 'Completada' },
-  { id: 2, code: 'V-0002', productId: 2, product: 'Papas Lays Clásicas', quantity: 2, subtotal: 2.2, discount: 0, total: 2.2, profit: 0.9, date: 'Hoy, 10:20 AM', status: 'Completada' },
-  { id: 3, code: 'V-0003', productId: 4, product: 'Leche Entera 1L', quantity: 1, subtotal: 1.5, discount: 0, total: 1.5, profit: 0.55, date: 'Ayer, 05:30 PM', status: 'Completada' },
-];
-
-const initialClients = [
-  { id: 1, name: 'Ana Rodríguez', phone: '099 123 4567', type: 'Frecuente', purchases: 12 },
-  { id: 2, name: 'Carlos Mejía', phone: '098 765 4321', type: 'Regular', purchases: 5 },
-  { id: 3, name: 'María López', phone: '097 111 2222', type: 'Nuevo', purchases: 1 },
-];
-
-const initialProviders = [
-  { id: 1, name: 'Distribuidora Norte', category: 'Bebidas', contact: '099 111 2222', email: 'ventas@disnorte.com', delivery: '2 días' },
-  { id: 2, name: 'Comercial Andina', category: 'Snacks', contact: '099 222 3333', email: 'ventas@comercialandina.com', delivery: '1 día' },
-  { id: 3, name: 'Lácteos San Miguel', category: 'Lácteos', contact: '098 555 7777', email: 'pedidos@lacteossanmiguel.com', delivery: '3 días' },
-];
-
-const emptySaleForm = {
-  productId: '',
-  quantity: 1,
-  discountType: 'percent',
-  discount: 0,
-  saleType: 'consumidor',
-  customer: '',
-  customerId: '',
-  invoiceEnabled: false,
-  invoiceName: '',
-  invoiceIdentification: '',
-  invoiceAddress: '',
-  invoiceEmail: '',
-  paymentMethod: 'Efectivo',
-};
-
 const menu = [
   { label: 'Inicio', icon: Home },
   { label: 'Ventas', icon: ShoppingCart },
@@ -205,89 +163,6 @@ const menu = [
   { label: 'Reportes', icon: BarChart3 },
   { label: 'Configuración', icon: Settings },
 ];
-
-const initialUsers = [
-  {
-    id: 1,
-    name: 'Ana Rodríguez',
-    store: 'Mi Tienda',
-    city: 'Cuenca',
-    username: 'demo',
-    password: '1234',
-  },
-];
-
-const emptyLoginForm = {
-  username: '',
-  password: '',
-};
-
-const emptyRegisterForm = {
-  name: '',
-  store: '',
-  city: '',
-  businessType: 'general',
-  username: '',
-  password: '',
-  confirmPassword: '',
-};
-
-const emptyAdminCreateUserForm = {
-  name: '',
-  store: '',
-  city: '',
-  businessType: 'ropa',
-  email: '',
-  password: '',
-  confirmPassword: '',
-};
-
-const emptyClientForm = {
-  name: '',
-  phone: '',
-  type: 'Nuevo',
-  email: '',
-  identification: '',
-  address: '',
-  invoiceName: '',
-  wantsInvoice: false,
-  notes: '',
-};
-
-const emptyProviderForm = {
-  name: '',
-  category: '',
-  contact: '',
-  email: '',
-  delivery: '',
-  notes: '',
-};
-
-const emptySettingsForm = {
-  name: '',
-  store: '',
-  city: '',
-  businessType: 'general',
-  businessId: '',
-  address: '',
-  phone: '',
-  commercialEmail: '',
-  receiptFooter: '',
-  logoUrl: '',
-  logoFile: null,
-  username: '',
-  currentPassword: '',
-  newPassword: '',
-  confirmNewPassword: '',
-};
-
-const emptyPurchaseForm = {
-  productId: '',
-  providerId: '',
-  quantity: 1,
-  unitCost: '',
-  note: '',
-};
 
 function getAvatarLetter(user) {
   const source = String(user?.store || user?.name || user?.email || 'InventiQ').trim();
@@ -1017,27 +892,6 @@ function App() {
 
   const { totalProducts, lowStock, noStock, inventoryValue, potentialProfit } = inventoryStats;
   const { totalSales, totalProfit, totalDiscount, totalUnitsSold, bestSeller } = salesStats;
-
-  function statusText(product) {
-    if (product.stock === 0) return { label: 'Sin stock', color: 'text-red-600', badge: 'bg-red-50 text-red-700' };
-    if (product.stock <= product.minStock) return { label: 'Stock bajo', color: 'text-amber-600', badge: 'bg-amber-50 text-amber-700' };
-    return { label: 'Disponible', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700' };
-  }
-
-  function expirationText(product) {
-    if (!product.expirationDate) return { label: 'Sin caducidad', color: 'text-slate-500', badge: 'bg-slate-50 text-slate-600', days: null };
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const expiration = new Date(product.expirationDate);
-    expiration.setHours(0, 0, 0, 0);
-    const days = Math.ceil((expiration - today) / (1000 * 60 * 60 * 24));
-
-    if (days < 0) return { label: 'Vencido', color: 'text-red-600', badge: 'bg-red-50 text-red-700', days };
-    if (days <= 15) return { label: 'Por vencer', color: 'text-amber-600', badge: 'bg-amber-50 text-amber-700', days };
-    if (days <= 30) return { label: 'Vence pronto', color: 'text-blue-600', badge: 'bg-blue-50 text-blue-700', days };
-    return { label: 'Vigente', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700', days };
-  }
 
   function resetForm() {
     setForm(emptyForm);
