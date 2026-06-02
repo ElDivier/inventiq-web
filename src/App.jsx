@@ -72,6 +72,12 @@ import MiniStat from './components/MiniStat';
 import TableCard from './components/TableCard';
 import ListRow from './components/ListRow';
 import ReportRow from './components/ReportRow';
+import DashboardKpi from './components/DashboardKpi';
+import DashboardMiniStat from './components/DashboardMiniStat';
+import QuickAction from './components/QuickAction';
+import SummaryBox from './components/SummaryBox';
+import DashboardListCard from './components/DashboardListCard';
+import EmptyDashboardMessage from './components/EmptyDashboardMessage';
 import InventiQIcon from './components/InventiQIcon';
 import SplashScreen from './components/SplashScreen';
 import StoreAvatar from './components/StoreAvatar';
@@ -2769,113 +2775,6 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
       </section>
     </div>
   );
-}
-
-function DashboardKpi({ icon: Icon, title, value, subtitle, tone = 'emerald' }) {
-  const styles = {
-    emerald: 'bg-emerald-50 text-emerald-600',
-    blue: 'bg-blue-50 text-blue-600',
-    amber: 'bg-amber-50 text-amber-600',
-    red: 'bg-red-50 text-red-600',
-  };
-
-  return (
-    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex items-center gap-3">
-        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${styles[tone]}`}>
-          <Icon className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-slate-500 sm:text-sm">{title}</p>
-          <p className="truncate text-2xl font-extrabold text-slate-900">{value}</p>
-          <p className="truncate text-xs text-emerald-600">{subtitle}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardMiniStat({ icon: Icon, label, value }) {
-  return (
-    <div className="rounded-2xl bg-white/15 p-3 backdrop-blur">
-      <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-white/15">
-        <Icon className="h-4 w-4 text-emerald-100" />
-      </div>
-      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-100 sm:text-xs">{label}</p>
-      <p className="mt-1 truncate text-lg font-extrabold text-white sm:text-xl">{value}</p>
-    </div>
-  );
-}
-
-function QuickAction({ icon: Icon, label, onClick, tone = 'emerald' }) {
-  const styles = {
-    emerald: 'bg-emerald-50 text-emerald-700',
-    teal: 'bg-teal-50 text-teal-700',
-    blue: 'bg-blue-50 text-blue-700',
-    slate: 'bg-slate-50 text-slate-700',
-  };
-
-  return (
-    <button onClick={onClick} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${styles[tone]}`}>
-        <Icon className="h-6 w-6" />
-      </div>
-      <p className="text-xs font-semibold text-slate-500">Acción rápida</p>
-      <p className="mt-1 text-base font-extrabold text-slate-900 sm:text-lg">{label}</p>
-    </button>
-  );
-}
-
-function SummaryBox({ label, value }) {
-  return (
-    <div className="rounded-2xl bg-white/15 p-4 backdrop-blur">
-      <p className="text-xs text-emerald-50 sm:text-sm">{label}</p>
-      <p className="truncate text-xl font-extrabold text-white sm:text-2xl">{value}</p>
-    </div>
-  );
-}
-
-function DashboardListCard({ title, subtitle, items = [], empty }) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-xl font-extrabold text-slate-900">{title}</h3>
-          <p className="text-sm text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-      <div className="space-y-3">
-        {items.length === 0 && <EmptyDashboardMessage text={empty} />}
-        {items.map((item, index) => (
-          <DashboardListItem key={`${item.title}-${index}`} item={item} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DashboardListItem({ item }) {
-  const badgeStyles = {
-    emerald: 'bg-emerald-50 text-emerald-700',
-    amber: 'bg-amber-50 text-amber-700',
-    red: 'bg-red-50 text-red-700',
-  };
-
-  return (
-    <div className="flex items-start justify-between gap-3 rounded-2xl bg-slate-50 p-4">
-      <div className="min-w-0">
-        <p className="truncate font-bold text-slate-900">{item.title}</p>
-        <p className="text-sm text-slate-500">{item.subtitle}</p>
-      </div>
-      <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${badgeStyles[item.tone] || badgeStyles.emerald}`}>
-        {item.badge}
-      </span>
-    </div>
-  );
-}
-
-function EmptyDashboardMessage({ text }) {
-  return <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">{text}</p>;
 }
 
 function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
