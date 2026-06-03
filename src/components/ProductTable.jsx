@@ -58,6 +58,24 @@ export default function ProductTable({
     setCurrentPage(1);
   }, [category, filtered.length]);
 
+  function getCategoryCount(categoryName) {
+    if (categoryName === 'Todas') {
+      return products.length;
+    }
+
+    return products.filter(product => product.category === categoryName).length;
+  }
+
+  function categoryExists(categoryName, ignoredCategory = '') {
+    const cleanName = String(categoryName || '').trim().toLowerCase();
+    const ignoredName = String(ignoredCategory || '').trim().toLowerCase();
+
+    return visibleCategories.some(cat => {
+      const currentName = String(cat || '').trim().toLowerCase();
+      return currentName === cleanName && currentName !== ignoredName;
+    });
+  }
+
   function toggleLabelProduct(productId) {
     setSelectedLabelIds(prev =>
       prev.includes(productId)
@@ -79,21 +97,6 @@ export default function ProductTable({
     );
   }
 
-  function getCategoryCount(categoryName) {
-    if (categoryName === 'Todas') return products.length;
-    return products.filter(product => product.category === categoryName).length;
-  }
-
-  function categoryExists(categoryName, ignoreCategory = '') {
-    const cleanName = String(categoryName || '').trim().toLowerCase();
-    const ignoreName = String(ignoreCategory || '').trim().toLowerCase();
-
-    return visibleCategories.some(cat => {
-      const current = String(cat || '').trim().toLowerCase();
-      return current === cleanName && current !== ignoreName;
-    });
-  }
-
   function saveNewCategory() {
     const cleanName = String(newCategoryName || '').trim();
 
@@ -107,9 +110,7 @@ export default function ProductTable({
       prev.filter(item => String(item).toLowerCase() !== cleanName.toLowerCase())
     );
 
-    if (setCategory) {
-      setCategory(cleanName);
-    }
+    setCategory(cleanName);
 
     if (onCreateCategory) {
       onCreateCategory(cleanName);
@@ -152,17 +153,19 @@ export default function ProductTable({
     }
 
     setCustomCategories(prev => {
-      const replaced = prev.map(cat => (cat === oldName ? newName : cat));
-      const hasNewName = replaced.some(cat => cat === newName);
+      const updated = prev.map(cat => (cat === oldName ? newName : cat));
+      const exists = updated.some(cat => cat === newName);
 
-      return hasNewName ? Array.from(new Set(replaced)) : Array.from(new Set([...replaced, newName]));
+      return exists
+        ? Array.from(new Set(updated))
+        : Array.from(new Set([...updated, newName]));
     });
 
     setDeletedCategories(prev =>
       Array.from(new Set([...prev, oldName])).filter(cat => cat !== newName)
     );
 
-    if (category === oldName && setCategory) {
+    if (category === oldName) {
       setCategory(newName);
     }
 
@@ -201,7 +204,7 @@ export default function ProductTable({
     setCustomCategories(prev => prev.filter(cat => cat !== categoryName));
     setDeletedCategories(prev => Array.from(new Set([...prev, categoryName])));
 
-    if (category === categoryName && setCategory) {
+    if (category === categoryName) {
       setCategory('Todas');
     }
 
@@ -284,7 +287,7 @@ export default function ProductTable({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr]">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
         <aside className="border-b border-slate-100 p-4 lg:border-b-0 lg:border-r">
           <h4 className="mb-4 font-semibold">Categorías</h4>
 
@@ -303,7 +306,7 @@ export default function ProductTable({
                     selected ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'
                   }`}
                 >
-                  {isEditing ? (
+                  {isEditing && (
                     <div>
                       <input
                         value={editingCategoryName}
@@ -342,7 +345,9 @@ export default function ProductTable({
                         </button>
                       </div>
                     </div>
-                  ) : isConfirmingDelete ? (
+                  )}
+
+                  {isConfirmingDelete && !isEditing && (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -360,17 +365,21 @@ export default function ProductTable({
                         Cancelar
                       </button>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-2">
+                  )}
+
+                  {!isEditing && !isConfirmingDelete && (
+                    <div className="flex items-start justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => setCategory(cat)}
                         className="min-w-0 flex-1 text-left"
                       >
-                        <span className="block truncate">{cat}</span>
+                        <span className="block whitespace-normal break-words pr-1 leading-tight">
+                          {cat}
+                        </span>
                       </button>
 
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-1 self-start">
                         <span className="rounded-full bg-white px-2 py-1 text-xs text-slate-500 shadow-sm">
                           {count}
                         </span>
@@ -476,7 +485,10 @@ export default function ProductTable({
 
             <tbody className="divide-y divide-slate-100">
               {paginatedProducts.map(product => {
-                const stockState = statusText(product);
+                const stockState = statusText
+                  ? statusText(product)
+                  : { label: 'Disponible', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700' };
+
                 const expirationState = expirationText ? expirationText(product) : null;
                 const isDeleting = pendingDeleteId === product.id;
 
