@@ -3141,7 +3141,32 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
       {excelImportPreview && <ExcelImportPreviewModal preview={excelImportPreview} progress={excelImportProgress} onConfirm={confirmExcelImport} onCancel={cancelExcelImport} />}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-        <ProductTable businessConfig={businessConfig} products={products} filtered={filtered} categories={categories} category={category} setCategory={setCategory} deleteProduct={deleteProduct} editProduct={editProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} />
+        <ProductTable
+          businessConfig={businessConfig}
+          products={products}
+          filtered={filtered}
+          categories={categories}
+          category={category}
+          setCategory={setCategory}
+          deleteProduct={deleteProduct}
+          editProduct={editProduct}
+          pendingDeleteId={pendingDeleteId}
+          setPendingDeleteId={setPendingDeleteId}
+          statusText={statusText}
+          expirationText={expirationText}
+          onCreateCategory={categoryName => {
+            setForm(prev => ({
+              ...prev,
+              category: '__new__',
+              customCategory: categoryName,
+            }));
+            setEditingId(null);
+            setNotice({
+              type: 'success',
+              message: `Categoría "${categoryName}" agregada. Ahora puedes guardar un producto con esa categoría.`,
+            });
+          }}
+        />
         <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
