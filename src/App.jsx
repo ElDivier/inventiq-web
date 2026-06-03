@@ -192,6 +192,7 @@ function App() {
   const [purchases, setPurchases] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
+  const [customProductCategories, setCustomProductCategories] = useState([]);
   const [saleForm, setSaleForm] = useState(emptySaleForm);
   const [saleCart, setSaleCart] = useState([]);
   const [saleNotice, setSaleNotice] = useState(null);
@@ -836,8 +837,41 @@ function App() {
   const storeClients = useMemo(() => clients.filter(client => (client.storeId || 'demo') === storeKey), [clients, storeKey]);
   const storeProviders = useMemo(() => providers.filter(provider => (provider.storeId || 'demo') === storeKey), [providers, storeKey]);
 
-  const categories = useMemo(() => ['Todas', ...Array.from(new Set(storeProducts.map(p => p.category).filter(Boolean)))], [storeProducts]);
-  const productCategories = useMemo(() => categories.filter(cat => cat !== 'Todas'), [categories]);
+  const categories = useMemo(() => {
+    const productCategoryNames = storeProducts
+      .map(product => product.category)
+      .filter(Boolean);
+
+    return [
+      'Todas',
+      ...Array.from(new Set([...customProductCategories, ...productCategoryNames])),
+    ];
+  }, [storeProducts, customProductCategories]);
+
+  const productCategories = useMemo(
+    () => categories.filter(cat => cat !== 'Todas'),
+    [categories]
+  );
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const savedCategories = loadFromStorage(
+      `inventiq_custom_categories_${currentUser.id}`,
+      []
+    );
+
+    setCustomProductCategories(Array.isArray(savedCategories) ? savedCategories : []);
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    saveToStorage(
+      `inventiq_custom_categories_${currentUser.id}`,
+      customProductCategories
+    );
+  }, [currentUser?.id, customProductCategories]);
 
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -1131,6 +1165,10 @@ function App() {
       setProducts([mapProductFromDb(data), ...products]);
       setNotice({ type: 'success', message: 'Producto guardado correctamente en Supabase.' });
     }
+
+    setCustomProductCategories(prev =>
+      Array.from(new Set([...prev, finalCategory].filter(Boolean)))
+    );
 
     setForm(emptyForm);
     setEditingId(null);
@@ -2334,9 +2372,12 @@ function App() {
               setEditingId={setEditingId}
               setNotice={setNotice}
               products={storeProducts}
+              setProducts={setProducts}
               filtered={filtered}
               categories={categories}
               productCategories={productCategories}
+              customProductCategories={customProductCategories}
+              setCustomProductCategories={setCustomProductCategories}
               category={category}
               setCategory={setCategory}
               form={form}
@@ -3140,9 +3181,12 @@ function ProductsPage({
   setEditingId,
   setNotice,
   products,
+  setProducts,
   filtered,
   categories,
   productCategories,
+  customProductCategories,
+  setCustomProductCategories,
   category,
   setCategory,
   form,
@@ -3223,79 +3267,120 @@ function ProductsPage({
   statusText={statusText}
   expirationText={expirationText}
   onCreateCategory={categoryName => {
+    const cleanName = String(categoryName || '').trim();
+
+    if (!cleanName) {
+      return;
+    }
+
+    setCustomProductCategories(prev =>
+      Array.from(new Set([...prev, cleanName]))
+    );
+
+    setCategory(cleanName);
+
     setForm(prev => ({
       ...prev,
-      category: '__new__',
-      customCategory: categoryName,
+      category: cleanName,
+      customCategory: '',
     }));
 
     setEditingId(null);
 
     setNotice({
       type: 'success',
-      message: `Categoría "${categoryName}" agregada. Ahora puedes guardar un producto con esa categoría.`,
+      message: `Categoría "${cleanName}" creada. Ya puedes seleccionarla en el formulario.`,
     });
   }}
   onRenameCategory={async (oldName, newName) => {
-  const cleanOldName = String(oldName || '').trim();
-  const cleanNewName = String(newName || '').trim();
+    const cleanOldName = String(oldName || '').trim();
+    const cleanNewName = String(newName || '').trim();
 
-  if (!currentUser?.id) {
-    setNotice({
-      type: 'error',
-      message: 'No existe una sesión activa.',
-    });
-    return false;
-  }
-
-  if (!cleanOldName || !cleanNewName || cleanOldName === cleanNewName) {
-    return false;
-  }
-
-  try {
-    const { error } = await supabase
-      .from('products')
-      .update({
-        category: cleanNewName,
-      })
-      .eq('category', cleanOldName)
-      .eq('user_id', currentUser.id);
-
-    if (error) {
-      throw error;
+    if (!currentUser?.id) {
+      setNotice({
+        type: 'error',
+        message: 'No existe una sesión activa.',
+      });
+      return false;
     }
 
-    if (category === cleanOldName && setCategory) {
-      setCategory(cleanNewName);
+    if (!cleanOldName || !cleanNewName || cleanOldName === cleanNewName) {
+      return false;
     }
 
-    setForm(prev => ({
-      ...prev,
-      category: prev.category === cleanOldName ? cleanNewName : prev.category,
-      customCategory: prev.customCategory === cleanOldName ? cleanNewName : prev.customCategory,
-    }));
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          category: cleanNewName,
+        })
+        .eq('category', cleanOldName)
+        .eq('user_id', currentUser.id);
 
-    setNotice({
-      type: 'success',
-      message: `Categoría "${cleanOldName}" actualizada a "${cleanNewName}". Los productos se mantienen en la nueva categoría.`,
-    });
+      if (error) {
+        throw error;
+      }
 
-    return true;
-  } catch (error) {
-    console.error('Error al actualizar categoría:', error);
+      if (setProducts) {
+        setProducts(prevProducts =>
+          prevProducts.map(product =>
+            product.category === cleanOldName
+              ? { ...product, category: cleanNewName }
+              : product
+          )
+        );
+      }
 
-    setNotice({
-      type: 'error',
-      message: `No se pudo actualizar la categoría: ${error.message}`,
-    });
+      setCustomProductCategories(prev =>
+        Array.from(
+          new Set(
+            [...prev.map(cat => (cat === cleanOldName ? cleanNewName : cat)), cleanNewName]
+              .filter(Boolean)
+          )
+        ).filter(cat => cat !== cleanOldName)
+      );
 
-    return false;
-  }
-}}
+      if (category === cleanOldName && setCategory) {
+        setCategory(cleanNewName);
+      }
+
+      setForm(prev => ({
+        ...prev,
+        category: prev.category === cleanOldName ? cleanNewName : prev.category,
+        customCategory: prev.customCategory === cleanOldName ? cleanNewName : prev.customCategory,
+      }));
+
+      setNotice({
+        type: 'success',
+        message: `Categoría "${cleanOldName}" actualizada a "${cleanNewName}". Los productos se mantienen en la nueva categoría.`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error al actualizar categoría:', error);
+
+      setNotice({
+        type: 'error',
+        message: `No se pudo actualizar la categoría: ${error.message}`,
+      });
+
+      return false;
+    }
+  }}
   onDeleteCategory={categoryName => {
+    const cleanName = String(categoryName || '').trim();
+
+    if (!cleanName) {
+      return;
+    }
+
+    setCustomProductCategories(prev =>
+      prev.filter(cat => cat !== cleanName)
+    );
+
     setNotice({
       type: 'success',
-      message: `Categoría "${categoryName}" eliminada.`,
+      message: `Categoría "${cleanName}" eliminada.`,
     });
   }}
 />
