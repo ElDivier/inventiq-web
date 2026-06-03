@@ -2328,7 +2328,42 @@ function App() {
           {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
           {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && <ProductsPage currentUser={currentUser} products={storeProducts} filtered={filtered} categories={categories} productCategories={productCategories} category={category} setCategory={setCategory} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editProduct={editProduct} editingId={editingId} notice={notice} deleteProduct={deleteProduct} pendingDeleteId={pendingDeleteId} setPendingDeleteId={setPendingDeleteId} statusText={statusText} expirationText={expirationText} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} handleProductImage={handleProductImage} productsLoading={productsLoading} importProductsFromExcel={importProductsFromExcel} excelImportPreview={excelImportPreview} confirmExcelImport={confirmExcelImport} cancelExcelImport={cancelExcelImport} excelImportProgress={excelImportProgress} />}
+          {active === 'Productos' && (
+            <ProductsPage
+              currentUser={currentUser}
+              setEditingId={setEditingId}
+              setNotice={setNotice}
+              products={storeProducts}
+              filtered={filtered}
+              categories={categories}
+              productCategories={productCategories}
+              category={category}
+              setCategory={setCategory}
+              form={form}
+              setForm={setForm}
+              saveProduct={saveProduct}
+              resetForm={resetForm}
+              editProduct={editProduct}
+              editingId={editingId}
+              notice={notice}
+              deleteProduct={deleteProduct}
+              pendingDeleteId={pendingDeleteId}
+              setPendingDeleteId={setPendingDeleteId}
+              statusText={statusText}
+              expirationText={expirationText}
+              totalProducts={totalProducts}
+              lowStock={lowStock}
+              noStock={noStock}
+              inventoryValue={inventoryValue}
+              handleProductImage={handleProductImage}
+              productsLoading={productsLoading}
+              importProductsFromExcel={importProductsFromExcel}
+              excelImportPreview={excelImportPreview}
+              confirmExcelImport={confirmExcelImport}
+              cancelExcelImport={cancelExcelImport}
+              excelImportProgress={excelImportProgress}
+            />
+          )}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
           {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} setActive={setActive} setPurchaseForm={setPurchaseForm} />}
@@ -3100,7 +3135,40 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
   );
 }
 
-function ProductsPage({ currentUser, products, filtered, categories, productCategories, category, setCategory, form, setForm, saveProduct, resetForm, editProduct, editingId, notice, deleteProduct, pendingDeleteId, setPendingDeleteId, statusText, expirationText, totalProducts, lowStock, noStock, inventoryValue, handleProductImage, productsLoading, importProductsFromExcel, excelImportPreview, confirmExcelImport, cancelExcelImport, excelImportProgress }) {
+function ProductsPage({
+  currentUser,
+  setEditingId,
+  setNotice,
+  products,
+  filtered,
+  categories,
+  productCategories,
+  category,
+  setCategory,
+  form,
+  setForm,
+  saveProduct,
+  resetForm,
+  editProduct,
+  editingId,
+  notice,
+  deleteProduct,
+  pendingDeleteId,
+  setPendingDeleteId,
+  statusText,
+  expirationText,
+  totalProducts,
+  lowStock,
+  noStock,
+  inventoryValue,
+  handleProductImage,
+  productsLoading,
+  importProductsFromExcel,
+  excelImportPreview,
+  confirmExcelImport,
+  cancelExcelImport,
+  excelImportProgress,
+}) {
   const businessType = currentUser?.businessType || 'general';
   const businessConfig = getBusinessConfig(businessType);
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
@@ -3142,31 +3210,95 @@ function ProductsPage({ currentUser, products, filtered, categories, productCate
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <ProductTable
-          businessConfig={businessConfig}
-          products={products}
-          filtered={filtered}
-          categories={categories}
-          category={category}
-          setCategory={setCategory}
-          deleteProduct={deleteProduct}
-          editProduct={editProduct}
-          pendingDeleteId={pendingDeleteId}
-          setPendingDeleteId={setPendingDeleteId}
-          statusText={statusText}
-          expirationText={expirationText}
-          onCreateCategory={categoryName => {
-            setForm(prev => ({
-              ...prev,
-              category: '__new__',
-              customCategory: categoryName,
-            }));
-            setEditingId(null);
-            setNotice({
-              type: 'success',
-              message: `Categoría "${categoryName}" agregada. Ahora puedes guardar un producto con esa categoría.`,
-            });
-          }}
-        />
+  businessConfig={businessConfig}
+  products={products}
+  filtered={filtered}
+  categories={categories}
+  category={category}
+  setCategory={setCategory}
+  deleteProduct={deleteProduct}
+  editProduct={editProduct}
+  pendingDeleteId={pendingDeleteId}
+  setPendingDeleteId={setPendingDeleteId}
+  statusText={statusText}
+  expirationText={expirationText}
+  onCreateCategory={categoryName => {
+    setForm(prev => ({
+      ...prev,
+      category: '__new__',
+      customCategory: categoryName,
+    }));
+
+    setEditingId(null);
+
+    setNotice({
+      type: 'success',
+      message: `Categoría "${categoryName}" agregada. Ahora puedes guardar un producto con esa categoría.`,
+    });
+  }}
+  onRenameCategory={async (oldName, newName) => {
+  const cleanOldName = String(oldName || '').trim();
+  const cleanNewName = String(newName || '').trim();
+
+  if (!currentUser?.id) {
+    setNotice({
+      type: 'error',
+      message: 'No existe una sesión activa.',
+    });
+    return false;
+  }
+
+  if (!cleanOldName || !cleanNewName || cleanOldName === cleanNewName) {
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update({
+        category: cleanNewName,
+      })
+      .eq('category', cleanOldName)
+      .eq('user_id', currentUser.id);
+
+    if (error) {
+      throw error;
+    }
+
+    if (category === cleanOldName && setCategory) {
+      setCategory(cleanNewName);
+    }
+
+    setForm(prev => ({
+      ...prev,
+      category: prev.category === cleanOldName ? cleanNewName : prev.category,
+      customCategory: prev.customCategory === cleanOldName ? cleanNewName : prev.customCategory,
+    }));
+
+    setNotice({
+      type: 'success',
+      message: `Categoría "${cleanOldName}" actualizada a "${cleanNewName}". Los productos se mantienen en la nueva categoría.`,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error al actualizar categoría:', error);
+
+    setNotice({
+      type: 'error',
+      message: `No se pudo actualizar la categoría: ${error.message}`,
+    });
+
+    return false;
+  }
+}}
+  onDeleteCategory={categoryName => {
+    setNotice({
+      type: 'success',
+      message: `Categoría "${categoryName}" eliminada.`,
+    });
+  }}
+/>
         <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 

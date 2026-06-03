@@ -140,16 +140,34 @@ export default function ProductTable({
     setEditingCategoryName('');
   }
 
-  function saveEditedCategory() {
+  async function saveEditedCategory() {
     const oldName = String(editingCategory || '').trim();
     const newName = String(editingCategoryName || '').trim();
 
-    if (!oldName || !newName) return;
-    if (oldName === 'Todas') return;
+    if (!oldName || !newName) {
+      return;
+    }
+
+    if (oldName === 'Todas') {
+      return;
+    }
+
+    if (oldName === newName) {
+      cancelEditCategory();
+      return;
+    }
 
     if (categoryExists(newName, oldName)) {
       alert(`Ya existe una categoría llamada "${newName}".`);
       return;
+    }
+
+    if (onRenameCategory) {
+      const wasRenamed = await onRenameCategory(oldName, newName);
+
+      if (wasRenamed === false) {
+        return;
+      }
     }
 
     setCustomCategories(prev => {
@@ -165,12 +183,8 @@ export default function ProductTable({
       Array.from(new Set([...prev, oldName])).filter(cat => cat !== newName)
     );
 
-    if (category === oldName) {
+    if (category === oldName && setCategory) {
       setCategory(newName);
-    }
-
-    if (onRenameCategory) {
-      onRenameCategory(oldName, newName);
     }
 
     cancelEditCategory();
