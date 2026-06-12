@@ -1430,7 +1430,7 @@ function App() {
 
     try {
       setNotice({ type: 'success', message: 'Optimizando imagen del producto...' });
-      const optimizedFile = await optimizeImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.82 });
+      const optimizedFile = await optimizeImageFile(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
       const previewUrl = await fileToDataUrl(optimizedFile);
       setForm(prev => ({ ...prev, imageUrl: previewUrl, imageFile: optimizedFile }));
       setNotice({ type: 'success', message: `Imagen optimizada. Peso final: ${(optimizedFile.size / 1024).toFixed(0)} KB.` });
