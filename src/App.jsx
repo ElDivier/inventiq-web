@@ -394,7 +394,7 @@ function App() {
       .subscribe();
 
     // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
-    const syncInterval = setInterval(refreshProducts, 45000);
+    const syncInterval = setInterval(refreshProducts, 300000);
 
     // También sincroniza cuando el usuario vuelve a la pestaña.
     const refreshWhenVisible = () => {
@@ -453,7 +453,7 @@ function App() {
       .subscribe();
 
     // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
-    const syncInterval = setInterval(refreshSales, 45000);
+    const syncInterval = setInterval(refreshSales, 300000);
 
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshSales();
@@ -496,7 +496,7 @@ function App() {
       )
       .subscribe();
 
-    const syncInterval = setInterval(refreshClients, 60000);
+    const syncInterval = setInterval(refreshClients, 300000);
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshClients();
     };
@@ -544,7 +544,7 @@ function App() {
       )
       .subscribe();
 
-    const syncInterval = setInterval(refreshProviders, 60000);
+    const syncInterval = setInterval(refreshProviders, 300000);
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshProviders();
     };
@@ -583,7 +583,7 @@ function App() {
       )
       .subscribe();
 
-    const syncInterval = setInterval(refreshPurchases, 60000);
+    const syncInterval = setInterval(refreshPurchases, 300000);
     const refreshWhenVisible = () => {
       if (!document.hidden) refreshPurchases();
     };
