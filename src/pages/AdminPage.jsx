@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
-import { businessTypes } from '../config/businessTypes';
+import { businessTypes, getBusinessConfig } from '../config/businessTypes';
 
 const STATUS_OPTIONS = [
   { value: 'activo', label: 'Activo' },
@@ -164,11 +164,15 @@ export default function AdminPage({
   const [editingClientId, setEditingClientId] = useState(null);
   const [editForm, setEditForm] = useState(DEFAULT_EDIT_FORM);
   const [savingClient, setSavingClient] = useState(false);
+  const [previewBusinessType, setPreviewBusinessType] = useState('general');
+  const [previewSaving, setPreviewSaving] = useState(false);
 
   const businessTypeOptions = getBusinessTypeOptions();
+  const previewConfig = getBusinessConfig(previewBusinessType);
 
   useEffect(() => {
     loadClients();
+    loadAdminPreviewBusinessType();
   }, []);
 
   const filteredClients = useMemo(() => {
@@ -224,6 +228,81 @@ export default function AdminPage({
 
   function setEditField(field, value) {
     setEditForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function loadAdminPreviewBusinessType() {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      const adminUser = userData?.user;
+      if (!adminUser?.id) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('business_type')
+        .eq('id', adminUser.id)
+        .maybeSingle();
+
+      if (profile?.business_type) {
+        setPreviewBusinessType(profile.business_type);
+      }
+    } catch (error) {
+      console.error('Error cargando modo de vista previa:', error);
+    }
+  }
+
+  async function applyAdminPreviewBusinessType() {
+    try {
+      setPreviewSaving(true);
+      setAdminPageNotice(null);
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      const adminUser = userData?.user;
+
+      if (!adminUser?.id) {
+        throw new Error('No se encontró la sesión del administrador.');
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: adminUser.id,
+          business_type: previewBusinessType,
+          owner_name: adminUser.email,
+          store_name: 'InventiQ Admin',
+          city: 'Administración',
+        }, { onConflict: 'id' });
+
+      if (error) {
+        throw error;
+      }
+
+      setAdminPageNotice({
+        type: 'success',
+        message: `Vista previa cambiada a ${previewConfig.label}. La página se recargará para aplicar el cambio.`,
+      });
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 900);
+    } catch (error) {
+      console.error('Error cambiando modo de vista previa:', error);
+      setAdminPageNotice({
+        type: 'error',
+        message: `No se pudo cambiar el tipo de negocio: ${error.message}`,
+      });
+    } finally {
+      setPreviewSaving(false);
+    }
   }
 
   async function loadClients() {
@@ -435,6 +514,80 @@ export default function AdminPage({
             Actualizar clientes
           </button>
         </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-sm font-black uppercase tracking-wide text-slate-500">Modo de vista previa</p>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">Revisar InventiQ como otro tipo de negocio</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              Cambia el tipo de negocio de tu cuenta administradora para revisar cómo se adaptan textos, campos y categorías.
+              Esto no cambia los clientes; solo afecta tu cuenta de administrador.
+            </p>
+          </div>
+
+          <div className="w-full rounded-3xl border border-slate-100 bg-slate-50 p-4 xl:max-w-md">
+            <label className="block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">Tipo de negocio para revisar</span>
+              <select
+                value={previewBusinessType}
+                onChange={event => setPreviewBusinessType(event.target.value)}
+                className="input-admin"
+              >
+                {businessTypeOptions.map(option => {
+                  const value = option.id || option.value || option.key || 'general';
+                  const label = option.name || option.label || option.title || value;
+                  return (
+                    <option key={value} value={value}>{label}</option>
+                  );
+                })}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={applyAdminPreviewBusinessType}
+              disabled={previewSaving}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {previewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+              Aplicar vista de {previewConfig.label}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Nombre de producto</p>
+            <p className="mt-2 text-sm font-bold text-emerald-950">{previewConfig.productNamePlaceholder}</p>
+          </div>
+
+          <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-blue-700">Categorías sugeridas</p>
+            <p className="mt-2 text-sm font-bold text-blue-950">{previewConfig.categoryPlaceholder}</p>
+          </div>
+
+          <div className="rounded-3xl border border-amber-100 bg-amber-50 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-amber-700">Caducidad</p>
+            <p className="mt-2 text-sm font-bold text-amber-950">
+              {previewConfig.usesExpiration ? 'Activa para productos o insumos perecibles' : 'No activa para este tipo de negocio'}
+            </p>
+          </div>
+        </div>
+
+        {Array.isArray(previewConfig.defaultCategories) && previewConfig.defaultCategories.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Categorías base de este negocio</p>
+            <div className="flex flex-wrap gap-2">
+              {previewConfig.defaultCategories.slice(0, 12).map(item => (
+                <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
