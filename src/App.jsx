@@ -936,21 +936,48 @@ function App() {
 
   async function loadProductsFromSupabase(userId, showLoader = true) {
     if (showLoader) setProductsLoading(true);
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
 
-    if (error) {
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      let to = pageSize - 1;
+      let allProducts = [];
+      let keepLoading = true;
+
+      while (keepLoading) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          throw error;
+        }
+
+        const currentBatch = data || [];
+        allProducts = [...allProducts, ...currentBatch];
+
+        if (currentBatch.length < pageSize) {
+          keepLoading = false;
+        } else {
+          from += pageSize;
+          to += pageSize;
+        }
+      }
+
+      setProducts(allProducts.map(mapProductFromDb));
+    } catch (error) {
       console.error('Error cargando productos:', error);
-      setNotice({ type: 'error', message: 'No se pudieron cargar los productos desde Supabase.' });
-      if (showLoader) setProductsLoading(false);
-      return;
-    }
 
-    setProducts((data || []).map(mapProductFromDb));
-    if (showLoader) setProductsLoading(false);
+      setNotice({
+        type: 'error',
+        message: `No se pudieron cargar los productos desde Supabase: ${error.message}`,
+      });
+    } finally {
+      if (showLoader) setProductsLoading(false);
+    }
   }
 
   async function loadSalesFromSupabase(userId, showLoader = true) {

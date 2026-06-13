@@ -242,8 +242,8 @@ export default function ProductTable({
     printSelectedBarcodeLabels(selectedProducts, {
       columns: Number(labelColumns || 2),
       copies: Number(labelCopies || 1),
-      labelWidth: 44,
-      labelHeight: 33,
+      labelWidth: 51,
+      labelHeight: 25,
     });
   }
 

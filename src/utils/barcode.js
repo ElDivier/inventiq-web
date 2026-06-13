@@ -137,8 +137,8 @@ export function printProductBarcodeLabel(product) {
   openPrintWindow(buildBarcodeLabelHtml([product], {
     columns: 1,
     copies: 1,
-    labelWidth: 44,
-    labelHeight: 33,
+    labelWidth: 51,
+    labelHeight: 25,
   }));
 }
 
