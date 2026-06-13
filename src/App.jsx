@@ -170,6 +170,45 @@ function getAvatarLetter(user) {
   return source.charAt(0).toUpperCase() || 'I';
 }
 
+function getAccountAccessBlockReason(profile, email) {
+  const currentEmail = String(email || '').trim().toLowerCase();
+  const adminEmails = ADMIN_EMAILS.map(adminEmail =>
+    String(adminEmail || '').trim().toLowerCase()
+  );
+
+  if (adminEmails.includes(currentEmail)) {
+    return null;
+  }
+
+  if (!profile) {
+    return null;
+  }
+
+  const status = String(profile.subscription_status || '').trim().toLowerCase();
+
+  if (profile.is_suspended || status === 'suspendido') {
+    return 'Tu cuenta de InventiQ está suspendida. Comunícate con InventiQ para reactivar tu acceso.';
+  }
+
+  if (status === 'vencido') {
+    return 'Tu plan de InventiQ está vencido. Comunícate con InventiQ para renovar tu acceso.';
+  }
+
+  if (profile.subscription_end) {
+    const today = new Date();
+    const endDate = new Date(profile.subscription_end);
+
+    today.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (!Number.isNaN(endDate.getTime()) && endDate < today) {
+      return 'Tu plan de InventiQ ha vencido. Comunícate con InventiQ para renovar tu acceso.';
+    }
+  }
+
+  return null;
+}
+
 function getUsersFromStorage() {
   return loadFromStorage(STORAGE_KEYS.users, initialUsers);
 }
@@ -632,6 +671,21 @@ function App() {
       console.error('Error cargando perfil:', error);
     }
 
+    const accessBlockReason = getAccountAccessBlockReason(profile, sessionUser.email);
+
+    if (accessBlockReason) {
+      await supabase.auth.signOut();
+      localStorage.removeItem(STORAGE_KEYS.currentUser);
+      setCurrentUser(null);
+      setActive('Inicio');
+      setAuthMode('login');
+      setAuthNotice({
+        type: 'error',
+        message: accessBlockReason,
+      });
+      return;
+    }
+
     setCurrentUser({
       id: sessionUser.id,
       email: sessionUser.email,
@@ -646,6 +700,12 @@ function App() {
       receiptFooter: profile?.receipt_footer || 'Gracias por su compra.',
       logoUrl: profile?.logo_url || '',
       businessType: profile?.business_type || 'general',
+      plan: profile?.plan || 'anual',
+      subscriptionStatus: profile?.subscription_status || 'activo',
+      subscriptionStart: profile?.subscription_start || '',
+      subscriptionEnd: profile?.subscription_end || '',
+      isSuspended: Boolean(profile?.is_suspended),
+      maxProducts: profile?.max_products || 2000,
     });
   }
 
