@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Edit, Package, Plus, Printer, Trash2 } from 'lucide-react';
 import { MAX_LABELS_WITHOUT_CONFIRM } from '../config/constants';
 import { getProductVariantText } from '../utils/products';
@@ -7,11 +7,88 @@ import {
   printSelectedBarcodeLabels,
 } from '../utils/barcode';
 
+const PRODUCTS_PER_PAGE = 15;
+const CATEGORIES_PER_PAGE = 15;
+const DEFAULT_LABEL_WIDTH = 51;
+const DEFAULT_LABEL_HEIGHT = 25;
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+  return `$${number.toFixed(2)}`;
+}
+
+function getStockBadge(product, statusText) {
+  const result = typeof statusText === 'function' ? statusText(product) : null;
+
+  if (typeof result === 'string') {
+    return {
+      label: result,
+      className: 'bg-slate-100 text-slate-700',
+    };
+  }
+
+  if (result?.className) {
+    return {
+      label: result.label || product.status || 'Sin estado',
+      className: result.className,
+    };
+  }
+
+  if (result?.color) {
+    return {
+      label: result.label || product.status || 'Sin estado',
+      className: result.color,
+    };
+  }
+
+  if (Number(product.stock || 0) <= 0) {
+    return {
+      label: 'Sin stock',
+      className: 'bg-red-50 text-red-700',
+    };
+  }
+
+  if (Number(product.stock || 0) <= Number(product.minStock || 0)) {
+    return {
+      label: 'Stock bajo',
+      className: 'bg-amber-50 text-amber-700',
+    };
+  }
+
+  return {
+    label: product.status || 'Activo',
+    className: 'bg-emerald-50 text-emerald-700',
+  };
+}
+
+function getExpirationBadge(product, expirationText) {
+  if (typeof expirationText !== 'function') return null;
+  const result = expirationText(product);
+
+  if (!result) return null;
+
+  if (typeof result === 'string') {
+    return {
+      label: result,
+      className: 'bg-slate-100 text-slate-700',
+    };
+  }
+
+  return {
+    label: result.label || '',
+    className: result.className || result.color || 'bg-slate-100 text-slate-700',
+  };
+}
+
 export default function ProductTable({
   businessConfig,
-  products = [],
-  filtered = [],
-  categories = [],
+  products,
+  filtered,
+  categories,
   category,
   setCategory,
   deleteProduct,
@@ -24,33 +101,65 @@ export default function ProductTable({
   onRenameCategory,
   onDeleteCategory,
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [categorySearch, setCategorySearch] = useState('');
   const [selectedLabelIds, setSelectedLabelIds] = useState([]);
   const [labelColumns, setLabelColumns] = useState('2');
   const [labelCopies, setLabelCopies] = useState('1');
-  const [currentPage, setCurrentPage] = useState(1);
-
   const [creatingCategory, setCreatingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [customCategories, setCustomCategories] = useState([]);
-  const [deletedCategories, setDeletedCategories] = useState([]);
-
-  const [editingCategory, setEditingCategory] = useState('');
+  const [newCategory, setNewCategory] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
-  const [pendingDeleteCategory, setPendingDeleteCategory] = useState('');
+  const [categoryNotice, setCategoryNotice] = useState(null);
 
-  const productsPerPage = 15;
+  const totalProducts = filtered.length;
+  const totalPages = Math.max(Math.ceil(totalProducts / PRODUCTS_PER_PAGE), 1);
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * PRODUCTS_PER_PAGE;
+  const paginatedProducts = filtered.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
 
-  const visibleCategories = Array.from(
-    new Set([...categories, ...customCategories].filter(Boolean))
-  ).filter(cat => !deletedCategories.includes(cat));
+  const allCategories = useMemo(() => {
+    const cleanCategories = (categories || [])
+      .map(item => normalizeText(item))
+      .filter(Boolean);
 
-  const totalPages = Math.max(Math.ceil(filtered.length / productsPerPage), 1);
-  const safePage = Math.min(currentPage, totalPages);
-  const startIndex = (safePage - 1) * productsPerPage;
-  const paginatedProducts = filtered.slice(startIndex, startIndex + productsPerPage);
-  const selectedProducts = filtered.filter(product => selectedLabelIds.includes(product.id));
+    const unique = Array.from(new Set(['Todas', ...cleanCategories]));
+    return unique;
+  }, [categories]);
 
-  const allVisibleSelected =
+  const normalCategories = useMemo(
+    () => allCategories.filter(item => item !== 'Todas'),
+    [allCategories]
+  );
+
+  const searchedCategories = useMemo(() => {
+    const text = categorySearch.trim().toLowerCase();
+    if (!text) return normalCategories;
+
+    return normalCategories.filter(item =>
+      item.toLowerCase().includes(text)
+    );
+  }, [normalCategories, categorySearch]);
+
+  const totalCategoryPages = Math.max(
+    Math.ceil(searchedCategories.length / CATEGORIES_PER_PAGE),
+    1
+  );
+
+  const safeCategoryPage = Math.min(categoryPage, totalCategoryPages);
+  const categoryStartIndex = (safeCategoryPage - 1) * CATEGORIES_PER_PAGE;
+  const paginatedCategories = searchedCategories.slice(
+    categoryStartIndex,
+    categoryStartIndex + CATEGORIES_PER_PAGE
+  );
+
+  const selectedProducts = useMemo(() => {
+    const selectedSet = new Set(selectedLabelIds.map(String));
+    return products.filter(product => selectedSet.has(String(product.id)));
+  }, [products, selectedLabelIds]);
+
+  const allPageProductsSelected =
     paginatedProducts.length > 0 &&
     paginatedProducts.every(product => selectedLabelIds.includes(product.id));
 
@@ -58,25 +167,33 @@ export default function ProductTable({
     setCurrentPage(1);
   }, [category, filtered.length]);
 
-  function getCategoryCount(categoryName) {
-    if (categoryName === 'Todas') {
-      return products.length;
-    }
+  useEffect(() => {
+    setCategoryPage(1);
+  }, [categorySearch, searchedCategories.length]);
 
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (categoryPage > totalCategoryPages) {
+      setCategoryPage(totalCategoryPages);
+    }
+  }, [categoryPage, totalCategoryPages]);
+
+  function getCategoryCount(categoryName) {
+    if (categoryName === 'Todas') return products.length;
     return products.filter(product => product.category === categoryName).length;
   }
 
-  function categoryExists(categoryName, ignoredCategory = '') {
-    const cleanName = String(categoryName || '').trim().toLowerCase();
-    const ignoredName = String(ignoredCategory || '').trim().toLowerCase();
-
-    return visibleCategories.some(cat => {
-      const currentName = String(cat || '').trim().toLowerCase();
-      return currentName === cleanName && currentName !== ignoredName;
-    });
+  function selectCategory(categoryName) {
+    setCategory(categoryName);
+    setPendingDeleteId(null);
   }
 
-  function toggleLabelProduct(productId) {
+  function toggleSelectedLabel(productId) {
     setSelectedLabelIds(prev =>
       prev.includes(productId)
         ? prev.filter(id => id !== productId)
@@ -84,336 +201,535 @@ export default function ProductTable({
     );
   }
 
-  function toggleAllVisibleProducts() {
-    if (allVisibleSelected) {
-      setSelectedLabelIds(prev =>
-        prev.filter(id => !paginatedProducts.some(product => product.id === id))
-      );
+  function togglePageSelection() {
+    const pageIds = paginatedProducts.map(product => product.id);
+
+    if (allPageProductsSelected) {
+      setSelectedLabelIds(prev => prev.filter(id => !pageIds.includes(id)));
       return;
     }
 
-    setSelectedLabelIds(prev =>
-      Array.from(new Set([...prev, ...paginatedProducts.map(product => product.id)]))
-    );
+    setSelectedLabelIds(prev => Array.from(new Set([...prev, ...pageIds])));
   }
 
-  function saveNewCategory() {
-    const cleanName = String(newCategoryName || '').trim();
-
-    if (!cleanName) return;
-
-    if (!categoryExists(cleanName)) {
-      setCustomCategories(prev => [...prev, cleanName]);
-    }
-
-    setDeletedCategories(prev =>
-      prev.filter(item => String(item).toLowerCase() !== cleanName.toLowerCase())
-    );
-
-    setCategory(cleanName);
-
-    if (onCreateCategory) {
-      onCreateCategory(cleanName);
-    }
-
-    setNewCategoryName('');
-    setCreatingCategory(false);
+  function clearSelectedLabels() {
+    setSelectedLabelIds([]);
   }
 
-  function cancelNewCategory() {
-    setNewCategoryName('');
-    setCreatingCategory(false);
-  }
-
-  function startEditCategory(categoryName) {
-    if (categoryName === 'Todas') return;
-
-    setEditingCategory(categoryName);
-    setEditingCategoryName(categoryName);
-    setPendingDeleteCategory('');
-    setCreatingCategory(false);
-    setNewCategoryName('');
-  }
-
-  function cancelEditCategory() {
-    setEditingCategory('');
-    setEditingCategoryName('');
-  }
-
-  async function saveEditedCategory() {
-    const oldName = String(editingCategory || '').trim();
-    const newName = String(editingCategoryName || '').trim();
-
-    if (!oldName || !newName) {
-      return;
-    }
-
-    if (oldName === 'Todas') {
-      return;
-    }
-
-    if (oldName === newName) {
-      cancelEditCategory();
-      return;
-    }
-
-    if (categoryExists(newName, oldName)) {
-      alert(`Ya existe una categoría llamada "${newName}".`);
-      return;
-    }
-
-    if (onRenameCategory) {
-      const wasRenamed = await onRenameCategory(oldName, newName);
-
-      if (wasRenamed === false) {
-        return;
-      }
-    }
-
-    setCustomCategories(prev => {
-      const updated = prev.map(cat => (cat === oldName ? newName : cat));
-      const exists = updated.some(cat => cat === newName);
-
-      return exists
-        ? Array.from(new Set(updated))
-        : Array.from(new Set([...updated, newName]));
+  function printOneLabel(product) {
+    printProductBarcodeLabel(product, {
+      labelWidth: DEFAULT_LABEL_WIDTH,
+      labelHeight: DEFAULT_LABEL_HEIGHT,
     });
-
-    setDeletedCategories(prev =>
-      Array.from(new Set([...prev, oldName])).filter(cat => cat !== newName)
-    );
-
-    if (category === oldName && setCategory) {
-      setCategory(newName);
-    }
-
-    cancelEditCategory();
-  }
-
-  function askDeleteCategory(categoryName) {
-    if (categoryName === 'Todas') return;
-
-    setPendingDeleteCategory(categoryName);
-    setEditingCategory('');
-    setEditingCategoryName('');
-    setCreatingCategory(false);
-    setNewCategoryName('');
-  }
-
-  function cancelDeleteCategory() {
-    setPendingDeleteCategory('');
-  }
-
-  function confirmDeleteCategory(categoryName) {
-    if (categoryName === 'Todas') return;
-
-    const count = getCategoryCount(categoryName);
-
-    if (count > 0) {
-      alert(`No puedes borrar la categoría "${categoryName}" porque tiene ${count} producto(s). Primero cambia esos productos a otra categoría.`);
-      setPendingDeleteCategory('');
-      return;
-    }
-
-    setCustomCategories(prev => prev.filter(cat => cat !== categoryName));
-    setDeletedCategories(prev => Array.from(new Set([...prev, categoryName])));
-
-    if (category === categoryName) {
-      setCategory('Todas');
-    }
-
-    if (onDeleteCategory) {
-      onDeleteCategory(categoryName);
-    }
-
-    setPendingDeleteCategory('');
   }
 
   function printSelectedLabels() {
-    const totalLabels = selectedProducts.length * Math.max(Number(labelCopies || 1), 1);
+    if (selectedProducts.length === 0) return;
+
+    const copies = Number(labelCopies || 1);
+    const totalLabels = selectedProducts.length * copies;
 
     if (
       totalLabels > MAX_LABELS_WITHOUT_CONFIRM &&
-      !window.confirm(`Vas a generar ${totalLabels} etiquetas. Esto puede tardar y abrir una impresión pesada. ¿Deseas continuar?`)
+      !window.confirm(`Vas a imprimir ${totalLabels} etiquetas. ¿Deseas continuar?`)
     ) {
       return;
     }
 
     printSelectedBarcodeLabels(selectedProducts, {
       columns: Number(labelColumns || 2),
-      copies: Number(labelCopies || 1),
-      labelWidth: 51,
-      labelHeight: 25,
+      copies,
+      labelWidth: DEFAULT_LABEL_WIDTH,
+      labelHeight: DEFAULT_LABEL_HEIGHT,
     });
   }
 
-  return (
-    <div className="order-2 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
-      <div className="border-b border-slate-100 p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-xl font-bold text-slate-800">
-              <Package className="h-5 w-5 text-emerald-600" />
-              Lista de productos
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Selecciona productos y genera etiquetas por columnas.
-            </p>
-          </div>
+  function startCreateCategory() {
+    setCreatingCategory(true);
+    setNewCategory('');
+    setCategoryNotice(null);
+  }
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 xl:w-[520px]">
+  function cancelCreateCategory() {
+    setCreatingCategory(false);
+    setNewCategory('');
+    setCategoryNotice(null);
+  }
+
+  function saveNewCategory() {
+    const cleanName = normalizeText(newCategory);
+
+    if (!cleanName) {
+      setCategoryNotice({ type: 'error', message: 'Escribe el nombre de la categoría.' });
+      return;
+    }
+
+    if (allCategories.includes(cleanName)) {
+      setCategoryNotice({ type: 'error', message: 'Esa categoría ya existe.' });
+      return;
+    }
+
+    if (typeof onCreateCategory === 'function') {
+      onCreateCategory(cleanName);
+    }
+
+    setCreatingCategory(false);
+    setNewCategory('');
+    setCategoryNotice({ type: 'success', message: `Categoría "${cleanName}" creada.` });
+  }
+
+  function startRenameCategory(categoryName) {
+    if (categoryName === 'Todas') return;
+    setEditingCategory(categoryName);
+    setEditingCategoryName(categoryName);
+    setCategoryNotice(null);
+  }
+
+  function cancelRenameCategory() {
+    setEditingCategory(null);
+    setEditingCategoryName('');
+    setCategoryNotice(null);
+  }
+
+  async function saveRenameCategory() {
+    const oldName = normalizeText(editingCategory);
+    const newName = normalizeText(editingCategoryName);
+
+    if (!oldName || !newName) {
+      setCategoryNotice({ type: 'error', message: 'Escribe el nuevo nombre de la categoría.' });
+      return;
+    }
+
+    if (oldName === newName) {
+      cancelRenameCategory();
+      return;
+    }
+
+    if (allCategories.includes(newName)) {
+      setCategoryNotice({ type: 'error', message: 'Ya existe una categoría con ese nombre.' });
+      return;
+    }
+
+    if (typeof onRenameCategory !== 'function') {
+      setCategoryNotice({ type: 'error', message: 'No se encontró la función para renombrar categorías.' });
+      return;
+    }
+
+    const ok = await onRenameCategory(oldName, newName);
+
+    if (ok !== false) {
+      setEditingCategory(null);
+      setEditingCategoryName('');
+      setCategoryNotice({ type: 'success', message: `Categoría actualizada a "${newName}".` });
+    }
+  }
+
+  function removeCategory(categoryName) {
+    const cleanName = normalizeText(categoryName);
+    const count = getCategoryCount(cleanName);
+
+    if (!cleanName || cleanName === 'Todas') return;
+
+    if (count > 0) {
+      setCategoryNotice({
+        type: 'error',
+        message: `No puedes eliminar "${cleanName}" porque tiene ${count} producto(s). Primero cambia esos productos a otra categoría.`,
+      });
+      return;
+    }
+
+    if (!window.confirm(`¿Eliminar la categoría "${cleanName}"?`)) return;
+
+    if (typeof onDeleteCategory === 'function') {
+      onDeleteCategory(cleanName);
+    }
+
+    if (category === cleanName) {
+      setCategory('Todas');
+    }
+
+    setCategoryNotice({ type: 'success', message: `Categoría "${cleanName}" eliminada.` });
+  }
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
+            <Package className="h-5 w-5 text-emerald-600" /> Productos
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Mostrando {totalProducts === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} producto(s).
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_auto_auto] sm:items-end">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Columnas</span>
             <select
               value={labelColumns}
               onChange={event => setLabelColumns(event.target.value)}
-              className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
             >
               <option value="1">1 columna</option>
               <option value="2">2 columnas</option>
               <option value="3">3 columnas</option>
             </select>
+          </label>
 
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Copias</span>
             <input
               type="number"
               min="1"
               value={labelCopies}
               onChange={event => setLabelCopies(event.target.value)}
-              className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
-              placeholder="Copias"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
             />
+          </label>
 
-            <button
-              type="button"
-              onClick={toggleAllVisibleProducts}
-              className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
-            >
-              {allVisibleSelected ? 'Quitar página' : 'Seleccionar página'}
-            </button>
-
-            <button
-              type="button"
-              onClick={printSelectedLabels}
-              className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"
-            >
-              <Printer className="mr-1 inline h-4 w-4" />
-              Imprimir {selectedProducts.length}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={printSelectedLabels}
+            disabled={selectedProducts.length === 0}
+            className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Printer className="mr-2 inline h-4 w-4" />
+            Imprimir {selectedProducts.length || ''}
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
-        <aside className="border-b border-slate-100 p-4 lg:border-b-0 lg:border-r">
-          <h4 className="mb-4 font-semibold">Categorías</h4>
+      <div className="grid grid-cols-1 gap-0 xl:grid-cols-[280px_1fr]">
+        <aside className="border-b border-slate-100 p-5 xl:border-b-0 xl:border-r">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Categorías</h4>
+              <p className="text-xs text-slate-400">
+                {normalCategories.length} categoría(s)
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={startCreateCategory}
+              className="rounded-xl bg-emerald-600 p-2 text-white hover:bg-emerald-700"
+              title="Crear categoría"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+
+          <input
+            value={categorySearch}
+            onChange={event => setCategorySearch(event.target.value)}
+            placeholder="Buscar categoría..."
+            className="mb-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+          />
+
+          {categoryNotice && (
+            <div className={`mb-3 rounded-2xl p-3 text-xs font-semibold ${categoryNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              {categoryNotice.message}
+            </div>
+          )}
+
+          {creatingCategory && (
+            <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+              <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800">
+                Nueva categoría
+              </label>
+              <input
+                value={newCategory}
+                onChange={event => setNewCategory(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') saveNewCategory();
+                  if (event.key === 'Escape') cancelCreateCategory();
+                }}
+                className="mt-2 w-full rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                placeholder="Ej: Mujer - Blusas"
+                autoFocus
+              />
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={saveNewCategory}
+                  className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelCreateCategory}
+                  className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
-            {visibleCategories.map(cat => {
-              const count = getCategoryCount(cat);
-              const selected = category === cat;
-              const isEditing = editingCategory === cat;
-              const isConfirmingDelete = pendingDeleteCategory === cat;
-              const canManageCategory = cat !== 'Todas';
+            <CategoryButton
+              categoryName="Todas"
+              count={getCategoryCount('Todas')}
+              active={category === 'Todas'}
+              onSelect={() => selectCategory('Todas')}
+            />
 
-              return (
-                <div
-                  key={cat}
-                  className={`rounded-2xl px-3 py-3 text-left text-sm ${
-                    selected ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'
-                  }`}
-                >
-                  {isEditing && (
-                    <div>
-                      <input
-                        value={editingCategoryName}
-                        onChange={event => setEditingCategoryName(event.target.value)}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            saveEditedCategory();
-                          }
+            {paginatedCategories.map(categoryName => {
+              const count = getCategoryCount(categoryName);
+              const isEditing = editingCategory === categoryName;
 
-                          if (event.key === 'Escape') {
-                            event.preventDefault();
-                            cancelEditCategory();
-                          }
-                        }}
-                        autoFocus
-                        className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200"
-                        placeholder="Nuevo nombre"
-                      />
-
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={saveEditedCategory}
-                          className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
-                        >
-                          Guardar
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={cancelEditCategory}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {isConfirmingDelete && !isEditing && (
-                    <div className="flex items-center gap-2">
+              if (isEditing) {
+                return (
+                  <div key={categoryName} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                    <input
+                      value={editingCategoryName}
+                      onChange={event => setEditingCategoryName(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') saveRenameCategory();
+                        if (event.key === 'Escape') cancelRenameCategory();
+                      }}
+                      className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+                      autoFocus
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => confirmDeleteCategory(cat)}
-                        className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
+                        onClick={saveRenameCategory}
+                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
                       >
-                        Confirmar
+                        Guardar
                       </button>
-
                       <button
                         type="button"
-                        onClick={cancelDeleteCategory}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                        onClick={cancelRenameCategory}
+                        className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
                       >
                         Cancelar
                       </button>
                     </div>
-                  )}
+                  </div>
+                );
+              }
 
-                  {!isEditing && !isConfirmingDelete && (
-                    <div className="flex items-start justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setCategory(cat)}
-                        className="min-w-0 flex-1 text-left"
-                      >
-                        <span className="block whitespace-normal break-words pr-1 leading-tight">
-                          {cat}
+              return (
+                <div key={categoryName} className="group flex items-center gap-2">
+                  <CategoryButton
+                    categoryName={categoryName}
+                    count={count}
+                    active={category === categoryName}
+                    onSelect={() => selectCategory(categoryName)}
+                  />
+                  <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => startRenameCategory(categoryName)}
+                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+                      title="Renombrar categoría"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeCategory(categoryName)}
+                      className="rounded-xl border border-red-100 bg-white p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                      title="Eliminar categoría"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {searchedCategories.length === 0 && (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+              No se encontraron categorías.
+            </div>
+          )}
+
+          {searchedCategories.length > CATEGORIES_PER_PAGE && (
+            <div className="mt-4 flex items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <button
+                type="button"
+                disabled={safeCategoryPage <= 1}
+                onClick={() => setCategoryPage(page => Math.max(page - 1, 1))}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Anterior
+              </button>
+
+              <span className="font-bold text-slate-700">
+                {safeCategoryPage} / {totalCategoryPages}
+              </span>
+
+              <button
+                type="button"
+                disabled={safeCategoryPage >= totalCategoryPages}
+                onClick={() => setCategoryPage(page => Math.min(page + 1, totalCategoryPages))}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 font-bold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
+        </aside>
+
+        <div className="min-w-0 p-5">
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+              <input
+                type="checkbox"
+                checked={allPageProductsSelected}
+                onChange={togglePageSelection}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Seleccionar productos de esta página
+            </label>
+
+            {selectedProducts.length > 0 && (
+              <button
+                type="button"
+                onClick={clearSelectedLabels}
+                className="text-sm font-bold text-slate-500 hover:text-slate-700"
+              >
+                Limpiar selección ({selectedProducts.length})
+              </button>
+            )}
+          </div>
+
+          {paginatedProducts.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 p-10 text-center">
+              <Package className="mx-auto h-10 w-10 text-slate-300" />
+              <h4 className="mt-3 text-lg font-bold text-slate-700">No hay productos para mostrar</h4>
+              <p className="mt-1 text-sm text-slate-500">
+                Cambia la categoría o importa productos desde Excel.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-3xl border border-slate-100">
+              <div className="hidden bg-slate-50 px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:gap-3">
+                <span />
+                <span>Producto</span>
+                <span>Categoría</span>
+                <span>Precio</span>
+                <span>Stock</span>
+                <span>Estado</span>
+                <span className="text-right">Acciones</span>
+              </div>
+
+              <div className="divide-y divide-slate-100">
+                {paginatedProducts.map(product => {
+                  const stockBadge = getStockBadge(product, statusText);
+                  const expirationBadge = businessConfig?.usesExpiration ? getExpirationBadge(product, expirationText) : null;
+                  const variantText = getProductVariantText(product);
+                  const isPendingDelete = pendingDeleteId === product.id;
+                  const isSelected = selectedLabelIds.includes(product.id);
+
+                  return (
+                    <div key={product.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:items-center">
+                      <div className="flex items-center lg:block">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectedLabel(product.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-3">
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-12 w-12 rounded-2xl object-cover ring-1 ring-slate-100"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                              <Package className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-bold text-slate-900">{product.name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {product.sku || 'Sin SKU'} {product.barcode ? `· ${product.barcode}` : ''}
+                            </p>
+                            {variantText && (
+                              <p className="mt-1 text-xs text-slate-400">{variantText}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                          {product.category || 'Sin categoría'}
                         </span>
-                      </button>
+                      </div>
 
-                      <div className="flex shrink-0 items-center gap-1 self-start">
-                        <span className="rounded-full bg-white px-2 py-1 text-xs text-slate-500 shadow-sm">
-                          {count}
+                      <div className="text-sm font-bold text-slate-800">
+                        {formatMoney(product.price)}
+                      </div>
+
+                      <div className="text-sm text-slate-600">
+                        <span className="font-bold text-slate-900">{product.stock}</span>
+                        <span className="text-slate-400"> / mín. {product.minStock}</span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${stockBadge.className}`}>
+                          {stockBadge.label}
                         </span>
+                        {expirationBadge?.label && (
+                          <span className={`rounded-full px-3 py-1 text-xs font-bold ${expirationBadge.className}`}>
+                            {expirationBadge.label}
+                          </span>
+                        )}
+                      </div>
 
-                        {canManageCategory && (
+                      <div className="flex items-center justify-start gap-2 lg:justify-end">
+                        {isPendingDelete ? (
                           <>
                             <button
                               type="button"
-                              onClick={() => startEditCategory(cat)}
-                              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                              title="Editar categoría"
+                              onClick={() => deleteProduct(product.id)}
+                              className="rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+                            >
+                              Sí
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteId(null)}
+                              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                            >
+                              No
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => printOneLabel(product)}
+                              className="rounded-xl border border-emerald-100 p-2 text-emerald-600 hover:bg-emerald-50"
+                              title="Imprimir etiqueta"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => editProduct(product)}
+                              className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+                              title="Editar producto"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
-
                             <button
                               type="button"
-                              onClick={() => askDeleteCategory(cat)}
-                              className="rounded-xl border border-red-100 bg-white p-2 text-red-500 hover:bg-red-50"
-                              title="Eliminar categoría"
+                              onClick={() => setPendingDeleteId(product.id)}
+                              className="rounded-xl border border-red-100 p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                              title="Eliminar producto"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -421,247 +737,61 @@ export default function ProductTable({
                         )}
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-          {creatingCategory ? (
-            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-              <input
-                value={newCategoryName}
-                onChange={event => setNewCategoryName(event.target.value)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    saveNewCategory();
-                  }
-
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    cancelNewCategory();
-                  }
-                }}
-                autoFocus
-                className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
-                placeholder="Nombre de categoría"
-              />
-
-              <div className="mt-2 grid grid-cols-2 gap-2">
+          {totalProducts > PRODUCTS_PER_PAGE && (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                Mostrando {startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} producto(s)
+              </span>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={saveNewCategory}
-                  className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Agregar
+                  Anterior
                 </button>
-
+                <span className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                  Página {safeCurrentPage} de {totalPages}
+                </span>
                 <button
                   type="button"
-                  onClick={cancelNewCategory}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Cancelar
+                  Siguiente
                 </button>
               </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setCreatingCategory(true);
-                setEditingCategory('');
-                setEditingCategoryName('');
-                setPendingDeleteCategory('');
-              }}
-              className="mt-6 w-full rounded-2xl border border-slate-200 px-4 py-3 font-medium hover:bg-slate-50"
-            >
-              <Plus className="mr-2 inline h-4 w-4" />
-              Nueva categoría
-            </button>
           )}
-        </aside>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-5 py-4">Etiq.</th>
-                <th className="px-5 py-4">Producto</th>
-                <th className="px-5 py-4">Categoría</th>
-                <th className="px-5 py-4">Precio</th>
-                <th className="px-5 py-4">Stock</th>
-                <th className="px-5 py-4">Estado</th>
-                <th className="px-5 py-4">Acciones</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {paginatedProducts.map(product => {
-                const stockState = statusText
-                  ? statusText(product)
-                  : { label: 'Disponible', color: 'text-emerald-600', badge: 'bg-emerald-50 text-emerald-700' };
-
-                const expirationState = expirationText ? expirationText(product) : null;
-                const isDeleting = pendingDeleteId === product.id;
-
-                return (
-                  <tr key={product.id} className="hover:bg-slate-50/70">
-                    <td className="px-5 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedLabelIds.includes(product.id)}
-                        onChange={() => toggleLabelProduct(product.id)}
-                        className="h-4 w-4"
-                      />
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        {product.imageUrl ? (
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            loading="lazy"
-                            className="h-12 w-12 rounded-xl object-cover shadow-sm"
-                          />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl">
-                            📦
-                          </div>
-                        )}
-
-                        <div>
-                          <p className="font-bold text-slate-900">{product.name}</p>
-
-                          <p className="text-xs text-slate-500">
-                            SKU: {product.sku}
-                            {product.barcode ? ` · Barra: ${product.barcode}` : ''}
-                          </p>
-
-                          {businessConfig?.productExtraFields && (
-                            <p className="text-xs font-semibold text-emerald-700">
-                              {getProductVariantText(product) || 'Sin variante'}
-                            </p>
-                          )}
-
-                          {businessConfig?.usesExpiration && product.expirationDate && (
-                            <p className={`text-xs ${expirationState?.color || ''}`}>
-                              Caduca: {product.expirationDate} · {expirationState?.label || ''}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">{product.category}</td>
-
-                    <td className="px-5 py-4 font-medium">
-                      ${Number(product.price || 0).toFixed(2)}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <p className="font-bold">{product.stock}</p>
-                      <p className={`text-xs ${stockState.color}`}>{stockState.label}</p>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockState.badge}`}>
-                        {product.status}
-                      </span>
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {isDeleting ? (
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => deleteProduct(product.id)}
-                            className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600"
-                          >
-                            Confirmar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteId(null)}
-                            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => printProductBarcodeLabel(product)}
-                            className="rounded-xl border border-emerald-100 p-2 text-emerald-600 hover:bg-emerald-50"
-                            title="Imprimir código"
-                          >
-                            <Printer className="h-4 w-4" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => editProduct(product)}
-                            className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50"
-                            title="Editar producto"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteId(product.id)}
-                            className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"
-                            title="Eliminar producto"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 lg:flex-row lg:items-center lg:justify-between">
-            <span>
-              Mostrando {filtered.length === 0 ? 0 : startIndex + 1}
-              -
-              {Math.min(startIndex + productsPerPage, filtered.length)}
-              {' '}de {filtered.length} filtrados · Total {products.length} productos · Seleccionados para etiquetas: {selectedProducts.length}
-            </span>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={safePage <= 1}
-                onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Anterior
-              </button>
-
-              <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                Página {safePage} de {totalPages}
-              </span>
-
-              <button
-                type="button"
-                disabled={safePage >= totalPages}
-                onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
         </div>
       </div>
-    </div>
+    </section>
+  );
+}
+
+function CategoryButton({ categoryName, count, active, onSelect }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold transition ${
+        active
+          ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100'
+          : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+      }`}
+    >
+      <span className="truncate">{categoryName}</span>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+        {count}
+      </span>
+    </button>
   );
 }
