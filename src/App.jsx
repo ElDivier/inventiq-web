@@ -127,6 +127,7 @@ import SettingsPage from './pages/SettingsPage';
 import CashPage from './pages/CashPage';
 import ReportsPage from './pages/ReportsPage';
 import AuthPage from './pages/AuthPage';
+import FoodSalesPage from './pages/FoodSalesPage';
 import ProvidersPage from './pages/ProvidersPage';
 import { menu } from './config/menu';
 import {
@@ -1557,9 +1558,11 @@ function App() {
     return { product: selectedProduct || null, quantity, subtotal, discountType, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
   }
 
-  function addSaleItem() {
-    const product = storeProducts.find(p => String(p.id) === String(saleForm.productId));
-    const quantity = Number(saleForm.quantity || 0);
+  function addSaleItem(productIdOverride = null, quantityOverride = null) {
+    const selectedProductId = productIdOverride ?? saleForm.productId;
+    const selectedQuantity = quantityOverride ?? saleForm.quantity;
+    const product = storeProducts.find(p => String(p.id) === String(selectedProductId));
+    const quantity = Number(selectedQuantity || 0);
 
     if (!product) {
       setSaleNotice({ type: 'error', message: 'Selecciona un producto para agregar al carrito.' });
@@ -2348,6 +2351,8 @@ function App() {
     setSettingsNotice({ type: 'success', message: 'Configuración actualizada correctamente.' });
   }
 
+  const businessConfig = getBusinessConfig(currentUser?.businessType);
+
   const pageInfo = {
     Inicio: { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home },
     Ventas: { title: 'Ventas', subtitle: 'Registra ventas y revisa el historial reciente.', icon: ShoppingCart },
@@ -2450,7 +2455,55 @@ function App() {
           </header>
 
           {active === 'Inicio' && <HomePage currentUser={currentUser} totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} setActive={setActive} expirationText={expirationText} />}
-          {active === 'Ventas' && <SalesPage sales={storeSales} products={storeProducts} clients={storeClients} saleForm={saleForm} setSaleForm={setSaleForm} saleCart={saleCart} addSaleItem={addSaleItem} removeSaleItem={removeSaleItem} clearSaleCart={clearSaleCart} registerSale={registerSale} resetSaleForm={resetSaleForm} cancelSale={cancelSale} totalSales={totalSales} totalProfit={totalProfit} totalDiscount={totalDiscount} totalUnitsSold={totalUnitsSold} saleNotice={saleNotice} salePreview={calculateSalePreview()} salesLoading={salesLoading} setReceiptSale={setReceiptSale} />}
+          {active === 'Ventas' && (
+            businessConfig.salesMode === 'food' ? (
+              <FoodSalesPage
+                sales={storeSales}
+                products={storeProducts}
+                clients={storeClients}
+                saleForm={saleForm}
+                setSaleForm={setSaleForm}
+                saleCart={saleCart}
+                addSaleItem={addSaleItem}
+                removeSaleItem={removeSaleItem}
+                clearSaleCart={clearSaleCart}
+                registerSale={registerSale}
+                resetSaleForm={resetSaleForm}
+                cancelSale={cancelSale}
+                totalSales={totalSales}
+                totalProfit={totalProfit}
+                totalDiscount={totalDiscount}
+                totalUnitsSold={totalUnitsSold}
+                saleNotice={saleNotice}
+                salePreview={calculateSalePreview()}
+                salesLoading={salesLoading}
+                setReceiptSale={setReceiptSale}
+              />
+            ) : (
+              <SalesPage
+                sales={storeSales}
+                products={storeProducts}
+                clients={storeClients}
+                saleForm={saleForm}
+                setSaleForm={setSaleForm}
+                saleCart={saleCart}
+                addSaleItem={addSaleItem}
+                removeSaleItem={removeSaleItem}
+                clearSaleCart={clearSaleCart}
+                registerSale={registerSale}
+                resetSaleForm={resetSaleForm}
+                cancelSale={cancelSale}
+                totalSales={totalSales}
+                totalProfit={totalProfit}
+                totalDiscount={totalDiscount}
+                totalUnitsSold={totalUnitsSold}
+                saleNotice={saleNotice}
+                salePreview={calculateSalePreview()}
+                salesLoading={salesLoading}
+                setReceiptSale={setReceiptSale}
+              />
+            )
+          )}
           {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && (
