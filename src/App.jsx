@@ -1793,6 +1793,93 @@ function App() {
     clearDraft(currentUser?.id, 'purchaseCart');
   }
 
+  async function buildRecipeIngredientAdjustments(cartItems, sourceProducts, direction = 'subtract') {
+    const isCafeteria = currentUser?.businessType === 'cafeteria';
+
+    if (!isCafeteria || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return { updates: [], errorMessage: '' };
+    }
+
+    const menuProductIds = Array.from(new Set(
+      cartItems
+        .map(item => item.productId)
+        .filter(Boolean)
+        .map(String)
+    ));
+
+    if (menuProductIds.length === 0) {
+      return { updates: [], errorMessage: '' };
+    }
+
+    const { data: recipeRows, error: recipeError } = await supabase
+      .from('product_recipes')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .in('menu_product_id', menuProductIds);
+
+    if (recipeError) {
+      return {
+        updates: [],
+        errorMessage: `No se pudieron cargar las recetas: ${recipeError.message}`,
+      };
+    }
+
+    if (!recipeRows?.length) {
+      return { updates: [], errorMessage: '' };
+    }
+
+    const quantityByMenuProduct = cartItems.reduce((acc, item) => {
+      const key = String(item.productId || '');
+      acc[key] = (acc[key] || 0) + Number(item.quantity || 0);
+      return acc;
+    }, {});
+
+    const requiredByIngredient = recipeRows.reduce((acc, recipe) => {
+      const menuQuantity = quantityByMenuProduct[String(recipe.menu_product_id)] || 0;
+      const requiredQuantity = Number(recipe.quantity || 0) * menuQuantity;
+      const ingredientId = String(recipe.ingredient_product_id || '');
+
+      if (!ingredientId || requiredQuantity <= 0) return acc;
+
+      acc[ingredientId] = (acc[ingredientId] || 0) + requiredQuantity;
+      return acc;
+    }, {});
+
+    const updates = [];
+
+    for (const [ingredientId, requiredQuantity] of Object.entries(requiredByIngredient)) {
+      const ingredient = sourceProducts.find(product => String(product.id) === String(ingredientId));
+
+      if (!ingredient) {
+        return {
+          updates: [],
+          errorMessage: 'No se encontró uno de los insumos de la receta. Revisa la receta antes de vender.',
+        };
+      }
+
+      const currentStock = Number(ingredient.stock || 0);
+      const nextStock = direction === 'restore'
+        ? currentStock + requiredQuantity
+        : currentStock - requiredQuantity;
+
+      if (direction !== 'restore' && nextStock < 0) {
+        return {
+          updates: [],
+          errorMessage: `Stock insuficiente del insumo "${ingredient.name}". Necesitas ${requiredQuantity}, disponible: ${currentStock}.`,
+        };
+      }
+
+      updates.push({
+        product: ingredient,
+        requiredQuantity,
+        nextStock,
+        nextStatus: nextStock === 0 ? 'Inactivo' : 'Activo',
+      });
+    }
+
+    return { updates, errorMessage: '' };
+  }
+
   async function registerSale(e) {
     e.preventDefault();
     const preview = calculateSalePreview();
@@ -1823,6 +1910,13 @@ function App() {
         setSaleNotice({ type: 'error', message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}.` });
         return;
       }
+    }
+
+    const { updates: recipeStockUpdates, errorMessage: recipeErrorMessage } = await buildRecipeIngredientAdjustments(saleCart, storeProducts, 'subtract');
+
+    if (recipeErrorMessage) {
+      setSaleNotice({ type: 'error', message: recipeErrorMessage });
+      return;
     }
 
     const totalQuantity = saleCart.reduce((sum, item) => sum + item.quantity, 0);
@@ -1891,11 +1985,34 @@ function App() {
       }
     }
 
+    for (const ingredientUpdate of recipeStockUpdates) {
+      const { product, nextStock, nextStatus } = ingredientUpdate;
+
+      const { error: ingredientError } = await supabase
+        .from('products')
+        .update({ stock: nextStock, status: nextStatus })
+        .eq('id', product.id)
+        .eq('user_id', currentUser.id);
+
+      if (ingredientError) {
+        console.error('Error descontando insumo:', ingredientError);
+        setSaleNotice({ type: 'error', message: `La venta se registró, pero no se pudo descontar el insumo ${product.name}: ${ingredientError.message}` });
+        await loadSalesFromSupabase(currentUser.id, false);
+        await loadProductsFromSupabase(currentUser.id, false);
+        return;
+      }
+    }
+
     setSaleForm(emptySaleForm);
     setSaleCart([]);
     clearDraft(currentUser?.id, 'saleForm');
     clearDraft(currentUser?.id, 'saleCart');
-    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${saleCart.length} producto(s).` });
+
+    const recipeMessage = recipeStockUpdates.length > 0
+      ? ` También se descontaron ${recipeStockUpdates.length} insumo(s) de recetas.`
+      : '';
+
+    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${saleCart.length} producto(s).${recipeMessage}` });
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
@@ -1907,6 +2024,13 @@ function App() {
     const items = sale.items?.length > 0
       ? sale.items
       : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity }];
+
+    const { updates: recipeRestoreUpdates, errorMessage: recipeRestoreError } = await buildRecipeIngredientAdjustments(items, products, 'restore');
+
+    if (recipeRestoreError) {
+      setSaleNotice({ type: 'error', message: recipeRestoreError });
+      return;
+    }
 
     const { error: saleError } = await supabase
       .from('sales')
@@ -1939,9 +2063,32 @@ function App() {
       }
     }
 
+    for (const ingredientUpdate of recipeRestoreUpdates) {
+      const { product, nextStock } = ingredientUpdate;
+
+      const { error: ingredientError } = await supabase
+        .from('products')
+        .update({ stock: nextStock, status: 'Activo' })
+        .eq('id', product.id)
+        .eq('user_id', currentUser.id);
+
+      if (ingredientError) {
+        console.error('Error devolviendo insumo:', ingredientError);
+        setSaleNotice({ type: 'error', message: `Venta anulada, pero no se pudo devolver el insumo ${product.name}: ${ingredientError.message}` });
+        await loadSalesFromSupabase(currentUser.id, false);
+        await loadProductsFromSupabase(currentUser.id, false);
+        return;
+      }
+    }
+
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
-    setSaleNotice({ type: 'success', message: 'Venta anulada y stock devuelto correctamente.' });
+
+    const recipeMessage = recipeRestoreUpdates.length > 0
+      ? ` También se devolvieron ${recipeRestoreUpdates.length} insumo(s) de recetas.`
+      : '';
+
+    setSaleNotice({ type: 'success', message: `Venta anulada y stock devuelto correctamente.${recipeMessage}` });
   }
 
   function resetSaleForm() {
@@ -2492,6 +2639,7 @@ function App() {
                 saleForm={saleForm}
                 setSaleForm={setSaleForm}
                 saleCart={saleCart}
+                setSaleCart={setSaleCart}
                 addSaleItem={addSaleItem}
                 removeSaleItem={removeSaleItem}
                 clearSaleCart={clearSaleCart}

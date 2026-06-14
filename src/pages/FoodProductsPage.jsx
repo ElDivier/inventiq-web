@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CalendarDays,
   Coffee,
   Download,
@@ -12,6 +13,7 @@ import {
   Upload,
 } from 'lucide-react';
 import ProductForm from '../components/ProductForm';
+import FoodRecipeModal from '../components/FoodRecipeModal';
 import ExcelImportPreviewModal from '../components/ExcelImportPreviewModal';
 import { downloadProductExcelTemplate } from '../utils/excel';
 import { getBusinessConfig } from '../config/businessTypes';
@@ -110,6 +112,7 @@ export default function FoodProductsPage({
   const [search, setSearch] = useState('');
   const [foodCategory, setFoodCategory] = useState('Todas');
   const [foodFormMode, setFoodFormMode] = useState('menu');
+  const [recipeProduct, setRecipeProduct] = useState(null);
   const formRef = useRef(null);
 
   const businessType = currentUser?.businessType || 'cafeteria';
@@ -216,6 +219,22 @@ export default function FoodProductsPage({
       labelWidth: DEFAULT_LABEL_WIDTH,
       labelHeight: DEFAULT_LABEL_HEIGHT,
     });
+  }
+
+  function openRecipe(product) {
+    setRecipeProduct(product);
+  }
+
+  function handleRecipeChange(productId, recipeEnabled) {
+    if (typeof setProducts !== 'function') return;
+
+    setProducts(prevProducts =>
+      prevProducts.map(product =>
+        product.id === productId
+          ? { ...product, recipeEnabled, recipe_enabled: recipeEnabled }
+          : product
+      )
+    );
   }
 
   return (
@@ -369,6 +388,7 @@ export default function FoodProductsPage({
               editProduct={handleEditProduct}
               deleteProduct={deleteProduct}
               printLabel={printLabel}
+              openRecipe={openRecipe}
             />
           ) : (
             <IngredientsList
@@ -398,11 +418,21 @@ export default function FoodProductsPage({
           />
         </div>
       </section>
+
+      {recipeProduct && (
+        <FoodRecipeModal
+          currentUser={currentUser}
+          menuProduct={recipeProduct}
+          ingredients={ingredientProducts}
+          onClose={() => setRecipeProduct(null)}
+          onRecipeChange={handleRecipeChange}
+        />
+      )}
     </div>
   );
 }
 
-function MenuGrid({ products, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel }) {
+function MenuGrid({ products, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe }) {
   if (products.length === 0) {
     return (
       <EmptyFoodState
@@ -454,6 +484,8 @@ function MenuGrid({ products, pendingDeleteId, setPendingDeleteId, editProduct, 
               editProduct={editProduct}
               deleteProduct={deleteProduct}
               printLabel={printLabel}
+              openRecipe={openRecipe}
+              showRecipeButton
             />
           </div>
         );
@@ -529,7 +561,7 @@ function IngredientsList({ products, pendingDeleteId, setPendingDeleteId, editPr
   );
 }
 
-function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editProduct, deleteProduct, printLabel }) {
+function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe, showRecipeButton = false }) {
   return (
     <div className="mt-4 flex items-center justify-end gap-2 lg:mt-0">
       {isPendingDelete ? (
@@ -551,6 +583,16 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
         </>
       ) : (
         <>
+          {showRecipeButton && (
+            <button
+              type="button"
+              onClick={() => openRecipe?.(product)}
+              className="rounded-xl border border-amber-100 p-2 text-amber-600 hover:bg-amber-50"
+              title="Configurar receta"
+            >
+              <BookOpen className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => printLabel(product)}

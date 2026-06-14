@@ -38,6 +38,7 @@ export default function FoodSalesPage({
   saleForm,
   setSaleForm,
   saleCart,
+  setSaleCart,
   addSaleItem,
   removeSaleItem,
   clearSaleCart,
@@ -114,19 +115,33 @@ export default function FoodSalesPage({
   }
 
   function decreaseCartItem(item) {
-    if (Number(item.quantity || 0) <= 1) {
+    if (typeof setSaleCart !== 'function') {
       removeSaleItem(item.productId);
       return;
     }
 
-    const product = products.find(current => String(current.id) === String(item.productId));
-    if (!product) return;
+    setSaleCart(prevCart => {
+      const currentItem = prevCart.find(current => String(current.productId) === String(item.productId));
 
-    removeSaleItem(item.productId);
+      if (!currentItem) return prevCart;
 
-    for (let index = 0; index < item.quantity - 1; index += 1) {
-      addSaleItem(product.id, 1);
-    }
+      const nextQuantity = Number(currentItem.quantity || 0) - 1;
+
+      if (nextQuantity <= 0) {
+        return prevCart.filter(current => String(current.productId) !== String(item.productId));
+      }
+
+      return prevCart.map(current => {
+        if (String(current.productId) !== String(item.productId)) return current;
+
+        return {
+          ...current,
+          quantity: nextQuantity,
+          subtotal: Number(current.price || 0) * nextQuantity,
+          profit: (Number(current.price || 0) - Number(current.cost || 0)) * nextQuantity,
+        };
+      });
+    });
   }
 
   return (

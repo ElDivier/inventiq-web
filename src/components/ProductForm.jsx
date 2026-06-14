@@ -383,6 +383,7 @@ function IngredientFields({ form, updateField }) {
           label="Stock actual del insumo"
           type="number"
           min="0"
+          step="0.001"
           value={form.stock}
           onChange={value => updateField('stock', value)}
           placeholder="0"
@@ -392,6 +393,7 @@ function IngredientFields({ form, updateField }) {
           label="Stock mínimo del insumo"
           type="number"
           min="0"
+          step="0.001"
           value={form.minStock}
           onChange={value => updateField('minStock', value)}
           placeholder="3"
