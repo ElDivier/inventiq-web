@@ -113,6 +113,18 @@ export default function ProductTable({
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [categoryNotice, setCategoryNotice] = useState(null);
 
+  const isFoodProductMode = businessConfig?.productMode === 'menu-inventory';
+  const tableTitle = isFoodProductMode ? 'Menú e insumos' : 'Productos';
+  const itemWord = isFoodProductMode ? 'ítem' : 'producto';
+  const itemWordPlural = isFoodProductMode ? 'ítems' : 'productos';
+  const productColumnLabel = isFoodProductMode ? 'Ítem' : 'Producto';
+  const stockColumnLabel = isFoodProductMode ? 'Existencia' : 'Stock';
+  const categoryExample = isFoodProductMode ? 'Ej: Menú - Café caliente' : 'Ej: Mujer - Blusas';
+  const emptyTitle = isFoodProductMode ? 'No hay menú ni insumos para mostrar' : '{emptyTitle}';
+  const emptyDescription = isFoodProductMode
+    ? 'Cambia la categoría o importa menú e insumos desde Excel.'
+    : '{emptyDescription}';
+
   const totalProducts = filtered.length;
   const totalPages = Math.max(Math.ceil(totalProducts / PRODUCTS_PER_PAGE), 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -333,7 +345,7 @@ export default function ProductTable({
     if (count > 0) {
       setCategoryNotice({
         type: 'error',
-        message: `No puedes eliminar "${cleanName}" porque tiene ${count} producto(s). Primero cambia esos productos a otra categoría.`,
+        message: `No puedes eliminar "${cleanName}" porque tiene ${count} ${itemWordPlural}. Primero cambia esos ${itemWordPlural} a otra categoría.`,
       });
       return;
     }
@@ -356,10 +368,10 @@ export default function ProductTable({
       <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
-            <Package className="h-5 w-5 text-emerald-600" /> Productos
+            <Package className="h-5 w-5 text-emerald-600" /> {tableTitle}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Mostrando {totalProducts === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} producto(s).
+            Mostrando {totalProducts === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} {itemWordPlural}.
           </p>
         </div>
 
@@ -445,7 +457,7 @@ export default function ProductTable({
                   if (event.key === 'Escape') cancelCreateCategory();
                 }}
                 className="mt-2 w-full rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
-                placeholder="Ej: Mujer - Blusas"
+                placeholder={categoryExample}
                 autoFocus
               />
               <div className="mt-2 flex gap-2">
@@ -585,7 +597,7 @@ export default function ProductTable({
                 onChange={togglePageSelection}
                 className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
               />
-              Seleccionar productos de esta página
+              Seleccionar {itemWordPlural} de esta página
             </label>
 
             {selectedProducts.length > 0 && (
@@ -602,19 +614,19 @@ export default function ProductTable({
           {paginatedProducts.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-200 p-10 text-center">
               <Package className="mx-auto h-10 w-10 text-slate-300" />
-              <h4 className="mt-3 text-lg font-bold text-slate-700">No hay productos para mostrar</h4>
+              <h4 className="mt-3 text-lg font-bold text-slate-700">{emptyTitle}</h4>
               <p className="mt-1 text-sm text-slate-500">
-                Cambia la categoría o importa productos desde Excel.
+                {emptyDescription}
               </p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-3xl border border-slate-100">
               <div className="hidden bg-slate-50 px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:gap-3">
                 <span />
-                <span>Producto</span>
+                <span>{productColumnLabel}</span>
                 <span>Categoría</span>
                 <span>Precio</span>
-                <span>Stock</span>
+                <span>{stockColumnLabel}</span>
                 <span>Estado</span>
                 <span className="text-right">Acciones</span>
               </div>
@@ -746,7 +758,7 @@ export default function ProductTable({
           {totalProducts > PRODUCTS_PER_PAGE && (
             <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                Mostrando {startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} producto(s)
+                Mostrando {startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} {itemWordPlural}
               </span>
               <div className="flex items-center gap-2">
                 <button

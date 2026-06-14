@@ -1564,8 +1564,9 @@ function App() {
   }
 
   function addSaleItem(productIdOverride = null, quantityOverride = null) {
-    const selectedProductId = productIdOverride ?? saleForm.productId;
-    const selectedQuantity = quantityOverride ?? saleForm.quantity;
+    const receivedEvent = productIdOverride && typeof productIdOverride === 'object' && 'preventDefault' in productIdOverride;
+    const selectedProductId = receivedEvent ? saleForm.productId : productIdOverride ?? saleForm.productId;
+    const selectedQuantity = receivedEvent ? saleForm.quantity : quantityOverride ?? saleForm.quantity;
     const product = storeProducts.find(p => String(p.id) === String(selectedProductId));
     const quantity = Number(selectedQuantity || 0);
 
@@ -2363,7 +2364,13 @@ function App() {
     Ventas: { title: 'Ventas', subtitle: 'Registra ventas y revisa el historial reciente.', icon: ShoppingCart },
     Caja: { title: 'Caja', subtitle: 'Controla cierres, cortes y métodos de pago por periodo.', icon: DollarSign },
     Compras: { title: 'Compras', subtitle: 'Registra compras a proveedores y aumenta stock.', icon: ClipboardList },
-    Productos: { title: 'Productos', subtitle: 'Administra los productos de tu tienda fácilmente.', icon: Package },
+    Productos: {
+      title: businessConfig.productMode === 'menu-inventory' ? 'Menú e insumos' : 'Productos',
+      subtitle: businessConfig.productMode === 'menu-inventory'
+        ? 'Administra productos del menú e insumos de cocina.'
+        : 'Administra los productos de tu tienda fácilmente.',
+      icon: Package,
+    },
     Inventario: { title: 'Inventario', subtitle: 'Controla stock, alertas y valor de inventario.', icon: Boxes },
     Clientes: { title: 'Clientes', subtitle: 'Administra clientes frecuentes de la tienda.', icon: Users },
     Proveedores: { title: 'Proveedores', subtitle: 'Organiza proveedores y entregas estimadas.', icon: Truck },
@@ -3382,6 +3389,19 @@ function ProductsPage({
     })
     : filtered;
 
+  const totalProductsLabel = isFoodProductMode ? 'Total ítems' : 'Total productos';
+  const activeProductsNote = isFoodProductMode ? 'menú e insumos' : 'activos';
+  const stockLowNote = isFoodProductMode ? 'ítems' : 'productos';
+  const noStockNote = isFoodProductMode ? 'ítems' : 'productos';
+  const expiringNote = isFoodProductMode ? 'perecibles' : 'productos';
+  const importTitle = isFoodProductMode
+    ? 'Importar menú e insumos desde Excel'
+    : 'Importar productos desde Excel';
+  const importDescription = isFoodProductMode
+    ? 'Carga un archivo .xlsx o .csv con productos del menú e insumos de cocina. Usa categorías como Menú - Café caliente o Insumos - Lácteos.'
+    : 'Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.';
+  const importButtonLabel = isFoodProductMode ? 'Seleccionar Excel' : 'Seleccionar Excel';
+
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
     const exp = expirationText ? expirationText(product) : null;
     return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
@@ -3390,10 +3410,10 @@ function ProductsPage({
   return (
     <>
       <section className={`mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 ${businessConfig.usesExpiration ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <Metric icon={Package} label="Total productos" value={totalProducts} note="activos" color="emerald" />
-        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
-        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
-        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />}
+        <Metric icon={Package} label={totalProductsLabel} value={totalProducts} note={activeProductsNote} color="emerald" />
+        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note={stockLowNote} color="amber" />
+        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note={noStockNote} color="red" />
+        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note={expiringNote} color="amber" />}
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
 
@@ -3452,8 +3472,10 @@ function ProductsPage({
       <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
-            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.</p>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900">
+              <Upload className="h-5 w-5" /> {importTitle}
+            </h3>
+            <p className="mt-1 text-sm text-emerald-800">{importDescription}</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
@@ -3473,7 +3495,7 @@ function ProductsPage({
         <ProductTable
   businessConfig={businessConfig}
   products={products}
-  filtered={filtered}
+  filtered={foodFilteredProducts}
   categories={categories}
   category={category}
   setCategory={setCategory}

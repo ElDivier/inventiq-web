@@ -18,6 +18,28 @@ export default function ProductForm({
   const [scannerOpen, setScannerOpen] = useState(false);
   const isNewCategory = form.category === '__new__';
   const extraLabels = businessConfig?.extraLabels || {};
+  const isFoodProductMode = businessConfig?.productMode === 'menu-inventory';
+
+  const formTitle = editingId
+    ? isFoodProductMode ? 'Editar menú / insumo' : 'Editar producto'
+    : isFoodProductMode ? 'Agregar menú / insumo' : 'Agregar nuevo producto';
+  const formDescription = editingId
+    ? isFoodProductMode ? 'Actualiza la información del menú o insumo seleccionado.' : 'Actualiza la información del producto seleccionado.'
+    : isFoodProductMode ? 'Registra un producto del menú o un insumo de cocina.' : 'Registra un producto nuevo en el inventario.';
+  const nameLabel = isFoodProductMode ? 'Nombre del menú o insumo' : 'Nombre del producto';
+  const categoryLabel = isFoodProductMode ? 'Categoría del menú o insumo' : 'Categoría';
+  const categorySelectLabel = isFoodProductMode ? 'Seleccionar categoría del menú o insumo' : 'Seleccionar categoría';
+  const newCategoryLabel = isFoodProductMode ? 'Nueva categoría de menú o insumo' : 'Nueva categoría';
+  const stockLabel = isFoodProductMode ? 'Existencia actual' : 'Stock actual';
+  const skuPlaceholder = isFoodProductMode ? 'Ej: CAP-001, LECHE-1L' : 'Ej: PROD001';
+  const barcodeHelpText = isFoodProductMode
+    ? 'Puedes generar un código interno para el menú o insumo, o escribir/escanear el código existente.'
+    : '{barcodeHelpText}';
+  const descriptionPlaceholder = isFoodProductMode ? 'Descripción del menú o insumo...' : 'Descripción del producto...';
+  const imageAlt = isFoodProductMode ? 'Vista previa del menú o insumo' : 'Vista previa del producto';
+  const saveButtonText = editingId
+    ? isFoodProductMode ? 'Actualizar menú / insumo' : 'Actualizar producto'
+    : isFoodProductMode ? 'Guardar menú / insumo' : 'Guardar producto';
 
   function generateProductBarcode() {
     const businessType = businessConfig?.label === 'Tienda de ropa' ? 'ropa' : 'general';
@@ -30,10 +52,10 @@ export default function ProductForm({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h3 className="text-xl font-bold">
-            {editingId ? 'Editar producto' : 'Agregar nuevo producto'}
+            {formTitle}
           </h3>
           <p className="text-sm text-slate-500">
-            {editingId ? 'Actualiza la información del producto seleccionado.' : 'Registra un producto nuevo en el inventario.'}
+            {formDescription}
           </p>
         </div>
 
@@ -50,20 +72,20 @@ export default function ProductForm({
 
       <div className="space-y-4">
         <Field
-          label="Nombre del producto"
+          label={nameLabel}
           value={form.name}
           onChange={v => setForm({ ...form, name: v })}
           placeholder={businessConfig?.productNamePlaceholder || 'Ej: Arroz 1kg'}
         />
 
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-slate-700">Categoría</span>
+          <span className="mb-2 block text-sm font-semibold text-slate-700">{categoryLabel}</span>
           <select
             value={form.category}
             onChange={e => setForm({ ...form, category: e.target.value })}
             className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
           >
-            <option value="">Seleccionar categoría</option>
+            <option value="">{categorySelectLabel}</option>
             {productCategories.map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
@@ -73,7 +95,7 @@ export default function ProductForm({
 
         {isNewCategory && (
           <Field
-            label="Nueva categoría"
+            label={newCategoryLabel}
             value={form.customCategory}
             onChange={v => setForm({ ...form, customCategory: v })}
             placeholder={businessConfig?.categoryPlaceholder || 'Ej: Mascotas'}
@@ -104,7 +126,7 @@ export default function ProductForm({
 
         <div className="grid grid-cols-2 gap-3">
           <Field
-            label="Stock actual"
+            label={stockLabel}
             type="number"
             min="0"
             value={form.stock}
@@ -126,7 +148,7 @@ export default function ProductForm({
           label="Código / SKU"
           value={form.sku}
           onChange={v => setForm({ ...form, sku: v })}
-          placeholder="Ej: PROD001"
+          placeholder={skuPlaceholder}
         />
 
         <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -158,7 +180,7 @@ export default function ProductForm({
           </div>
 
           <p className="mt-2 text-xs text-slate-500">
-            Puedes generar un código interno para InventiQ o escribir/escanear el código que el producto ya trae.
+            {barcodeHelpText}
           </p>
 
           {scannerOpen && (
@@ -225,7 +247,7 @@ export default function ProductForm({
             value={form.description}
             onChange={e => setForm({ ...form, description: e.target.value })}
             className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
-            placeholder="Descripción del producto..."
+            placeholder={descriptionPlaceholder}
           />
         </label>
 
@@ -234,7 +256,7 @@ export default function ProductForm({
             <div className="space-y-3">
               <img
                 src={form.imageUrl}
-                alt="Vista previa del producto"
+                alt={imageAlt}
                 className="mx-auto h-32 w-32 rounded-2xl object-cover shadow-sm"
               />
 
@@ -274,7 +296,7 @@ export default function ProductForm({
             type="submit"
             className="rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
           >
-            {editingId ? 'Actualizar producto' : 'Guardar producto'}
+            {saveButtonText}
           </button>
         </div>
       </div>
