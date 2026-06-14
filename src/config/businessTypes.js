@@ -41,6 +41,8 @@ export function getBusinessConfig(type = 'general') {
 
     ropa: {
       ...standardFeatures,
+      cashMode: 'daily-cash',
+      usesDailyCash: true,
       label: 'Tienda de ropa',
       usesExpiration: false,
       productExtraFields: true,

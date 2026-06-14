@@ -125,6 +125,7 @@ import ProductForm from './components/ProductForm';
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import CashPage from './pages/CashPage';
+import DailyCashPage from './pages/DailyCashPage';
 import ReportsPage from './pages/ReportsPage';
 import AuthPage from './pages/AuthPage';
 import FoodSalesPage from './pages/FoodSalesPage';
@@ -2680,7 +2681,17 @@ function App() {
               />
             )
           )}
-          {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
+          {active === 'Caja' && (
+            businessConfig.cashMode === 'daily-cash' ? (
+              <DailyCashPage
+                currentUser={currentUser}
+                sales={storeSales}
+                purchases={purchases}
+              />
+            ) : (
+              <CashPage sales={storeSales} purchases={purchases} />
+            )
+          )}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && (
             businessConfig.productMode === 'menu-inventory' ? (
