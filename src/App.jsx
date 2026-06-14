@@ -2518,7 +2518,7 @@ function App() {
               setNotice={setNotice}
               products={storeProducts}
               setProducts={setProducts}
-              filtered={foodFilteredProducts}
+              filtered={filtered}
               categories={categories}
               productCategories={productCategories}
               customProductCategories={customProductCategories}
