@@ -128,6 +128,7 @@ import CashPage from './pages/CashPage';
 import ReportsPage from './pages/ReportsPage';
 import AuthPage from './pages/AuthPage';
 import FoodSalesPage from './pages/FoodSalesPage';
+import FoodProductsPage from './pages/FoodProductsPage';
 import ProvidersPage from './pages/ProvidersPage';
 import { menu } from './config/menu';
 import {
@@ -984,14 +985,26 @@ function App() {
     clearDraft(currentUser?.id, 'productForm');
   }
 
-  function validateProduct(finalCategory, price, cost, stock, minStock) {
-    if (!form.name.trim()) return 'Ingresa el nombre del producto.';
+  function validateProduct(finalCategory, price, cost, stock, minStock, options = {}) {
+    const isFoodIngredient = Boolean(options.isFoodIngredient);
+
+    if (!form.name.trim()) {
+      return isFoodIngredient ? 'Ingresa el nombre del insumo.' : 'Ingresa el nombre del producto.';
+    }
+
     if (!finalCategory.trim()) return 'Selecciona o crea una categoría.';
-    if (Number.isNaN(price) || price <= 0) return 'El precio de venta debe ser mayor a 0.';
+
+    if (isFoodIngredient) {
+      if (Number.isNaN(price) || price < 0) return 'El precio referencial no puede ser negativo.';
+    } else if (Number.isNaN(price) || price <= 0) {
+      return 'El precio de venta debe ser mayor a 0.';
+    }
+
     if (Number.isNaN(cost) || cost < 0) return 'El costo no puede ser negativo. Si no lo conoces, déjalo vacío.';
     if (Number.isNaN(stock) || stock < 0) return 'El stock no puede ser negativo.';
     if (Number.isNaN(minStock) || minStock < 0) return 'El stock mínimo no puede ser negativo.';
-    if (cost > 0 && cost > price) return 'El costo no debería ser mayor al precio de venta.';
+    if (!isFoodIngredient && cost > 0 && cost > price) return 'El costo no debería ser mayor al precio de venta.';
+
     return null;
   }
 
@@ -1167,11 +1180,15 @@ function App() {
     e.preventDefault();
 
     const finalCategory = form.category === '__new__' ? form.customCategory.trim() : form.category.trim();
-    const price = Number(form.price);
+    const categoryText = finalCategory.toLowerCase();
+    const isFoodIngredient = currentUser?.businessType === 'cafeteria' && (
+      categoryText.startsWith('insumos -') || categoryText.includes('insumos')
+    );
+    const price = isFoodIngredient ? Number(form.price || 0) : Number(form.price);
     const cost = Number(form.cost || 0);
     const stock = Number(form.stock);
     const minStock = Number(form.minStock || 0);
-    const validationError = validateProduct(finalCategory, price, cost, stock, minStock);
+    const validationError = validateProduct(finalCategory, price, cost, stock, minStock, { isFoodIngredient });
 
     if (validationError) {
       setNotice({ type: 'error', message: validationError });
@@ -1288,12 +1305,7 @@ function App() {
 
       normalizedRows.forEach((row, index) => {
         const name = excelText(getExcelValue(row, ['nombre del producto', 'producto', 'nombre', 'nombre_producto']));
-        const defaultImportCategory = businessType === 'ropa'
-          ? 'Ropa'
-          : businessType === 'cafeteria'
-            ? 'Menú - Café caliente'
-            : 'General';
-        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], defaultImportCategory));
+        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], businessType === 'ropa' ? 'Ropa' : 'General'));
         const price = excelNumber(getExcelValue(row, ['precio de venta', 'precio venta', 'precio_venta', 'precio', 'pvp']), 0);
         const cost = excelNumber(getExcelValue(row, ['costo unitario', 'costo', 'costo opcional', 'precio costo', 'precio_costo']), 0);
         const stock = excelNumber(getExcelValue(row, ['stock actual', 'stock', 'cantidad', 'existencia']), 0);
@@ -1564,7 +1576,11 @@ function App() {
   }
 
   function addSaleItem(productIdOverride = null, quantityOverride = null) {
-    const receivedEvent = productIdOverride && typeof productIdOverride === 'object' && 'preventDefault' in productIdOverride;
+    const receivedEvent = Boolean(
+      productIdOverride &&
+      typeof productIdOverride === 'object' &&
+      typeof productIdOverride.preventDefault === 'function'
+    );
     const selectedProductId = receivedEvent ? saleForm.productId : productIdOverride ?? saleForm.productId;
     const selectedQuantity = receivedEvent ? saleForm.quantity : quantityOverride ?? saleForm.quantity;
     const product = storeProducts.find(p => String(p.id) === String(selectedProductId));
@@ -2519,7 +2535,8 @@ function App() {
           {active === 'Caja' && <CashPage sales={storeSales} purchases={purchases} />}
           {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
           {active === 'Productos' && (
-            <ProductsPage
+            businessConfig.productMode === 'menu-inventory' ? (
+              <FoodProductsPage
               currentUser={currentUser}
               setEditingId={setEditingId}
               setNotice={setNotice}
@@ -2556,6 +2573,45 @@ function App() {
               cancelExcelImport={cancelExcelImport}
               excelImportProgress={excelImportProgress}
             />
+            ) : (
+              <ProductsPage
+              currentUser={currentUser}
+              setEditingId={setEditingId}
+              setNotice={setNotice}
+              products={storeProducts}
+              setProducts={setProducts}
+              filtered={filtered}
+              categories={categories}
+              productCategories={productCategories}
+              customProductCategories={customProductCategories}
+              setCustomProductCategories={setCustomProductCategories}
+              category={category}
+              setCategory={setCategory}
+              form={form}
+              setForm={setForm}
+              saveProduct={saveProduct}
+              resetForm={resetForm}
+              editProduct={editProduct}
+              editingId={editingId}
+              notice={notice}
+              deleteProduct={deleteProduct}
+              pendingDeleteId={pendingDeleteId}
+              setPendingDeleteId={setPendingDeleteId}
+              statusText={statusText}
+              expirationText={expirationText}
+              totalProducts={totalProducts}
+              lowStock={lowStock}
+              noStock={noStock}
+              inventoryValue={inventoryValue}
+              handleProductImage={handleProductImage}
+              productsLoading={productsLoading}
+              importProductsFromExcel={importProductsFromExcel}
+              excelImportPreview={excelImportPreview}
+              confirmExcelImport={confirmExcelImport}
+              cancelExcelImport={cancelExcelImport}
+              excelImportProgress={excelImportProgress}
+            />
+            )
           )}
           {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
           {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
@@ -3367,41 +3423,6 @@ function ProductsPage({
 }) {
   const businessType = currentUser?.businessType || 'general';
   const businessConfig = getBusinessConfig(businessType);
-  const isFoodProductMode = businessConfig.productMode === 'menu-inventory';
-  const [foodProductView, setFoodProductView] = useState('todos');
-
-  function isIngredientProduct(product) {
-    const categoryName = String(product.category || '').trim().toLowerCase();
-    return categoryName.startsWith('insumos -') || categoryName.includes('insumos');
-  }
-
-  function isMenuProduct(product) {
-    return !isIngredientProduct(product);
-  }
-
-  const menuProducts = products.filter(isMenuProduct);
-  const ingredientProducts = products.filter(isIngredientProduct);
-  const foodFilteredProducts = isFoodProductMode
-    ? filtered.filter(product => {
-      if (foodProductView === 'menu') return isMenuProduct(product);
-      if (foodProductView === 'insumos') return isIngredientProduct(product);
-      return true;
-    })
-    : filtered;
-
-  const totalProductsLabel = isFoodProductMode ? 'Total ítems' : 'Total productos';
-  const activeProductsNote = isFoodProductMode ? 'menú e insumos' : 'activos';
-  const stockLowNote = isFoodProductMode ? 'ítems' : 'productos';
-  const noStockNote = isFoodProductMode ? 'ítems' : 'productos';
-  const expiringNote = isFoodProductMode ? 'perecibles' : 'productos';
-  const importTitle = isFoodProductMode
-    ? 'Importar menú e insumos desde Excel'
-    : 'Importar productos desde Excel';
-  const importDescription = isFoodProductMode
-    ? 'Carga un archivo .xlsx o .csv con productos del menú e insumos de cocina. Usa categorías como Menú - Café caliente o Insumos - Lácteos.'
-    : 'Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.';
-  const importButtonLabel = isFoodProductMode ? 'Seleccionar Excel' : 'Seleccionar Excel';
-
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
     const exp = expirationText ? expirationText(product) : null;
     return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
@@ -3410,72 +3431,20 @@ function ProductsPage({
   return (
     <>
       <section className={`mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 ${businessConfig.usesExpiration ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <Metric icon={Package} label={totalProductsLabel} value={totalProducts} note={activeProductsNote} color="emerald" />
-        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note={stockLowNote} color="amber" />
-        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note={noStockNote} color="red" />
-        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note={expiringNote} color="amber" />}
+        <Metric icon={Package} label="Total productos" value={totalProducts} note="activos" color="emerald" />
+        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
+        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
+        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />}
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
 
       {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
 
-      {isFoodProductMode && (
-        <section className="mb-5 rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-black uppercase tracking-wide text-amber-600">Cafetería / restaurante</p>
-              <h3 className="mt-1 text-2xl font-black text-slate-900">Menú e insumos</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Separa los productos que vendes en el menú de los insumos que usas en cocina.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/80 bg-white/80 p-2 shadow-sm">
-              <FoodProductViewButton
-                label="Todos"
-                count={products.length}
-                active={foodProductView === 'todos'}
-                onClick={() => setFoodProductView('todos')}
-              />
-              <FoodProductViewButton
-                label="Menú"
-                count={menuProducts.length}
-                active={foodProductView === 'menu'}
-                onClick={() => setFoodProductView('menu')}
-              />
-              <FoodProductViewButton
-                label="Insumos"
-                count={ingredientProducts.length}
-                active={foodProductView === 'insumos'}
-                onClick={() => setFoodProductView('insumos')}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4">
-              <p className="text-sm font-black text-emerald-800">Menú</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Productos que se venden al cliente: capuchino, latte, postres, sanduches, combos.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-amber-100 bg-white/80 p-4">
-              <p className="text-sm font-black text-amber-800">Insumos</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Materias primas y materiales: café, leche, azúcar, vasos, tapas, servilletas.
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
       <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900">
-              <Upload className="h-5 w-5" /> {importTitle}
-            </h3>
-            <p className="mt-1 text-sm text-emerald-800">{importDescription}</p>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
+            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
@@ -3495,7 +3464,7 @@ function ProductsPage({
         <ProductTable
   businessConfig={businessConfig}
   products={products}
-  filtered={foodFilteredProducts}
+  filtered={filtered}
   categories={categories}
   category={category}
   setCategory={setCategory}
@@ -3636,19 +3605,6 @@ function ProductsPage({
         </div>
       </section>
     </>
-  );
-}
-
-function FoodProductViewButton({ label, count, active, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-2xl px-4 py-3 text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-    >
-      <span className="block text-sm font-black">{label}</span>
-      <span className={`mt-1 block text-xs font-bold ${active ? 'text-emerald-50' : 'text-slate-400'}`}>{count}</span>
-    </button>
   );
 }
 
