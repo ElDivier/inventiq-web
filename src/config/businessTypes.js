@@ -7,9 +7,20 @@ export const businessTypes = [
   { value: 'otro', label: 'Otro negocio' },
 ];
 
+const standardFeatures = {
+  salesMode: 'standard',
+  productMode: 'standard',
+  cashMode: 'standard',
+  usesRecipes: false,
+  usesModifiers: false,
+  usesTables: false,
+  usesDailyCash: false,
+};
+
 export function getBusinessConfig(type = 'general') {
   const configs = {
     general: {
+      ...standardFeatures,
       label: 'Tienda general',
       usesExpiration: true,
       productExtraFields: false,
@@ -29,6 +40,7 @@ export function getBusinessConfig(type = 'general') {
     },
 
     ropa: {
+      ...standardFeatures,
       label: 'Tienda de ropa',
       usesExpiration: false,
       productExtraFields: true,
@@ -68,6 +80,13 @@ export function getBusinessConfig(type = 'general') {
 
     cafeteria: {
       label: 'Cafetería / restaurante',
+      salesMode: 'food',
+      productMode: 'menu-inventory',
+      cashMode: 'daily-cash',
+      usesRecipes: true,
+      usesModifiers: true,
+      usesTables: false,
+      usesDailyCash: true,
       usesExpiration: true,
       productExtraFields: true,
 
@@ -77,6 +96,15 @@ export function getBusinessConfig(type = 'general') {
       productSectionTitle: 'Menú e insumos',
       inventorySectionTitle: 'Insumos y stock',
       salesSectionTitle: 'Pedidos / ventas',
+
+      foodLabels: {
+        menuTitle: 'Menú',
+        ingredientsTitle: 'Insumos',
+        quickSaleTitle: 'Caja rápida',
+        orderTitle: 'Pedido',
+        recipeTitle: 'Receta',
+        modifiersTitle: 'Extras y variantes',
+      },
 
       extraLabels: {
         brand: {
@@ -114,6 +142,7 @@ export function getBusinessConfig(type = 'general') {
     },
 
     ferreteria: {
+      ...standardFeatures,
       label: 'Ferretería / repuestos',
       usesExpiration: false,
       productExtraFields: true,
@@ -148,6 +177,7 @@ export function getBusinessConfig(type = 'general') {
     },
 
     taller: {
+      ...standardFeatures,
       label: 'Taller / servicios',
       usesExpiration: false,
       productExtraFields: true,
@@ -181,6 +211,7 @@ export function getBusinessConfig(type = 'general') {
     },
 
     otro: {
+      ...standardFeatures,
       label: 'Otro negocio',
       usesExpiration: true,
       productExtraFields: false,
