@@ -1288,7 +1288,12 @@ function App() {
 
       normalizedRows.forEach((row, index) => {
         const name = excelText(getExcelValue(row, ['nombre del producto', 'producto', 'nombre', 'nombre_producto']));
-        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], businessType === 'ropa' ? 'Ropa' : 'General'));
+        const defaultImportCategory = businessType === 'ropa'
+          ? 'Ropa'
+          : businessType === 'cafeteria'
+            ? 'Menú - Café caliente'
+            : 'General';
+        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], defaultImportCategory));
         const price = excelNumber(getExcelValue(row, ['precio de venta', 'precio venta', 'precio_venta', 'precio', 'pvp']), 0);
         const cost = excelNumber(getExcelValue(row, ['costo unitario', 'costo', 'costo opcional', 'precio costo', 'precio_costo']), 0);
         const stock = excelNumber(getExcelValue(row, ['stock actual', 'stock', 'cantidad', 'existencia']), 0);
@@ -2513,7 +2518,7 @@ function App() {
               setNotice={setNotice}
               products={storeProducts}
               setProducts={setProducts}
-              filtered={filtered}
+              filtered={foodFilteredProducts}
               categories={categories}
               productCategories={productCategories}
               customProductCategories={customProductCategories}
@@ -3355,6 +3360,28 @@ function ProductsPage({
 }) {
   const businessType = currentUser?.businessType || 'general';
   const businessConfig = getBusinessConfig(businessType);
+  const isFoodProductMode = businessConfig.productMode === 'menu-inventory';
+  const [foodProductView, setFoodProductView] = useState('todos');
+
+  function isIngredientProduct(product) {
+    const categoryName = String(product.category || '').trim().toLowerCase();
+    return categoryName.startsWith('insumos -') || categoryName.includes('insumos');
+  }
+
+  function isMenuProduct(product) {
+    return !isIngredientProduct(product);
+  }
+
+  const menuProducts = products.filter(isMenuProduct);
+  const ingredientProducts = products.filter(isIngredientProduct);
+  const foodFilteredProducts = isFoodProductMode
+    ? filtered.filter(product => {
+      if (foodProductView === 'menu') return isMenuProduct(product);
+      if (foodProductView === 'insumos') return isIngredientProduct(product);
+      return true;
+    })
+    : filtered;
+
   const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
     const exp = expirationText ? expirationText(product) : null;
     return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
@@ -3371,6 +3398,56 @@ function ProductsPage({
       </section>
 
       {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
+
+      {isFoodProductMode && (
+        <section className="mb-5 rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase tracking-wide text-amber-600">Cafetería / restaurante</p>
+              <h3 className="mt-1 text-2xl font-black text-slate-900">Menú e insumos</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Separa los productos que vendes en el menú de los insumos que usas en cocina.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/80 bg-white/80 p-2 shadow-sm">
+              <FoodProductViewButton
+                label="Todos"
+                count={products.length}
+                active={foodProductView === 'todos'}
+                onClick={() => setFoodProductView('todos')}
+              />
+              <FoodProductViewButton
+                label="Menú"
+                count={menuProducts.length}
+                active={foodProductView === 'menu'}
+                onClick={() => setFoodProductView('menu')}
+              />
+              <FoodProductViewButton
+                label="Insumos"
+                count={ingredientProducts.length}
+                active={foodProductView === 'insumos'}
+                onClick={() => setFoodProductView('insumos')}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-emerald-100 bg-white/80 p-4">
+              <p className="text-sm font-black text-emerald-800">Menú</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Productos que se venden al cliente: capuchino, latte, postres, sanduches, combos.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-100 bg-white/80 p-4">
+              <p className="text-sm font-black text-amber-800">Insumos</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Materias primas y materiales: café, leche, azúcar, vasos, tapas, servilletas.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -3537,6 +3614,19 @@ function ProductsPage({
         </div>
       </section>
     </>
+  );
+}
+
+function FoodProductViewButton({ label, count, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl px-4 py-3 text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+    >
+      <span className="block text-sm font-black">{label}</span>
+      <span className={`mt-1 block text-xs font-bold ${active ? 'text-emerald-50' : 'text-slate-400'}`}>{count}</span>
+    </button>
   );
 }
 
