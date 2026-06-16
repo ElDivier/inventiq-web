@@ -216,6 +216,36 @@ function getUsersFromStorage() {
   return loadFromStorage(STORAGE_KEYS.users, initialUsers);
 }
 
+function looksLikeBarcodeSearch(value) {
+  const text = String(value || '').trim();
+  if (text.length < 4) return false;
+  if (text.includes(' ')) return false;
+  return /\d/.test(text) && /^[a-zA-Z0-9._-]+$/.test(text);
+}
+
+function filterProductsForBarcodeSearch(products, search, options = {}) {
+  const normalized = String(search || '').trim().toLowerCase();
+  const limit = options.limit || PRODUCT_SEARCH_LIMIT;
+  const onlyWithStock = Boolean(options.onlyWithStock);
+
+  if (!looksLikeBarcodeSearch(search)) {
+    return searchProductsForPicker(products, search, options);
+  }
+
+  if (!normalized) return [];
+
+  return products
+    .filter(product => {
+      if (onlyWithStock && Number(product.stock || 0) <= 0) return false;
+
+      return (
+        String(product.barcode || '').trim().toLowerCase() === normalized ||
+        String(product.sku || '').trim().toLowerCase() === normalized
+      );
+    })
+    .slice(0, limit);
+}
+
 function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -964,12 +994,13 @@ function App() {
   }, [storeProducts]);
 
   const salesStats = useMemo(() => {
-    const totalSales = storeSales.reduce((sum, s) => sum + s.total, 0);
-    const totalProfit = storeSales.reduce((sum, s) => sum + (s.profit || 0), 0);
-    const totalDiscount = storeSales.reduce((sum, s) => sum + (s.discount || 0), 0);
-    const totalUnitsSold = storeSales.reduce((sum, s) => sum + s.quantity, 0);
-    const topProduct = storeSales.reduce((acc, sale) => {
-      acc[sale.product] = (acc[sale.product] || 0) + sale.quantity;
+    const completedSales = storeSales.filter(sale => sale.status !== 'Anulada');
+    const totalSales = completedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+    const totalProfit = completedSales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
+    const totalDiscount = completedSales.reduce((sum, sale) => sum + Number(sale.discount || 0), 0);
+    const totalUnitsSold = completedSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
+    const topProduct = completedSales.reduce((acc, sale) => {
+      acc[sale.product] = (acc[sale.product] || 0) + Number(sale.quantity || 0);
       return acc;
     }, {});
     const bestSeller = Object.entries(topProduct).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Sin ventas';
@@ -1794,6 +1825,58 @@ function App() {
     clearDraft(currentUser?.id, 'purchaseCart');
   }
 
+  function normalizeRecipeUnit(unit) {
+    const text = String(unit || '').trim().toLowerCase();
+
+    if (!text) return '';
+    if (text.includes('mililitro') || text === 'ml' || text.endsWith(' ml')) return 'ml';
+    if (text.includes('litro') || text === 'l' || text.endsWith(' l') || /\d+l$/.test(text)) return 'l';
+    if (text.includes('kilogramo') || text === 'kg' || text.endsWith(' kg')) return 'kg';
+    if (text.includes('gramo') || text === 'g' || text === 'gr' || text.endsWith(' g') || text.endsWith(' gr')) return 'g';
+    if (text.includes('miligramo') || text === 'mg' || text.endsWith(' mg')) return 'mg';
+    if (text.includes('unidad') || text.includes('unid') || text === 'u' || text === 'und' || text.includes('pieza') || text.includes('pz')) return 'unidad';
+
+    return text;
+  }
+
+  function getUnitFamily(unit) {
+    if (['ml', 'l'].includes(unit)) return 'volume';
+    if (['mg', 'g', 'kg'].includes(unit)) return 'mass';
+    if (['unidad'].includes(unit)) return 'unit';
+    return 'custom';
+  }
+
+  function getUnitFactor(unit) {
+    const factors = {
+      ml: 1,
+      l: 1000,
+      mg: 1,
+      g: 1000,
+      kg: 1000000,
+      unidad: 1,
+    };
+
+    return factors[unit] || 1;
+  }
+
+  function convertRecipeQuantityToStockUnit(quantity, recipeUnit, stockUnit) {
+    const normalizedRecipeUnit = normalizeRecipeUnit(recipeUnit);
+    const normalizedStockUnit = normalizeRecipeUnit(stockUnit);
+
+    if (!normalizedRecipeUnit || !normalizedStockUnit || normalizedRecipeUnit === normalizedStockUnit) {
+      return quantity;
+    }
+
+    const recipeFamily = getUnitFamily(normalizedRecipeUnit);
+    const stockFamily = getUnitFamily(normalizedStockUnit);
+
+    if (recipeFamily === 'custom' || stockFamily === 'custom' || recipeFamily !== stockFamily) {
+      return null;
+    }
+
+    return (quantity * getUnitFactor(normalizedRecipeUnit)) / getUnitFactor(normalizedStockUnit);
+  }
+
   async function buildRecipeIngredientAdjustments(cartItems, sourceProducts, direction = 'subtract') {
     const isCafeteria = currentUser?.businessType === 'cafeteria';
 
@@ -1835,16 +1918,39 @@ function App() {
       return acc;
     }, {});
 
-    const requiredByIngredient = recipeRows.reduce((acc, recipe) => {
+    const requiredByIngredient = {};
+
+    for (const recipe of recipeRows) {
       const menuQuantity = quantityByMenuProduct[String(recipe.menu_product_id)] || 0;
-      const requiredQuantity = Number(recipe.quantity || 0) * menuQuantity;
       const ingredientId = String(recipe.ingredient_product_id || '');
+      const ingredient = sourceProducts.find(product => String(product.id) === String(ingredientId));
 
-      if (!ingredientId || requiredQuantity <= 0) return acc;
+      if (!ingredientId || menuQuantity <= 0) continue;
 
-      acc[ingredientId] = (acc[ingredientId] || 0) + requiredQuantity;
-      return acc;
-    }, {});
+      if (!ingredient) {
+        return {
+          updates: [],
+          errorMessage: 'No se encontró uno de los insumos de la receta. Revisa la receta antes de vender.',
+        };
+      }
+
+      const recipeQuantity = Number(recipe.quantity || 0);
+      const stockUnit = ingredient.unit || ingredient.size || '';
+      const convertedQuantity = convertRecipeQuantityToStockUnit(recipeQuantity, recipe.unit, stockUnit);
+
+      if (convertedQuantity === null) {
+        return {
+          updates: [],
+          errorMessage: `No se pudo convertir la unidad de ${ingredient.name}. Receta: ${recipe.quantity} ${recipe.unit || ''}, stock en: ${stockUnit || 'sin unidad'}.`,
+        };
+      }
+
+      const requiredQuantity = convertedQuantity * menuQuantity;
+
+      if (requiredQuantity <= 0) continue;
+
+      requiredByIngredient[ingredientId] = (requiredByIngredient[ingredientId] || 0) + requiredQuantity;
+    }
 
     const updates = [];
 
@@ -1879,6 +1985,31 @@ function App() {
     }
 
     return { updates, errorMessage: '' };
+  }
+
+  function buildFoodOrderCustomer() {
+    if (currentUser?.businessType !== 'cafeteria') return null;
+
+    const labels = {
+      local: 'En local',
+      takeaway: 'Para llevar',
+      delivery: 'Delivery',
+    };
+
+    const orderType = saleForm.orderType || 'local';
+    const parts = [labels[orderType] || 'En local'];
+    const reference = String(saleForm.orderReference || '').trim();
+    const notes = String(saleForm.orderNotes || '').trim();
+
+    if (reference) {
+      parts.push(reference);
+    }
+
+    if (notes) {
+      parts.push(`Nota: ${notes}`);
+    }
+
+    return parts.join(' · ');
   }
 
   async function registerSale(e) {
@@ -1929,7 +2060,7 @@ function App() {
       storeName: currentUser.store,
       productId: saleCart.length === 1 ? saleCart[0].productId : null,
       product: productSummary,
-      customer: saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final',
+      customer: buildFoodOrderCustomer() || (saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final'),
       paymentMethod: saleForm.paymentMethod,
       invoiceEnabled: saleForm.saleType === 'factura' && saleForm.invoiceEnabled,
       invoiceName: saleForm.saleType === 'factura' ? (saleForm.invoiceName || saleForm.customer || '') : '',
@@ -2634,6 +2765,7 @@ function App() {
           {active === 'Ventas' && (
             businessConfig.salesMode === 'food' ? (
               <FoodSalesPage
+                currentUser={currentUser}
                 sales={storeSales}
                 products={storeProducts}
                 clients={storeClients}
@@ -2956,7 +3088,10 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   const [scannerOpen, setScannerOpen] = useState(false);
   const [purchasePage, setPurchasePage] = useState(1);
   const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
-  const filteredProducts = useMemo(() => searchProductsForPicker(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT }), [products, productSearch]);
+  const filteredProducts = useMemo(
+    () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT }),
+    [products, productSearch]
+  );
   const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
   const quantity = Number(purchaseForm.quantity || 0);
   const unitCost = Number(purchaseForm.unitCost || selectedProduct?.cost || 0);
@@ -2991,12 +3126,12 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
     const product = products.find(item => String(item.id) === String(productId));
     const provider = product ? providers.find(item => String(item.category || '').toLowerCase() === String(product.category || '').toLowerCase()) : null;
 
-    setPurchaseForm({
-      ...purchaseForm,
+    setPurchaseForm(prev => ({
+      ...prev,
       productId,
       providerId: provider?.id || '',
       unitCost: product?.cost || '',
-    });
+    }));
   }
 
   async function copyProviderOrder(provider) {
@@ -3096,7 +3231,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={handleSearchKeyDown} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
               <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
                 <Camera className="h-4 w-4" /> Escanear con cámara
@@ -3208,7 +3343,10 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
   const [scannerOpen, setScannerOpen] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
   const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
-  const filteredProducts = useMemo(() => searchProductsForPicker(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }), [products, productSearch]);
+  const filteredProducts = useMemo(
+    () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
+    [products, productSearch]
+  );
   const salesPerPage = 20;
   const salesTotalPages = Math.max(Math.ceil(sales.length / salesPerPage), 1);
   const safeSalesPage = Math.min(salesPage, salesTotalPages);
@@ -3220,8 +3358,10 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
   }, [sales.length]);
 
   function handleProductSearch(value) {
+    const cleanValue = String(value || '').trim();
     setProductSearch(value);
-    const normalized = String(value || '').trim().toLowerCase();
+
+    const normalized = cleanValue.toLowerCase();
     if (!normalized) return;
 
     const exactProduct = products.find(product =>
@@ -3232,9 +3372,20 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
     );
 
     if (exactProduct) {
-      setSaleForm({ ...saleForm, productId: exactProduct.id });
+      setSaleForm(prev => ({ ...prev, productId: exactProduct.id }));
       setProductSearch(getProductDisplayName(exactProduct));
     }
+  }
+
+  function handleSearchKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+    }
+  }
+
+  function addSelectedProductToCart() {
+    addSaleItem();
+    setProductSearch('');
   }
 
   function setSaleType(type) {
@@ -3370,7 +3521,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
               <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
                 <Camera className="h-4 w-4" /> Escanear con cámara
@@ -3383,7 +3534,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                       type="button"
                       key={product.id}
                       onClick={() => {
-                        setSaleForm({ ...saleForm, productId: product.id });
+                        setSaleForm(prev => ({ ...prev, productId: product.id }));
                         setProductSearch(getProductDisplayName(product));
                       }}
                       className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
@@ -3405,7 +3556,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                       <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(product)}</p>
                       <p className="text-sm text-emerald-800">{product.sku || 'Sin SKU'} · Stock disponible {product.stock}</p>
                     </div>
-                    <button type="button" onClick={() => { setSaleForm({ ...saleForm, productId: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                    <button type="button" onClick={() => { setSaleForm(prev => ({ ...prev, productId: '' })); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
                   </div>
                 </div>
               ) : (
@@ -3423,7 +3574,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cantidad" type="number" value={saleForm.quantity} onChange={v => setSaleForm({ ...saleForm, quantity: v })} placeholder="1" min="1" />
-              <button type="button" onClick={addSaleItem} className="mt-7 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar al carrito</button>
+              <button type="button" onClick={addSelectedProductToCart} className="mt-7 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar al carrito</button>
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">

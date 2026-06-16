@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Coffee,
   CreditCard,
@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -32,7 +33,42 @@ function getPaymentLabel(value) {
   return labels[value] || value || 'Efectivo';
 }
 
+function getOrderTypeLabel(value) {
+  const labels = {
+    local: 'En local',
+    takeaway: 'Para llevar',
+    delivery: 'Delivery',
+  };
+
+  return labels[value || 'local'] || 'En local';
+}
+
+function getBaseCartName(item) {
+  return item.baseProduct || item.product || 'Producto';
+}
+
+function rebuildCartItemWithModifiers(item, nextModifiers) {
+  const basePrice = Number(item.basePrice ?? item.price ?? 0);
+  const modifierTotal = nextModifiers.reduce((sum, modifier) => sum + Number(modifier.price || 0), 0);
+  const nextPrice = basePrice + modifierTotal;
+  const quantity = Number(item.quantity || 0);
+  const baseName = getBaseCartName(item);
+  const modifierText = nextModifiers.map(modifier => modifier.name).join(', ');
+
+  return {
+    ...item,
+    baseProduct: baseName,
+    basePrice,
+    modifiers: nextModifiers,
+    product: modifierText ? `${baseName} (${modifierText})` : baseName,
+    price: nextPrice,
+    subtotal: nextPrice * quantity,
+    profit: (nextPrice - Number(item.cost || 0)) * quantity,
+  };
+}
+
 export default function FoodSalesPage({
+  currentUser,
   sales,
   products,
   saleForm,
@@ -56,6 +92,16 @@ export default function FoodSalesPage({
 }) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
+  const [modifiers, setModifiers] = useState([]);
+  const [modifierForm, setModifierForm] = useState({ name: '', price: '' });
+  const [modifierNotice, setModifierNotice] = useState(null);
+  const [modifiersLoading, setModifiersLoading] = useState(false);
+  const [extrasManagerOpen, setExtrasManagerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    loadModifiers();
+  }, [currentUser?.id]);
 
   const completedSales = useMemo(
     () => sales.filter(sale => sale.status !== 'Anulada'),
@@ -142,6 +188,112 @@ export default function FoodSalesPage({
         };
       });
     });
+  }
+
+  async function loadModifiers() {
+    try {
+      setModifiersLoading(true);
+      setModifierNotice(null);
+
+      const { data, error } = await supabase
+        .from('food_modifiers')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      setModifiers(data || []);
+    } catch (error) {
+      console.error('Error cargando extras:', error);
+      setModifierNotice({ type: 'error', message: `No se pudieron cargar los extras: ${error.message}` });
+    } finally {
+      setModifiersLoading(false);
+    }
+  }
+
+  async function saveModifier() {
+    const name = modifierForm.name.trim();
+    const price = Number(modifierForm.price || 0);
+
+    if (!name) {
+      setModifierNotice({ type: 'error', message: 'Escribe el nombre del extra.' });
+      return;
+    }
+
+    if (Number.isNaN(price) || price < 0) {
+      setModifierNotice({ type: 'error', message: 'El precio del extra no puede ser negativo.' });
+      return;
+    }
+
+    try {
+      setModifierNotice(null);
+
+      const { data, error } = await supabase
+        .from('food_modifiers')
+        .insert({
+          user_id: currentUser.id,
+          name,
+          price,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setModifiers(prev => [...prev, data]);
+      setModifierForm({ name: '', price: '' });
+      setModifierNotice({ type: 'success', message: 'Extra agregado correctamente.' });
+    } catch (error) {
+      console.error('Error guardando extra:', error);
+      setModifierNotice({ type: 'error', message: `No se pudo guardar el extra: ${error.message}` });
+    }
+  }
+
+  async function deleteModifier(modifierId) {
+    try {
+      setModifierNotice(null);
+
+      const { error } = await supabase
+        .from('food_modifiers')
+        .update({ is_active: false })
+        .eq('id', modifierId)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      setModifiers(prev => prev.filter(modifier => modifier.id !== modifierId));
+      setModifierNotice({ type: 'success', message: 'Extra eliminado.' });
+    } catch (error) {
+      console.error('Error eliminando extra:', error);
+      setModifierNotice({ type: 'error', message: `No se pudo eliminar el extra: ${error.message}` });
+    }
+  }
+
+  function addModifierToItem(item, modifier) {
+    if (typeof setSaleCart !== 'function') return;
+
+    setSaleCart(prevCart => prevCart.map(current => {
+      if (String(current.productId) !== String(item.productId)) return current;
+
+      const currentModifiers = Array.isArray(current.modifiers) ? current.modifiers : [];
+      const nextModifiers = [...currentModifiers, modifier];
+      return rebuildCartItemWithModifiers(current, nextModifiers);
+    }));
+  }
+
+  function removeModifierFromItem(item, modifierIndex) {
+    if (typeof setSaleCart !== 'function') return;
+
+    setSaleCart(prevCart => prevCart.map(current => {
+      if (String(current.productId) !== String(item.productId)) return current;
+
+      const currentModifiers = Array.isArray(current.modifiers) ? current.modifiers : [];
+      const nextModifiers = currentModifiers.filter((_, index) => index !== modifierIndex);
+      return rebuildCartItemWithModifiers(current, nextModifiers);
+    }));
   }
 
   return (
@@ -285,6 +437,127 @@ export default function FoodSalesPage({
               )}
             </div>
 
+            <div className="mb-4 rounded-3xl border border-amber-100 bg-amber-50 p-4">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wide text-amber-700">Tipo de pedido</span>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'local', label: 'En local' },
+                  { value: 'takeaway', label: 'Para llevar' },
+                  { value: 'delivery', label: 'Delivery' },
+                ].map(option => {
+                  const active = (saleForm.orderType || 'local') === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => updateSaleField('orderType', option.value)}
+                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-black uppercase tracking-wide text-slate-500">
+                    {(saleForm.orderType || 'local') === 'local' ? 'Mesa / número' : (saleForm.orderType || 'local') === 'delivery' ? 'Cliente / entrega' : 'Nombre del pedido'}
+                  </span>
+                  <input
+                    value={saleForm.orderReference || ''}
+                    onChange={event => updateSaleField('orderReference', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    placeholder={(saleForm.orderType || 'local') === 'local' ? 'Ej: Mesa 3' : (saleForm.orderType || 'local') === 'delivery' ? 'Ej: Diego / dirección' : 'Ej: Juan'}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-xs font-black uppercase tracking-wide text-slate-500">Nota rápida</span>
+                  <input
+                    value={saleForm.orderNotes || ''}
+                    onChange={event => updateSaleField('orderNotes', event.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    placeholder="Ej: sin azúcar, sin hielo, calentar"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Extras del cliente</p>
+                  <p className="truncate text-xs text-emerald-700/80">
+                    {modifiersLoading ? 'Cargando extras...' : `${modifiers.length} extra(s) creados`}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setExtrasManagerOpen(open => !open)}
+                  className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700"
+                >
+                  {extrasManagerOpen ? 'Cerrar' : '+ Extra'}
+                </button>
+              </div>
+
+              {extrasManagerOpen && (
+                <div className="mt-3 rounded-2xl bg-white p-3">
+                  {modifierNotice && (
+                    <div className={`mb-3 rounded-2xl p-3 text-xs font-bold ${modifierNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {modifierNotice.message}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-[1fr_88px_42px] gap-2">
+                    <input
+                      value={modifierForm.name}
+                      onChange={event => setModifierForm(prev => ({ ...prev, name: event.target.value }))}
+                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                      placeholder="Ej: Leche de almendra"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={modifierForm.price}
+                      onChange={event => setModifierForm(prev => ({ ...prev, price: event.target.value }))}
+                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                      placeholder="0.00"
+                    />
+                    <button
+                      type="button"
+                      onClick={saveModifier}
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-black text-white hover:bg-emerald-700"
+                      title="Guardar extra"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {modifiers.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {modifiers.map(modifier => (
+                        <span key={modifier.id} className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">
+                          {modifier.name} · {formatMoney(modifier.price)}
+                          <button
+                            type="button"
+                            onClick={() => deleteModifier(modifier.id)}
+                            className="text-red-500 hover:text-red-600"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {saleCart.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
                 Agrega productos del menú para iniciar un pedido.
@@ -327,6 +600,43 @@ export default function FoodSalesPage({
                       >
                         Quitar
                       </button>
+                    </div>
+
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">Extras rápidos</p>
+                      {modifiers.length === 0 ? (
+                        <p className="text-xs text-slate-400">Aún no hay extras creados para este negocio.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {modifiers.map(modifier => (
+                          <button
+                            key={modifier.id}
+                            type="button"
+                            onClick={() => addModifierToItem(item, modifier)}
+                            className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-100"
+                          >
+                            + {modifier.name} {modifier.price > 0 ? formatMoney(modifier.price) : ''}
+                          </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                        <div className="mt-3 space-y-1">
+                          {item.modifiers.map((modifier, modifierIndex) => (
+                            <div key={`${modifier.id}-${modifierIndex}`} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                              <span>{modifier.name} · {formatMoney(modifier.price)}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeModifierFromItem(item, modifierIndex)}
+                                className="font-black text-red-500 hover:text-red-600"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -388,7 +698,7 @@ export default function FoodSalesPage({
                 <span className="text-lg font-black">Total</span>
                 <span className="text-3xl font-black text-emerald-300">{formatMoney(salePreview.total)}</span>
               </div>
-              <p className="mt-2 text-xs text-slate-400">Pago: {getPaymentLabel(saleForm.paymentMethod)}</p>
+              <p className="mt-2 text-xs text-slate-400">Pedido: {getOrderTypeLabel(saleForm.orderType)} · Pago: {getPaymentLabel(saleForm.paymentMethod)}</p>
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -430,7 +740,7 @@ export default function FoodSalesPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-900">{sale.code || 'Venta'}</p>
-                        <p className="text-xs text-slate-500">{sale.product || 'Pedido'} · {sale.paymentMethod}</p>
+                        <p className="text-xs text-slate-500">{sale.customer || sale.product || 'Pedido'} · {sale.paymentMethod}</p>
                       </div>
                       <p className="text-sm font-black text-emerald-700">{formatMoney(sale.total)}</p>
                     </div>

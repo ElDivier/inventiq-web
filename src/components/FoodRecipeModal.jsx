@@ -34,6 +34,11 @@ export default function FoodRecipeModal({
     return (ingredients || []).filter(item => !usedIds.has(String(item.id)));
   }, [ingredients, recipeItems]);
 
+  const selectedIngredient = useMemo(() => {
+    if (!form.ingredientProductId) return null;
+    return ingredientById.get(String(form.ingredientProductId)) || null;
+  }, [form.ingredientProductId, ingredientById]);
+
   useEffect(() => {
     if (!currentUser?.id || !menuProduct?.id) return;
     loadRecipeItems();
@@ -201,7 +206,15 @@ export default function FoodRecipeModal({
                 <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Insumo</span>
                 <select
                   value={form.ingredientProductId}
-                  onChange={event => setForm(prev => ({ ...prev, ingredientProductId: event.target.value }))}
+                  onChange={event => {
+                    const ingredientId = event.target.value;
+                    const ingredient = ingredientById.get(String(ingredientId));
+                    setForm(prev => ({
+                      ...prev,
+                      ingredientProductId: ingredientId,
+                      unit: prev.unit || ingredient?.size || '',
+                    }));
+                  }}
                   className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
                 >
                   <option value="">Seleccionar insumo</option>
@@ -214,7 +227,7 @@ export default function FoodRecipeModal({
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Cantidad</span>
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Cantidad por producto</span>
                 <input
                   type="number"
                   min="0"
@@ -232,7 +245,7 @@ export default function FoodRecipeModal({
                   value={form.unit}
                   onChange={event => setForm(prev => ({ ...prev, unit: event.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
-                  placeholder="g, ml, und"
+                  placeholder={selectedIngredient?.size || 'g, ml, und'}
                 />
               </label>
 
@@ -255,6 +268,20 @@ export default function FoodRecipeModal({
                 Agregar
               </button>
             </div>
+
+            {selectedIngredient && (
+              <div className="mt-3 rounded-2xl border border-emerald-100 bg-white p-3 text-xs text-slate-600">
+                <p className="font-black text-slate-800">{selectedIngredient.name}</p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <span>Stock disponible: <strong>{selectedIngredient.stock}</strong></span>
+                  <span>Unidad/presentación: <strong>{selectedIngredient.size || 'Sin unidad'}</strong></span>
+                  <span>Costo referencial: <strong>{Number(selectedIngredient.cost || 0).toFixed(2)}</strong></span>
+                </div>
+                <p className="mt-2 text-amber-700">
+                  Puedes usar unidades compatibles. Ejemplo: si el stock está en L, puedes poner la receta en ml y InventiQ hará la conversión.
+                </p>
+              </div>
+            )}
           </form>
 
           <div className="mt-5 rounded-3xl border border-slate-200 bg-white">
@@ -310,7 +337,7 @@ export default function FoodRecipeModal({
 
           <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
             <p className="font-bold">Receta activa para control de insumos.</p>
-            <p className="mt-1">Al vender este producto del menú, InventiQ descontará automáticamente las cantidades indicadas de cada insumo.</p>
+            <p className="mt-1">Al vender este producto del menú, InventiQ descontará automáticamente las cantidades indicadas de cada insumo. InventiQ convierte automáticamente unidades compatibles como L/ml y kg/g.</p>
           </div>
         </div>
       </div>
