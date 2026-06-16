@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit, Package, Plus, Printer, Trash2 } from 'lucide-react';
+import { Edit, Package, Plus, Printer, Search, Trash2 } from 'lucide-react';
 import { MAX_LABELS_WITHOUT_CONFIRM } from '../config/constants';
 import { getProductVariantText } from '../utils/products';
 import {
@@ -19,6 +19,36 @@ function normalizeText(value) {
 function formatMoney(value) {
   const number = Number(value || 0);
   return `$${number.toFixed(2)}`;
+}
+
+function looksLikeBarcodeSearch(value) {
+  const text = String(value || '').trim();
+  if (text.length < 4) return false;
+  if (text.includes(' ')) return false;
+  return /\d/.test(text) && /^[a-zA-Z0-9._-]+$/.test(text);
+}
+
+function productMatchesTableSearch(product, searchText) {
+  const text = String(searchText || '').trim().toLowerCase();
+
+  if (!text) return true;
+
+  if (looksLikeBarcodeSearch(text)) {
+    return (
+      String(product.barcode || '').trim().toLowerCase() === text ||
+      String(product.sku || '').trim().toLowerCase() === text
+    );
+  }
+
+  return [
+    product.name,
+    product.sku,
+    product.barcode,
+    product.brand,
+    product.size,
+    product.color,
+    product.category,
+  ].some(value => String(value || '').toLowerCase().includes(text));
 }
 
 function getStockBadge(product, statusText) {
@@ -87,6 +117,8 @@ function getExpirationBadge(product, expirationText) {
 export default function ProductTable({
   businessConfig,
   products,
+  search = '',
+  setSearch,
   filtered,
   categories,
   category,
@@ -104,6 +136,7 @@ export default function ProductTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [categoryPage, setCategoryPage] = useState(1);
   const [categorySearch, setCategorySearch] = useState('');
+  const [tableSearch, setTableSearch] = useState(search || '');
   const [selectedLabelIds, setSelectedLabelIds] = useState([]);
   const [labelColumns, setLabelColumns] = useState('2');
   const [labelCopies, setLabelCopies] = useState('1');
@@ -125,11 +158,15 @@ export default function ProductTable({
     ? 'Cambia la categoría o importa menú e insumos desde Excel.'
     : '{emptyDescription}';
 
-  const totalProducts = filtered.length;
+  const tableFilteredProducts = useMemo(() => {
+    return filtered.filter(product => productMatchesTableSearch(product, tableSearch));
+  }, [filtered, tableSearch]);
+
+  const totalProducts = tableFilteredProducts.length;
   const totalPages = Math.max(Math.ceil(totalProducts / PRODUCTS_PER_PAGE), 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * PRODUCTS_PER_PAGE;
-  const paginatedProducts = filtered.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
+  const paginatedProducts = tableFilteredProducts.slice(startIndex, startIndex + PRODUCTS_PER_PAGE);
 
   const allCategories = useMemo(() => {
     const cleanCategories = (categories || [])
@@ -177,7 +214,19 @@ export default function ProductTable({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [category, filtered.length]);
+  }, [category, tableSearch, tableFilteredProducts.length]);
+
+  useEffect(() => {
+    setTableSearch(search || '');
+  }, [search]);
+
+  function handleTableSearchChange(value) {
+    setTableSearch(value);
+
+    if (typeof setSearch === 'function') {
+      setSearch(value);
+    }
+  }
 
   useEffect(() => {
     setCategoryPage(1);
@@ -375,7 +424,30 @@ export default function ProductTable({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_auto_auto] sm:items-end">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,380px)_auto_auto_auto] lg:items-end">
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Buscar</span>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={tableSearch}
+                onChange={event => handleTableSearchChange(event.target.value)}
+                onFocus={event => event.target.select()}
+                className="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-16 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+                placeholder="Nombre, SKU o código..."
+              />
+              {tableSearch && (
+                <button
+                  type="button"
+                  onClick={() => handleTableSearchChange('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </label>
+
           <label className="block">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Columnas</span>
             <select

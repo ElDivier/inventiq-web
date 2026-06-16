@@ -968,18 +968,30 @@ function App() {
 
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase();
+    const searchLooksLikeCode = looksLikeBarcodeSearch(search);
 
-    return storeProducts.filter(p => {
-      const matchSearch = !text || [
-        p.name,
-        p.sku,
-        p.barcode,
-        p.brand,
-        p.size,
-        p.color,
-        p.category,
-      ].some(value => String(value || '').toLowerCase().includes(text));
-      const matchCategory = category === 'Todas' || p.category === category;
+    return storeProducts.filter(product => {
+      const matchCategory = category === 'Todas' || product.category === category;
+
+      if (!text) {
+        return matchCategory;
+      }
+
+      const matchSearch = searchLooksLikeCode
+        ? (
+          String(product.barcode || '').trim().toLowerCase() === text ||
+          String(product.sku || '').trim().toLowerCase() === text
+        )
+        : [
+          product.name,
+          product.sku,
+          product.barcode,
+          product.brand,
+          product.size,
+          product.color,
+          product.category,
+        ].some(value => String(value || '').toLowerCase().includes(text));
+
       return matchSearch && matchCategory;
     });
   }, [storeProducts, search, category]);
@@ -2833,6 +2845,8 @@ function App() {
               setNotice={setNotice}
               products={storeProducts}
               setProducts={setProducts}
+              search={search}
+              setSearch={setSearch}
               filtered={filtered}
               categories={categories}
               productCategories={productCategories}
@@ -3700,6 +3714,8 @@ function ProductsPage({
   setNotice,
   products,
   setProducts,
+  search,
+  setSearch,
   filtered,
   categories,
   productCategories,
@@ -3774,6 +3790,8 @@ function ProductsPage({
         <ProductTable
   businessConfig={businessConfig}
   products={products}
+  search={search}
+  setSearch={setSearch}
   filtered={filtered}
   categories={categories}
   category={category}
