@@ -3245,7 +3245,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={handleSearchKeyDown} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
               </div>
               <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
                 <Camera className="h-4 w-4" /> Escanear con cámara
