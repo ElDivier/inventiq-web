@@ -226,10 +226,6 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
 
         <div className="receipt-preview-wrap">
           <div id="thermal-receipt-80mm">
-            {currentUser?.logoUrl && (
-              <img src={currentUser.logoUrl} alt={storeName} className="receipt-logo" />
-            )}
-
             <div className="receipt-center">
               <div className="receipt-store">{storeName}</div>
               {currentUser?.businessId && <div className="receipt-small">RUC/C.I.: {currentUser.businessId}</div>}
