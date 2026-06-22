@@ -3356,20 +3356,28 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
   const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
+  const [saleHistoryFilter, setSaleHistoryFilter] = useState('completed');
   const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
   const filteredProducts = useMemo(
     () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
     [products, productSearch]
   );
   const salesPerPage = 20;
-  const salesTotalPages = Math.max(Math.ceil(sales.length / salesPerPage), 1);
+  const completedHistorySales = sales.filter(sale => sale.status !== 'Anulada');
+  const canceledHistorySales = sales.filter(sale => sale.status === 'Anulada');
+  const visibleHistorySales = saleHistoryFilter === 'canceled'
+    ? canceledHistorySales
+    : saleHistoryFilter === 'all'
+      ? sales
+      : completedHistorySales;
+  const salesTotalPages = Math.max(Math.ceil(visibleHistorySales.length / salesPerPage), 1);
   const safeSalesPage = Math.min(salesPage, salesTotalPages);
   const salesStartIndex = (safeSalesPage - 1) * salesPerPage;
-  const paginatedSales = sales.slice(salesStartIndex, salesStartIndex + salesPerPage);
+  const paginatedSales = visibleHistorySales.slice(salesStartIndex, salesStartIndex + salesPerPage);
 
   useEffect(() => {
     setSalesPage(1);
-  }, [sales.length]);
+  }, [sales.length, saleHistoryFilter]);
 
   function handleProductSearch(value) {
     const cleanValue = String(value || '').trim();
@@ -3471,9 +3479,23 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
           <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h3 className="flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Historial de ventas</h3>
+              <p className="mt-1 text-sm text-slate-500">Separa las ventas completadas de las anuladas para revisar mejor el movimiento.</p>
+            </div>
+            <div className="border-b border-slate-100 px-5 py-4">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setSaleHistoryFilter('completed')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'completed' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  Completadas ({completedHistorySales.length})
+                </button>
+                <button type="button" onClick={() => setSaleHistoryFilter('canceled')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'canceled' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  Anuladas ({canceledHistorySales.length})
+                </button>
+                <button type="button" onClick={() => setSaleHistoryFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  Todas ({sales.length})
+                </button>
+              </div>
             </div>
             <div className="divide-y divide-slate-100">
-              {sales.length === 0 && <div className="p-5"><EmptyState icon={ShoppingCart} title="Aún no tienes ventas" text="Registra tu primera venta para empezar a medir ingresos, utilidad y rotación." /></div>}
+              {visibleHistorySales.length === 0 && <div className="p-5"><EmptyState icon={ShoppingCart} title={saleHistoryFilter === 'canceled' ? 'No tienes ventas anuladas' : 'Aún no tienes ventas completadas'} text={saleHistoryFilter === 'canceled' ? 'Las ventas anuladas aparecerán separadas en esta pestaña.' : 'Registra tu primera venta para empezar a medir ingresos, utilidad y rotación.'} /></div>}
               {paginatedSales.map(sale => (
                 <div key={sale.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
@@ -3502,9 +3524,9 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                 </div>
               ))}
             </div>
-            {sales.length > salesPerPage && (
+            {visibleHistorySales.length > salesPerPage && (
               <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>Mostrando {salesStartIndex + 1}-{Math.min(salesStartIndex + salesPerPage, sales.length)} de {sales.length} ventas</span>
+                <span>Mostrando {salesStartIndex + 1}-{Math.min(salesStartIndex + salesPerPage, visibleHistorySales.length)} de {visibleHistorySales.length} ventas</span>
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={safeSalesPage <= 1} onClick={() => setSalesPage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
                   <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safeSalesPage} de {salesTotalPages}</span>
