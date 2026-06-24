@@ -1589,34 +1589,121 @@ function App() {
     }
   }
 
+  function calculateCartItemTotals(item) {
+    const quantity = Number(item.quantity || 0);
+    const price = Number(item.price || 0);
+    const cost = Number(item.cost || 0);
+    const originalSubtotal = price * quantity;
+    const discountType = item.discountType === 'fixed' ? 'fixed' : 'percent';
+    const discountValue = Number(item.discountValue || 0);
+    let discountAmount = 0;
+    let discountPercent = 0;
+
+    if (discountType === 'fixed') {
+      discountAmount = Math.min(Math.max(discountValue, 0), originalSubtotal);
+      discountPercent = originalSubtotal > 0 ? (discountAmount / originalSubtotal) * 100 : 0;
+    } else {
+      discountPercent = Math.min(Math.max(discountValue, 0), 100);
+      discountAmount = originalSubtotal * (discountPercent / 100);
+    }
+
+    const subtotal = Math.max(originalSubtotal - discountAmount, 0);
+    const profit = subtotal - (cost * quantity);
+
+    return {
+      originalSubtotal,
+      discountType,
+      discountValue,
+      discountPercent,
+      discount: discountAmount,
+      subtotal,
+      profit,
+    };
+  }
+
+  function normalizeSaleCartItem(item) {
+    return {
+      ...item,
+      ...calculateCartItemTotals(item),
+    };
+  }
+
+  function updateSaleItemDiscount(productId, changes) {
+    setSaleCart(currentCart => currentCart.map(item => {
+      if (String(item.productId) !== String(productId)) return item;
+      return normalizeSaleCartItem({ ...item, ...changes });
+    }));
+  }
+
   function calculateSalePreview() {
     const selectedProduct = storeProducts.find(p => String(p.id) === String(saleForm.productId));
     const quantity = Number(saleForm.quantity || 0);
-    const discountValue = Number(saleForm.discount || 0);
-    const discountType = saleForm.discountType || 'percent';
 
-    const subtotal = saleCart.reduce((sum, item) => sum + item.subtotal, 0);
-    let discountAmount = 0;
-    let safeDiscountPercent = 0;
+    if (businessConfig.salesMode === 'food') {
+      const discountValue = Number(saleForm.discount || 0);
+      const discountType = saleForm.discountType || 'percent';
+      const subtotal = saleCart.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
+      let discountAmount = 0;
+      let safeDiscountPercent = 0;
 
-    if (discountType === 'fixed') {
-      discountAmount = Math.min(Math.max(discountValue, 0), subtotal);
-      safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
-    } else {
-      safeDiscountPercent = Math.min(Math.max(discountValue, 0), 100);
-      discountAmount = subtotal * (safeDiscountPercent / 100);
+      if (discountType === 'fixed') {
+        discountAmount = Math.min(Math.max(discountValue, 0), subtotal);
+        safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
+      } else {
+        safeDiscountPercent = Math.min(Math.max(discountValue, 0), 100);
+        discountAmount = subtotal * (safeDiscountPercent / 100);
+      }
+
+      const total = subtotal - discountAmount;
+      const cartCost = saleCart.reduce((sum, item) => sum + Number(item.cost || 0) * Number(item.quantity || 0), 0);
+      const profit = total - cartCost;
+
+      let error = null;
+      if (discountValue < 0) error = 'El descuento no puede ser negativo.';
+      if (discountType === 'percent' && discountValue > 100) error = 'El descuento porcentual no puede ser mayor al 100%.';
+      if (discountType === 'fixed' && discountValue > subtotal) error = 'El descuento en dólares no puede ser mayor al subtotal.';
+
+      return { product: selectedProduct || null, quantity, subtotal, discountType, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
     }
 
-    const total = subtotal - discountAmount;
-    const cartCost = saleCart.reduce((sum, item) => sum + item.cost * item.quantity, 0);
-    const profit = total - cartCost;
+    const normalizedCart = saleCart.map(normalizeSaleCartItem);
+    const subtotal = normalizedCart.reduce((sum, item) => sum + item.originalSubtotal, 0);
+    const discountAmount = normalizedCart.reduce((sum, item) => sum + item.discount, 0);
+    const total = normalizedCart.reduce((sum, item) => sum + item.subtotal, 0);
+    const profit = normalizedCart.reduce((sum, item) => sum + item.profit, 0);
+    const safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
 
     let error = null;
-    if (discountValue < 0) error = 'El descuento no puede ser negativo.';
-    if (discountType === 'percent' && discountValue > 100) error = 'El descuento porcentual no puede ser mayor al 100%.';
-    if (discountType === 'fixed' && discountValue > subtotal) error = 'El descuento en dólares no puede ser mayor al subtotal.';
+    const invalidItem = normalizedCart.find(item => {
+      const discountValue = Number(item.discountValue || 0);
+      if (Number.isNaN(discountValue) || discountValue < 0) return true;
+      if (item.discountType === 'percent' && discountValue > 100) return true;
+      if (item.discountType === 'fixed' && discountValue > item.originalSubtotal) return true;
+      return false;
+    });
 
-    return { product: selectedProduct || null, quantity, subtotal, discountType, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
+    if (invalidItem) {
+      const discountValue = Number(invalidItem.discountValue || 0);
+      if (Number.isNaN(discountValue) || discountValue < 0) {
+        error = `El descuento de ${invalidItem.product} no puede ser negativo.`;
+      } else if (invalidItem.discountType === 'percent' && discountValue > 100) {
+        error = `El descuento porcentual de ${invalidItem.product} no puede ser mayor al 100%.`;
+      } else if (invalidItem.discountType === 'fixed' && discountValue > invalidItem.originalSubtotal) {
+        error = `El descuento en dólares de ${invalidItem.product} no puede ser mayor al subtotal del producto.`;
+      }
+    }
+
+    return {
+      product: selectedProduct || null,
+      quantity,
+      subtotal,
+      discountType: 'item',
+      discountPercent: safeDiscountPercent,
+      discount: discountAmount,
+      total,
+      profit,
+      error,
+    };
   }
 
   function addSaleItem(productIdOverride = null, quantityOverride = null) {
@@ -1653,26 +1740,24 @@ function App() {
 
     if (existing) {
       setSaleCart(saleCart.map(item => String(item.productId) === String(product.id)
-        ? {
+        ? normalizeSaleCartItem({
           ...item,
           quantity: item.quantity + quantity,
-          subtotal: product.price * (item.quantity + quantity),
-          profit: (product.price - product.cost) * (item.quantity + quantity),
-        }
+        })
         : item
       ));
     } else {
       setSaleCart([
         ...saleCart,
-        {
+        normalizeSaleCartItem({
           productId: product.id,
           product: getProductDisplayName(product),
           quantity,
           price: product.price,
           cost: product.cost,
-          subtotal: product.price * quantity,
-          profit: (product.price - product.cost) * quantity,
-        },
+          discountType: 'percent',
+          discountValue: '',
+        }),
       ]);
     }
 
@@ -2063,14 +2148,15 @@ function App() {
       return;
     }
 
-    const totalQuantity = saleCart.reduce((sum, item) => sum + item.quantity, 0);
-    const productSummary = saleCart.length === 1 ? saleCart[0].product : `${saleCart.length} productos`;
+    const normalizedSaleCart = businessConfig.salesMode === 'food' ? saleCart : saleCart.map(normalizeSaleCartItem);
+    const totalQuantity = normalizedSaleCart.reduce((sum, item) => sum + item.quantity, 0);
+    const productSummary = normalizedSaleCart.length === 1 ? normalizedSaleCart[0].product : `${normalizedSaleCart.length} productos`;
 
     const newSale = {
       code: `V-${String(storeSales.length + 1).padStart(4, '0')}`,
       storeId: storeKey,
       storeName: currentUser.store,
-      productId: saleCart.length === 1 ? saleCart[0].productId : null,
+      productId: normalizedSaleCart.length === 1 ? normalizedSaleCart[0].productId : null,
       product: productSummary,
       customer: buildFoodOrderCustomer() || (saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final'),
       paymentMethod: saleForm.paymentMethod,
@@ -2100,7 +2186,7 @@ function App() {
       return;
     }
 
-    const itemsPayload = saleCart.map(item => mapSaleItemToDb(item, saleData.id, currentUser.id));
+    const itemsPayload = normalizedSaleCart.map(item => mapSaleItemToDb(item, saleData.id, currentUser.id));
     const { error: itemsError } = await supabase.from('sale_items').insert(itemsPayload);
 
     if (itemsError) {
@@ -2109,7 +2195,7 @@ function App() {
       return;
     }
 
-    for (const item of saleCart) {
+    for (const item of normalizedSaleCart) {
       const product = storeProducts.find(p => String(p.id) === String(item.productId));
       const newStock = product.stock - item.quantity;
       const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
@@ -2156,7 +2242,7 @@ function App() {
       ? ` También se descontaron ${recipeStockUpdates.length} insumo(s) de recetas.`
       : '';
 
-    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${saleCart.length} producto(s).${recipeMessage}` });
+    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${normalizedSaleCart.length} producto(s).${recipeMessage}` });
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
@@ -2787,6 +2873,7 @@ function App() {
                 setSaleCart={setSaleCart}
                 addSaleItem={addSaleItem}
                 removeSaleItem={removeSaleItem}
+                updateSaleItemDiscount={updateSaleItemDiscount}
                 clearSaleCart={clearSaleCart}
                 registerSale={registerSale}
                 resetSaleForm={resetSaleForm}
@@ -2810,6 +2897,7 @@ function App() {
                 saleCart={saleCart}
                 addSaleItem={addSaleItem}
                 removeSaleItem={removeSaleItem}
+                updateSaleItemDiscount={updateSaleItemDiscount}
                 clearSaleCart={clearSaleCart}
                 registerSale={registerSale}
                 resetSaleForm={resetSaleForm}
@@ -3352,12 +3440,12 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   );
 }
 
-function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
+function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, updateSaleItemDiscount, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
   const [saleHistoryFilter, setSaleHistoryFilter] = useState('completed');
-  const { product, subtotal, discount, discountType, discountPercent, total, profit, error } = salePreview;
+  const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
   const filteredProducts = useMemo(
     () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
     [products, productSearch]
@@ -3620,40 +3708,58 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
               </div>
               {saleCart.length === 0 && <p className="text-sm text-slate-500">Todavía no agregas productos.</p>}
               <div className="space-y-2">
-                {saleCart.map(item => (
-                  <div key={item.productId} className="flex items-center justify-between rounded-2xl bg-white p-3 text-sm shadow-sm">
-                    <div>
-                      <p className="font-bold text-slate-900">{item.product}</p>
-                      <p className="text-xs text-slate-500">{item.quantity} x ${item.price.toFixed(2)}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p className="font-bold text-emerald-700">${item.subtotal.toFixed(2)}</p>
-                      <button type="button" onClick={() => removeSaleItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                {saleCart.map(item => {
+                  const originalSubtotal = Number(item.originalSubtotal ?? (item.price * item.quantity));
+                  const lineDiscount = Number(item.discount || 0);
+                  const lineTotal = Number(item.subtotal ?? originalSubtotal);
+                  const hasDiscount = lineDiscount > 0;
 
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <span className="mb-3 block text-sm font-semibold text-slate-700">Descuento general</span>
-              <div className="mb-3 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setSaleForm({ ...saleForm, discountType: 'percent', discount: 0 })} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.discountType !== 'fixed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                  Porcentaje %
-                </button>
-                <button type="button" onClick={() => setSaleForm({ ...saleForm, discountType: 'fixed', discount: 0 })} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.discountType === 'fixed' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                  Valor $
-                </button>
+                  return (
+                    <div key={item.productId} className="rounded-2xl bg-white p-3 text-sm shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-slate-900">{item.product}</p>
+                          <p className="text-xs text-slate-500">{item.quantity} x ${item.price.toFixed(2)} = ${originalSubtotal.toFixed(2)}</p>
+                          {hasDiscount && <p className="mt-1 text-xs font-semibold text-emerald-700">Descuento: -${lineDiscount.toFixed(2)}</p>}
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="text-right">
+                            <p className="font-bold text-emerald-700">${lineTotal.toFixed(2)}</p>
+                            {hasDiscount && <p className="text-[11px] text-slate-400 line-through">${originalSubtotal.toFixed(2)}</p>}
+                          </div>
+                          <button type="button" onClick={() => removeSaleItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-slate-600">Descuento</span>
+                          {hasDiscount && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-700">-{item.discountPercent.toFixed(2)}%</span>}
+                        </div>
+                        <div className="grid grid-cols-[1fr_110px] gap-2">
+                          <select
+                            value={item.discountType || 'percent'}
+                            onChange={e => updateSaleItemDiscount(item.productId, { discountType: e.target.value, discountValue: '' })}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            <option value="percent">Porcentaje %</option>
+                            <option value="fixed">Valor $</option>
+                          </select>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={Number(item.discountValue || 0) === 0 ? '' : item.discountValue}
+                            onChange={e => updateSaleItemDiscount(item.productId, { discountValue: e.target.value })}
+                            placeholder={item.discountType === 'fixed' ? 'Ej: 2' : 'Ej: 10'}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <Field
-                label={saleForm.discountType === 'fixed' ? 'Descuento en dólares' : 'Descuento en porcentaje'}
-                type="number"
-                value={saleForm.discount}
-                onChange={v => setSaleForm({ ...saleForm, discount: v })}
-                placeholder={saleForm.discountType === 'fixed' ? 'Ej: 2.00' : 'Ej: 10'}
-                min="0"
-                step="0.01"
-              />
             </div>
 
             <div>
@@ -3713,7 +3819,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
             <div className="rounded-2xl bg-emerald-50 p-4">
               <div className="space-y-2 text-sm text-emerald-800">
                 <div className="flex justify-between"><span>Subtotal</span><strong>${subtotal.toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Descuento {discountType === 'fixed' ? `(valor fijo · ${discountPercent.toFixed(2)}%)` : `(${discountPercent.toFixed(2)}%)`}</span><strong>-${discount.toFixed(2)}</strong></div>
+                <div className="flex justify-between"><span>Descuento ({discountPercent.toFixed(2)}%)</span><strong>-${discount.toFixed(2)}</strong></div>
                 <div className="flex justify-between"><span>Utilidad estimada</span><strong>${profit.toFixed(2)}</strong></div>
               </div>
               <div className="mt-3 border-t border-emerald-100 pt-3">
