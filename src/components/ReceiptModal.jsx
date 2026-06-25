@@ -20,6 +20,27 @@ function formatDate(value) {
   });
 }
 
+
+function getPaymentBreakdown(sale) {
+  const method = sale?.paymentMethod || sale?.payment_method || 'Efectivo';
+  const cash = Number(sale?.cashAmount ?? sale?.cash_amount ?? 0);
+  const card = Number(sale?.cardAmount ?? sale?.card_amount ?? 0);
+  const transfer = Number(sale?.transferAmount ?? sale?.transfer_amount ?? 0);
+
+  if (method !== 'Mixto') return [];
+
+  return [
+    ['Efectivo', cash],
+    ['Tarjeta', card],
+    ['Transferencia', transfer],
+  ].filter(([, amount]) => Number(amount || 0) > 0);
+}
+
+function getPaymentLabel(sale) {
+  const method = sale?.paymentMethod || sale?.payment_method || 'Efectivo';
+  return method === 'Mixto' ? 'Pago mixto' : method;
+}
+
 function getSaleItems(sale) {
   if (Array.isArray(sale?.items) && sale.items.length > 0) {
     return sale.items;
@@ -42,6 +63,7 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
   const total = Number(sale.total || 0);
   const storeName = currentUser?.store || sale.storeName || 'InventiQ';
   const footer = currentUser?.receiptFooter || 'Gracias por su compra.';
+  const paymentBreakdown = getPaymentBreakdown(sale);
 
   function printReceipt() {
     window.print();
@@ -250,8 +272,14 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
             </div>
             <div className="receipt-row receipt-small">
               <span>Pago:</span>
-              <strong>{sale.paymentMethod || sale.payment_method || 'Efectivo'}</strong>
+              <strong>{getPaymentLabel(sale)}</strong>
             </div>
+            {paymentBreakdown.map(([label, amount]) => (
+              <div key={label} className="receipt-row receipt-small receipt-muted">
+                <span>{label}:</span>
+                <strong>{formatMoney(amount)}</strong>
+              </div>
+            ))}
 
             {sale.invoiceEnabled && (
               <>

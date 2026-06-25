@@ -246,6 +246,46 @@ function filterProductsForBarcodeSearch(products, search, options = {}) {
     .slice(0, limit);
 }
 
+
+function toMoneyNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0;
+}
+
+function isSplitPaymentAvailable(currentUser) {
+  const storeName = String(currentUser?.store || '').toLowerCase();
+  return Boolean(currentUser?.splitPaymentEnabled) || storeName.includes('kuehns') || storeName.includes('kuehns 5');
+}
+
+function getSplitPaymentAmounts(saleForm) {
+  return {
+    cashAmount: toMoneyNumber(saleForm?.cashAmount),
+    cardAmount: toMoneyNumber(saleForm?.cardAmount),
+    transferAmount: toMoneyNumber(saleForm?.transferAmount),
+  };
+}
+
+function getSplitPaymentTotal(saleForm) {
+  const amounts = getSplitPaymentAmounts(saleForm);
+  return toMoneyNumber(amounts.cashAmount + amounts.cardAmount + amounts.transferAmount);
+}
+
+function getPaymentDisplay(sale) {
+  const method = sale?.paymentMethod || sale?.payment_method || 'Efectivo';
+  const cash = toMoneyNumber(sale?.cashAmount ?? sale?.cash_amount);
+  const card = toMoneyNumber(sale?.cardAmount ?? sale?.card_amount);
+  const transfer = toMoneyNumber(sale?.transferAmount ?? sale?.transfer_amount);
+
+  if (method !== 'Mixto') return method;
+
+  const parts = [];
+  if (cash > 0) parts.push(`Efectivo $${cash.toFixed(2)}`);
+  if (card > 0) parts.push(`Tarjeta $${card.toFixed(2)}`);
+  if (transfer > 0) parts.push(`Transferencia $${transfer.toFixed(2)}`);
+
+  return parts.length > 0 ? `Mixto · ${parts.join(' · ')}` : 'Mixto';
+}
+
 function App() {
   const [users, setUsers] = useState(() => getUsersFromStorage());
   const [currentUser, setCurrentUser] = useState(null);
@@ -328,6 +368,7 @@ function App() {
             receiptFooter: 'Gracias por su compra.',
             logoUrl: '',
             businessType: 'general',
+            splitPaymentEnabled: false,
           });
           loadUserProfile(sessionUser);
         }
@@ -362,6 +403,7 @@ function App() {
             commercialEmail: '',
             receiptFooter: 'Gracias por su compra.',
             logoUrl: '',
+            splitPaymentEnabled: false,
           });
           loadUserProfile(session.user);
         } else {
@@ -739,6 +781,7 @@ function App() {
       subscriptionEnd: profile?.subscription_end || '',
       isSuspended: Boolean(profile?.is_suspended),
       maxProducts: profile?.max_products || 2000,
+      splitPaymentEnabled: Boolean(profile?.split_payment_enabled),
     });
   }
 
@@ -1135,7 +1178,13 @@ function App() {
       }
     }
 
-    setSales((data || []).map(sale => ({ ...mapSaleFromDb(sale), items: itemsBySale[sale.id] || [] })));
+    setSales((data || []).map(sale => ({
+      ...mapSaleFromDb(sale),
+      cashAmount: Number(sale.cash_amount || 0),
+      cardAmount: Number(sale.card_amount || 0),
+      transferAmount: Number(sale.transfer_amount || 0),
+      items: itemsBySale[sale.id] || [],
+    })));
     if (showLoader) setSalesLoading(false);
   }
 
@@ -2113,6 +2162,10 @@ function App() {
     e.preventDefault();
     const preview = calculateSalePreview();
     const { discount, discountPercent, subtotal, total, profit, error } = preview;
+    const splitPaymentEnabled = isSplitPaymentAvailable(currentUser);
+    const isSplitPayment = splitPaymentEnabled && saleForm.paymentMethod === 'Mixto';
+    const splitAmounts = isSplitPayment ? getSplitPaymentAmounts(saleForm) : { cashAmount: 0, cardAmount: 0, transferAmount: 0 };
+    const splitTotal = isSplitPayment ? getSplitPaymentTotal(saleForm) : 0;
 
     if (saleCart.length === 0) {
       setSaleNotice({ type: 'error', message: 'Agrega al menos un producto al carrito.' });
@@ -2122,6 +2175,18 @@ function App() {
     if (error) {
       setSaleNotice({ type: 'error', message: error });
       return;
+    }
+
+    if (isSplitPayment) {
+      if (splitTotal <= 0) {
+        setSaleNotice({ type: 'error', message: 'Ingresa al menos un valor para el pago mixto.' });
+        return;
+      }
+
+      if (Math.abs(splitTotal - toMoneyNumber(total)) > 0.01) {
+        setSaleNotice({ type: 'error', message: `El pago mixto debe sumar exactamente $${toMoneyNumber(total).toFixed(2)}. Actualmente suma $${splitTotal.toFixed(2)}.` });
+        return;
+      }
     }
 
     if (!currentUser?.id) {
@@ -2159,7 +2224,10 @@ function App() {
       productId: normalizedSaleCart.length === 1 ? normalizedSaleCart[0].productId : null,
       product: productSummary,
       customer: buildFoodOrderCustomer() || (saleForm.saleType === 'factura' ? (saleForm.customer || saleForm.invoiceName || 'Cliente con factura') : 'Consumidor final'),
-      paymentMethod: saleForm.paymentMethod,
+      paymentMethod: isSplitPayment ? 'Mixto' : saleForm.paymentMethod,
+      cashAmount: splitAmounts.cashAmount,
+      cardAmount: splitAmounts.cardAmount,
+      transferAmount: splitAmounts.transferAmount,
       invoiceEnabled: saleForm.saleType === 'factura' && saleForm.invoiceEnabled,
       invoiceName: saleForm.saleType === 'factura' ? (saleForm.invoiceName || saleForm.customer || '') : '',
       invoiceIdentification: saleForm.saleType === 'factura' ? (saleForm.invoiceIdentification || '') : '',
@@ -2174,9 +2242,16 @@ function App() {
       status: 'Completada',
     };
 
+    const salePayload = {
+      ...mapSaleToDb(newSale, currentUser.id),
+      cash_amount: newSale.cashAmount || 0,
+      card_amount: newSale.cardAmount || 0,
+      transfer_amount: newSale.transferAmount || 0,
+    };
+
     const { data: saleData, error: saleError } = await supabase
       .from('sales')
-      .insert(mapSaleToDb(newSale, currentUser.id))
+      .insert(salePayload)
       .select()
       .single();
 
@@ -2889,6 +2964,7 @@ function App() {
               />
             ) : (
               <SalesPage
+                currentUser={currentUser}
                 sales={storeSales}
                 products={storeProducts}
                 clients={storeClients}
@@ -3440,12 +3516,15 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
   );
 }
 
-function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, updateSaleItemDiscount, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
+function SalesPage({ currentUser, sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, updateSaleItemDiscount, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
   const [productSearch, setProductSearch] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
   const [saleHistoryFilter, setSaleHistoryFilter] = useState('completed');
   const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
+  const splitPaymentEnabled = isSplitPaymentAvailable(currentUser);
+  const splitPaymentTotal = getSplitPaymentTotal(saleForm);
+  const splitPaymentDifference = toMoneyNumber(splitPaymentTotal - toMoneyNumber(total));
   const filteredProducts = useMemo(
     () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
     [products, productSearch]
@@ -3591,7 +3670,7 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
                     <div>
                       <p className="font-bold">{sale.code}</p>
                       <p className="text-sm text-slate-500">{sale.product} · {sale.quantity} unidades · {sale.date}</p>
-                      <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {sale.paymentMethod || 'Efectivo'} {sale.invoiceEnabled ? '· Factura' : ''}</p>
+                      <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {getPaymentDisplay(sale)} {sale.invoiceEnabled ? '· Factura' : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-4 lg:justify-end">
@@ -3806,13 +3885,51 @@ function SalesPage({ sales, products, clients, saleForm, setSaleForm, saleCart, 
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Método de pago</span>
-              <select value={saleForm.paymentMethod} onChange={e => setSaleForm({ ...saleForm, paymentMethod: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+              <select
+                value={saleForm.paymentMethod}
+                onChange={e => {
+                  const paymentMethod = e.target.value;
+                  setSaleForm({
+                    ...saleForm,
+                    paymentMethod,
+                    ...(paymentMethod === 'Mixto' ? {} : { cashAmount: '', cardAmount: '', transferAmount: '' }),
+                  });
+                }}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+              >
                 <option>Efectivo</option>
                 <option>Transferencia</option>
                 <option>Tarjeta</option>
                 <option>Crédito</option>
+                {splitPaymentEnabled && <option>Mixto</option>}
               </select>
             </label>
+
+            {splitPaymentEnabled && saleForm.paymentMethod === 'Mixto' && (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-bold text-emerald-900">Pago mixto</h4>
+                    <p className="text-xs font-semibold text-emerald-700">Divide el total entre efectivo, tarjeta o transferencia.</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${Math.abs(splitPaymentDifference) <= 0.01 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    Suma: ${splitPaymentTotal.toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Efectivo" type="number" value={saleForm.cashAmount || ''} onChange={v => setSaleForm({ ...saleForm, cashAmount: v })} placeholder="Ej: 80" min="0" step="0.01" />
+                  <Field label="Tarjeta" type="number" value={saleForm.cardAmount || ''} onChange={v => setSaleForm({ ...saleForm, cardAmount: v })} placeholder="Ej: 40" min="0" step="0.01" />
+                  <Field label="Transferencia" type="number" value={saleForm.transferAmount || ''} onChange={v => setSaleForm({ ...saleForm, transferAmount: v })} placeholder="Ej: 0" min="0" step="0.01" />
+                </div>
+
+                {Math.abs(splitPaymentDifference) > 0.01 && (
+                  <p className="mt-3 text-xs font-bold text-red-600">
+                    Falta o sobra ${Math.abs(splitPaymentDifference).toFixed(2)} para completar el total de la venta.
+                  </p>
+                )}
+              </div>
+            )}
 
             {error && <div className="rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
 
