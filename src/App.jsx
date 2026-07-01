@@ -7,6 +7,7 @@ import {
   MAX_LABELS_WITHOUT_CONFIRM,
 } from './config/constants';
 import { businessTypes, getBusinessConfig } from './config/businessTypes';
+import { getRequiredDataForSection } from './config/sectionData';
 import {
   STORAGE_KEYS,
   loadFromStorage,
@@ -19,11 +20,14 @@ import {
   getProductDisplayName,
   getProductVariantText,
   productMatchesSearch,
-  searchProductsForPicker,
   chunkArray,
   validateExcelFile,
 } from './utils/products';
 import { exportToCSV } from './utils/csv';
+import {
+  looksLikeBarcodeSearch,
+  filterProductsForBarcodeSearch,
+} from './utils/productSearch';
 import {
   generateInternalBarcode,
   printProductBarcodeLabel,
@@ -52,6 +56,28 @@ import {
   statusText,
   expirationText,
 } from './utils/inventory';
+import {
+  toMoneyNumber,
+  isSplitPaymentAvailable,
+  getSplitPaymentAmounts,
+  getSplitPaymentTotal,
+} from './utils/payments';
+import {
+  normalizeSaleCartItem,
+  calculateSalePreview as buildSalePreview,
+} from './utils/sales';
+import {
+  createEmptyExpenseForm,
+  getTodayInputDate,
+  mapExpenseFromDb,
+  mapExpenseToDb,
+} from './utils/expenses';
+import {
+  isCustomerAccountsAvailable,
+  safeJsonArray,
+  makeLocalId,
+  mapClientWithAccountsFromDb,
+} from './utils/clientAccounts';
 
 import {
   normalizeEcuadorPhone,
@@ -112,11 +138,12 @@ import SummaryBox from './components/SummaryBox';
 import DashboardListCard from './components/DashboardListCard';
 import EmptyDashboardMessage from './components/EmptyDashboardMessage';
 import AbcBadge from './components/AbcBadge';
-import InventiQIcon from './components/InventiQIcon';
 import SplashScreen from './components/SplashScreen';
-import StoreAvatar from './components/StoreAvatar';
 import MobileTopBar from './components/MobileTopBar';
 import MobileBottomNav from './components/MobileBottomNav';
+import DesktopSidebar from './components/DesktopSidebar';
+import PageHeader from './components/PageHeader';
+import AppRoutes from './components/AppRoutes';
 import BarcodeScanner from './components/BarcodeScanner';
 import ReceiptModal from './components/ReceiptModal';
 import ExcelImportPreviewModal from './components/ExcelImportPreviewModal';
@@ -128,9 +155,16 @@ import CashPage from './pages/CashPage';
 import DailyCashPage from './pages/DailyCashPage';
 import ReportsPage from './pages/ReportsPage';
 import AuthPage from './pages/AuthPage';
+import HomePage from './pages/HomePage';
 import FoodSalesPage from './pages/FoodSalesPage';
+import SalesPage from './pages/SalesPage';
 import FoodProductsPage from './pages/FoodProductsPage';
+import ProductsPage from './pages/ProductsPage';
+import PurchasesPage from './pages/PurchasesPage';
 import ProvidersPage from './pages/ProvidersPage';
+import ExpensesPage from './pages/ExpensesPage';
+import InventoryPage from './pages/InventoryPage';
+import ClientsPage from './pages/ClientsPage';
 import { menu } from './config/menu';
 import {
   Home,
@@ -141,7 +175,6 @@ import {
   Truck,
   BarChart3,
   Settings,
-  Plus,
   Search,
   Edit,
   Trash2,
@@ -158,7 +191,6 @@ import {
   ReceiptText,
   Percent,
   RotateCcw,
-  LogOut,
   Lock,
   User,
   MoreHorizontal,
@@ -216,74 +248,30 @@ function getUsersFromStorage() {
   return loadFromStorage(STORAGE_KEYS.users, initialUsers);
 }
 
-function looksLikeBarcodeSearch(value) {
-  const text = String(value || '').trim();
-  if (text.length < 4) return false;
-  if (text.includes(' ')) return false;
-  return /\d/.test(text) && /^[a-zA-Z0-9._-]+$/.test(text);
-}
+function getEnhancedClientFromDb(row = {}) {
+  const base = mapClientFromDb(row);
 
-function filterProductsForBarcodeSearch(products, search, options = {}) {
-  const normalized = String(search || '').trim().toLowerCase();
-  const limit = options.limit || PRODUCT_SEARCH_LIMIT;
-  const onlyWithStock = Boolean(options.onlyWithStock);
-
-  if (!looksLikeBarcodeSearch(search)) {
-    return searchProductsForPicker(products, search, options);
-  }
-
-  if (!normalized) return [];
-
-  return products
-    .filter(product => {
-      if (onlyWithStock && Number(product.stock || 0) <= 0) return false;
-
-      return (
-        String(product.barcode || '').trim().toLowerCase() === normalized ||
-        String(product.sku || '').trim().toLowerCase() === normalized
-      );
-    })
-    .slice(0, limit);
-}
-
-
-function toMoneyNumber(value) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? Math.round(number * 100) / 100 : 0;
-}
-
-function isSplitPaymentAvailable(currentUser) {
-  const storeName = String(currentUser?.store || '').toLowerCase();
-  return Boolean(currentUser?.splitPaymentEnabled) || storeName.includes('kuehns') || storeName.includes('kuehns 5');
-}
-
-function getSplitPaymentAmounts(saleForm) {
   return {
-    cashAmount: toMoneyNumber(saleForm?.cashAmount),
-    cardAmount: toMoneyNumber(saleForm?.cardAmount),
-    transferAmount: toMoneyNumber(saleForm?.transferAmount),
+    ...base,
+    creditEnabled: Boolean(row.credit_enabled),
+    creditLimit: Number(row.credit_limit || 0),
+    creditBalance: Number(row.credit_balance || 0),
+    loyaltyEnabled: Boolean(row.loyalty_enabled),
+    loyaltyTotal: Number(row.loyalty_total || 0),
+    loyaltyNotes: row.loyalty_notes || '',
   };
 }
 
-function getSplitPaymentTotal(saleForm) {
-  const amounts = getSplitPaymentAmounts(saleForm);
-  return toMoneyNumber(amounts.cashAmount + amounts.cardAmount + amounts.transferAmount);
-}
-
-function getPaymentDisplay(sale) {
-  const method = sale?.paymentMethod || sale?.payment_method || 'Efectivo';
-  const cash = toMoneyNumber(sale?.cashAmount ?? sale?.cash_amount);
-  const card = toMoneyNumber(sale?.cardAmount ?? sale?.card_amount);
-  const transfer = toMoneyNumber(sale?.transferAmount ?? sale?.transfer_amount);
-
-  if (method !== 'Mixto') return method;
-
-  const parts = [];
-  if (cash > 0) parts.push(`Efectivo $${cash.toFixed(2)}`);
-  if (card > 0) parts.push(`Tarjeta $${card.toFixed(2)}`);
-  if (transfer > 0) parts.push(`Transferencia $${transfer.toFixed(2)}`);
-
-  return parts.length > 0 ? `Mixto · ${parts.join(' · ')}` : 'Mixto';
+function mapEnhancedClientToDb(clientData, userId) {
+  return {
+    ...mapClientToDb(clientData, userId),
+    credit_enabled: Boolean(clientData.creditEnabled),
+    credit_limit: Number(clientData.creditLimit || 0),
+    credit_balance: Number(clientData.creditBalance || 0),
+    loyalty_enabled: Boolean(clientData.loyaltyEnabled),
+    loyalty_total: Number(clientData.loyaltyTotal || 0),
+    loyalty_notes: clientData.loyaltyNotes || '',
+  };
 }
 
 function App() {
@@ -302,6 +290,7 @@ function App() {
   const [clients, setClients] = useState([]);
   const [providers, setProviders] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Todas');
   const [customProductCategories, setCustomProductCategories] = useState([]);
@@ -317,6 +306,7 @@ function App() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [providersLoading, setProvidersLoading] = useState(false);
   const [purchasesLoading, setPurchasesLoading] = useState(false);
+  const [expensesLoading, setExpensesLoading] = useState(false);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [editingClientId, setEditingClientId] = useState(null);
   const [pendingDeleteClientId, setPendingDeleteClientId] = useState(null);
@@ -329,6 +319,10 @@ function App() {
   const [settingsNotice, setSettingsNotice] = useState(null);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
+  const [expenseForm, setExpenseForm] = useState(() => createEmptyExpenseForm());
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [pendingDeleteExpenseId, setPendingDeleteExpenseId] = useState(null);
+  const [expenseNotice, setExpenseNotice] = useState(null);
   const [purchaseCart, setPurchaseCart] = useState([]);
   const [purchaseNotice, setPurchaseNotice] = useState(null);
   const [receiptSale, setReceiptSale] = useState(null);
@@ -340,6 +334,15 @@ function App() {
   const [excelImportProgress, setExcelImportProgress] = useState(null);
   const [adminCreateUserForm, setAdminCreateUserForm] = useState(emptyAdminCreateUserForm);
   const [adminNotice, setAdminNotice] = useState(null);
+
+  const loadedDataRef = useRef({
+    products: false,
+    sales: false,
+    clients: false,
+    providers: false,
+    purchases: false,
+    expenses: false,
+  });
 
   useEffect(() => {
     if (!showSplash) return;
@@ -439,6 +442,7 @@ function App() {
       setSaleCart(loadDraft(currentUser.id, 'saleCart', []));
       setPurchaseForm(loadDraft(currentUser.id, 'purchaseForm', emptyPurchaseForm));
       setPurchaseCart(loadDraft(currentUser.id, 'purchaseCart', []));
+      setExpenseForm(loadDraft(currentUser.id, 'expenseForm', createEmptyExpenseForm()));
     }
   }, [currentUser?.id]);
 
@@ -477,240 +481,162 @@ function App() {
     saveDraft(currentUser.id, 'purchaseCart', purchaseCart);
   }, [currentUser?.id, purchaseCart]);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    saveDraft(currentUser.id, 'expenseForm', expenseForm);
+  }, [currentUser?.id, expenseForm]);
+
   // Configuración no se guarda como borrador para evitar sobrescribir datos reales de la tienda.
   // Siempre se carga desde currentUser / Supabase.
 
   useEffect(() => {
-    if (currentUser?.id) {
-      loadProductsFromSupabase(currentUser.id);
-    }
+    loadedDataRef.current = {
+      products: false,
+      sales: false,
+      clients: false,
+      providers: false,
+      purchases: false,
+      expenses: false,
+    };
   }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const refreshProducts = () => loadProductsFromSupabase(currentUser.id, false);
+    let cancelled = false;
+    const activeSection = active;
+    const requiredData = getRequiredDataForSection(activeSection);
 
-    const channel = supabase
-      .channel(`products-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products',
-          filter: `user_id=eq.${currentUser.id}`,
-        },
-        () => {
-          refreshProducts();
-        }
-      )
-      .subscribe();
+    const needsProducts = requiredData.has('products');
+    const needsSales = requiredData.has('sales');
+    const needsClients = requiredData.has('clients');
+    const needsProviders = requiredData.has('providers');
+    const needsPurchases = requiredData.has('purchases');
+    const needsExpenses = requiredData.has('expenses');
 
-    // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
-    const syncInterval = setInterval(refreshProducts, 300000);
+    async function loadOnlyNeededData() {
+      const loaded = loadedDataRef.current;
 
-    // También sincroniza cuando el usuario vuelve a la pestaña.
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshProducts();
-    };
-    window.addEventListener('focus', refreshProducts);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
+      if (needsProducts && !loaded.products && !cancelled) {
+        await loadProductsFromSupabase(currentUser.id);
+      }
+
+      if (needsSales && !loaded.sales && !cancelled) {
+        await loadSalesFromSupabase(currentUser.id);
+      }
+
+      if (needsClients && !loaded.clients && !cancelled) {
+        await loadClientsFromSupabase(currentUser.id);
+      }
+
+      if (needsProviders && !loaded.providers && !cancelled) {
+        await loadProvidersFromSupabase(currentUser.id);
+      }
+
+      if (needsPurchases && !loaded.purchases && !cancelled) {
+        await loadPurchasesFromSupabase(currentUser.id);
+      }
+
+      if (needsExpenses && !loaded.expenses && !cancelled) {
+        await loadExpensesFromSupabase(currentUser.id);
+      }
+    }
+
+    loadOnlyNeededData();
 
     return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', refreshProducts);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      supabase.removeChannel(channel);
+      cancelled = true;
     };
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (active === 'Productos' && currentUser?.id) {
-      loadProductsFromSupabase(currentUser.id);
-    }
-
-    if (active === 'Ventas' && currentUser?.id) {
-      loadSalesFromSupabase(currentUser.id);
-      loadProductsFromSupabase(currentUser.id, false);
-    }
   }, [active, currentUser?.id]);
 
   useEffect(() => {
-    if (currentUser?.id) {
-      loadSalesFromSupabase(currentUser.id);
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
     if (!currentUser?.id) return;
 
-    const refreshSales = async () => {
-      await loadSalesFromSupabase(currentUser.id, false);
-      await loadProductsFromSupabase(currentUser.id, false);
-    };
+    const activeSection = active;
+    const subscriptions = [];
+    const requiredData = getRequiredDataForSection(activeSection);
 
-    const channel = supabase
-      .channel(`sales-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sales',
-          filter: `user_id=eq.${currentUser.id}`,
-        },
-        () => {
-          refreshSales();
-        }
-      )
-      .subscribe();
+    const watchProducts = requiredData.has('products');
+    const watchSales = requiredData.has('sales');
+    const watchClients = requiredData.has('clients');
+    const watchProviders = requiredData.has('providers');
+    const watchPurchases = requiredData.has('purchases');
+    const watchExpenses = requiredData.has('expenses');
 
-    // Respaldo liviano: si Realtime se pausa, sincroniza cada 45 segundos.
-    const syncInterval = setInterval(refreshSales, 300000);
-
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshSales();
-    };
-    window.addEventListener('focus', refreshSales);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-
-    return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', refreshSales);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentUser?.id) {
-      loadClientsFromSupabase(currentUser.id);
+    if (watchProducts) {
+      subscriptions.push({
+        name: `products-${currentUser.id}-${activeSection}`,
+        table: 'products',
+        refresh: () => loadProductsFromSupabase(currentUser.id, false),
+      });
     }
-  }, [currentUser?.id]);
 
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const refreshClients = () => loadClientsFromSupabase(currentUser.id, false);
-
-    const channel = supabase
-      .channel(`clients-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'clients',
-          filter: `user_id=eq.${currentUser.id}`,
+    if (watchSales) {
+      subscriptions.push({
+        name: `sales-${currentUser.id}-${activeSection}`,
+        table: 'sales',
+        refresh: async () => {
+          await loadSalesFromSupabase(currentUser.id, false);
+          if (watchProducts) await loadProductsFromSupabase(currentUser.id, false);
         },
-        () => {
-          refreshClients();
-        }
-      )
-      .subscribe();
-
-    const syncInterval = setInterval(refreshClients, 300000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshClients();
-    };
-    window.addEventListener('focus', refreshClients);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-
-    return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', refreshClients);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentUser?.id) {
-      loadProvidersFromSupabase(currentUser.id);
+      });
     }
-  }, [currentUser?.id]);
 
-  useEffect(() => {
-    if (currentUser?.id) {
-      loadPurchasesFromSupabase(currentUser.id);
+    if (watchClients) {
+      subscriptions.push({
+        name: `clients-${currentUser.id}-${activeSection}`,
+        table: 'clients',
+        refresh: () => loadClientsFromSupabase(currentUser.id, false),
+      });
     }
-  }, [currentUser?.id]);
 
-  useEffect(() => {
-    if (!currentUser?.id) return;
+    if (watchProviders) {
+      subscriptions.push({
+        name: `providers-${currentUser.id}-${activeSection}`,
+        table: 'providers',
+        refresh: () => loadProvidersFromSupabase(currentUser.id, false),
+      });
+    }
 
-    const refreshProviders = () => loadProvidersFromSupabase(currentUser.id, false);
-
-    const channel = supabase
-      .channel(`providers-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'providers',
-          filter: `user_id=eq.${currentUser.id}`,
+    if (watchPurchases) {
+      subscriptions.push({
+        name: `purchases-${currentUser.id}-${activeSection}`,
+        table: 'purchases',
+        refresh: async () => {
+          await loadPurchasesFromSupabase(currentUser.id, false);
+          if (watchProducts) await loadProductsFromSupabase(currentUser.id, false);
         },
-        () => {
-          refreshProviders();
-        }
-      )
-      .subscribe();
+      });
+    }
 
-    const syncInterval = setInterval(refreshProviders, 300000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshProviders();
-    };
-    window.addEventListener('focus', refreshProviders);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
+    if (watchExpenses) {
+      subscriptions.push({
+        name: `expenses-${currentUser.id}-${activeSection}`,
+        table: 'expenses',
+        refresh: () => loadExpensesFromSupabase(currentUser.id, false),
+      });
+    }
+
+    const channels = subscriptions.map(subscription => (
+      supabase
+        .channel(subscription.name)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: subscription.table,
+            filter: `user_id=eq.${currentUser.id}`,
+          },
+          subscription.refresh
+        )
+        .subscribe()
+    ));
 
     return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', refreshProviders);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      supabase.removeChannel(channel);
+      channels.forEach(channel => supabase.removeChannel(channel));
     };
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const refreshPurchases = async () => {
-      await loadPurchasesFromSupabase(currentUser.id, false);
-      await loadProductsFromSupabase(currentUser.id, false);
-    };
-
-    const channel = supabase
-      .channel(`purchases-${currentUser.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'purchases',
-          filter: `user_id=eq.${currentUser.id}`,
-        },
-        () => {
-          refreshPurchases();
-        }
-      )
-      .subscribe();
-
-    const syncInterval = setInterval(refreshPurchases, 300000);
-    const refreshWhenVisible = () => {
-      if (!document.hidden) refreshPurchases();
-    };
-    window.addEventListener('focus', refreshPurchases);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-
-    return () => {
-      clearInterval(syncInterval);
-      window.removeEventListener('focus', refreshPurchases);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-      supabase.removeChannel(channel);
-    };
-  }, [currentUser?.id]);
+  }, [active, currentUser?.id]);
 
   useEffect(() => {
     if (currentUser) {
@@ -782,6 +708,7 @@ function App() {
       isSuspended: Boolean(profile?.is_suspended),
       maxProducts: profile?.max_products || 2000,
       splitPaymentEnabled: Boolean(profile?.split_payment_enabled),
+      customerAccountsEnabled: Boolean(profile?.customer_accounts_enabled),
     });
   }
 
@@ -1129,6 +1056,7 @@ function App() {
       }
 
       setProducts(allProducts.map(mapProductFromDb));
+      loadedDataRef.current.products = true;
     } catch (error) {
       console.error('Error cargando productos:', error);
 
@@ -1185,6 +1113,7 @@ function App() {
       transferAmount: Number(sale.transfer_amount || 0),
       items: itemsBySale[sale.id] || [],
     })));
+    loadedDataRef.current.sales = true;
     if (showLoader) setSalesLoading(false);
   }
 
@@ -1204,7 +1133,8 @@ function App() {
       return;
     }
 
-    setClients((data || []).map(mapClientFromDb));
+    setClients((data || []).map(mapClientWithAccountsFromDb));
+    loadedDataRef.current.clients = true;
     if (showLoader) setClientsLoading(false);
   }
 
@@ -1225,6 +1155,7 @@ function App() {
     }
 
     setProviders((data || []).map(mapProviderFromDb));
+    loadedDataRef.current.providers = true;
     if (showLoader) setProvidersLoading(false);
   }
 
@@ -1266,6 +1197,7 @@ function App() {
     }
 
     setPurchases((data || []).map(purchase => ({ ...mapPurchaseFromDb(purchase), items: itemsByPurchase[purchase.id] || [] })));
+    loadedDataRef.current.purchases = true;
     if (showLoader) setPurchasesLoading(false);
   }
 
@@ -1638,45 +1570,6 @@ function App() {
     }
   }
 
-  function calculateCartItemTotals(item) {
-    const quantity = Number(item.quantity || 0);
-    const price = Number(item.price || 0);
-    const cost = Number(item.cost || 0);
-    const originalSubtotal = price * quantity;
-    const discountType = item.discountType === 'fixed' ? 'fixed' : 'percent';
-    const discountValue = Number(item.discountValue || 0);
-    let discountAmount = 0;
-    let discountPercent = 0;
-
-    if (discountType === 'fixed') {
-      discountAmount = Math.min(Math.max(discountValue, 0), originalSubtotal);
-      discountPercent = originalSubtotal > 0 ? (discountAmount / originalSubtotal) * 100 : 0;
-    } else {
-      discountPercent = Math.min(Math.max(discountValue, 0), 100);
-      discountAmount = originalSubtotal * (discountPercent / 100);
-    }
-
-    const subtotal = Math.max(originalSubtotal - discountAmount, 0);
-    const profit = subtotal - (cost * quantity);
-
-    return {
-      originalSubtotal,
-      discountType,
-      discountValue,
-      discountPercent,
-      discount: discountAmount,
-      subtotal,
-      profit,
-    };
-  }
-
-  function normalizeSaleCartItem(item) {
-    return {
-      ...item,
-      ...calculateCartItemTotals(item),
-    };
-  }
-
   function updateSaleItemDiscount(productId, changes) {
     setSaleCart(currentCart => currentCart.map(item => {
       if (String(item.productId) !== String(productId)) return item;
@@ -1685,74 +1578,12 @@ function App() {
   }
 
   function calculateSalePreview() {
-    const selectedProduct = storeProducts.find(p => String(p.id) === String(saleForm.productId));
-    const quantity = Number(saleForm.quantity || 0);
-
-    if (businessConfig.salesMode === 'food') {
-      const discountValue = Number(saleForm.discount || 0);
-      const discountType = saleForm.discountType || 'percent';
-      const subtotal = saleCart.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
-      let discountAmount = 0;
-      let safeDiscountPercent = 0;
-
-      if (discountType === 'fixed') {
-        discountAmount = Math.min(Math.max(discountValue, 0), subtotal);
-        safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
-      } else {
-        safeDiscountPercent = Math.min(Math.max(discountValue, 0), 100);
-        discountAmount = subtotal * (safeDiscountPercent / 100);
-      }
-
-      const total = subtotal - discountAmount;
-      const cartCost = saleCart.reduce((sum, item) => sum + Number(item.cost || 0) * Number(item.quantity || 0), 0);
-      const profit = total - cartCost;
-
-      let error = null;
-      if (discountValue < 0) error = 'El descuento no puede ser negativo.';
-      if (discountType === 'percent' && discountValue > 100) error = 'El descuento porcentual no puede ser mayor al 100%.';
-      if (discountType === 'fixed' && discountValue > subtotal) error = 'El descuento en dólares no puede ser mayor al subtotal.';
-
-      return { product: selectedProduct || null, quantity, subtotal, discountType, discountPercent: safeDiscountPercent, discount: discountAmount, total, profit, error };
-    }
-
-    const normalizedCart = saleCart.map(normalizeSaleCartItem);
-    const subtotal = normalizedCart.reduce((sum, item) => sum + item.originalSubtotal, 0);
-    const discountAmount = normalizedCart.reduce((sum, item) => sum + item.discount, 0);
-    const total = normalizedCart.reduce((sum, item) => sum + item.subtotal, 0);
-    const profit = normalizedCart.reduce((sum, item) => sum + item.profit, 0);
-    const safeDiscountPercent = subtotal > 0 ? (discountAmount / subtotal) * 100 : 0;
-
-    let error = null;
-    const invalidItem = normalizedCart.find(item => {
-      const discountValue = Number(item.discountValue || 0);
-      if (Number.isNaN(discountValue) || discountValue < 0) return true;
-      if (item.discountType === 'percent' && discountValue > 100) return true;
-      if (item.discountType === 'fixed' && discountValue > item.originalSubtotal) return true;
-      return false;
+    return buildSalePreview({
+      businessConfig,
+      storeProducts,
+      saleForm,
+      saleCart,
     });
-
-    if (invalidItem) {
-      const discountValue = Number(invalidItem.discountValue || 0);
-      if (Number.isNaN(discountValue) || discountValue < 0) {
-        error = `El descuento de ${invalidItem.product} no puede ser negativo.`;
-      } else if (invalidItem.discountType === 'percent' && discountValue > 100) {
-        error = `El descuento porcentual de ${invalidItem.product} no puede ser mayor al 100%.`;
-      } else if (invalidItem.discountType === 'fixed' && discountValue > invalidItem.originalSubtotal) {
-        error = `El descuento en dólares de ${invalidItem.product} no puede ser mayor al subtotal del producto.`;
-      }
-    }
-
-    return {
-      product: selectedProduct || null,
-      quantity,
-      subtotal,
-      discountType: 'item',
-      discountPercent: safeDiscountPercent,
-      discount: discountAmount,
-      total,
-      profit,
-      error,
-    };
   }
 
   function addSaleItem(productIdOverride = null, quantityOverride = null) {
@@ -1962,6 +1793,189 @@ function App() {
     await loadPurchasesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
+
+  async function loadExpensesFromSupabase(userId, showLoader = true) {
+    if (!userId) return;
+    if (showLoader) setExpensesLoading(true);
+
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('user_id', userId)
+      .order('due_day', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error cargando gastos:', error);
+      setExpenseNotice({ type: 'error', message: `No se pudieron cargar los gastos: ${error.message}` });
+    } else {
+      setExpenses((data || []).map(mapExpenseFromDb));
+      loadedDataRef.current.expenses = true;
+    }
+
+    if (showLoader) setExpensesLoading(false);
+  }
+
+  function resetExpenseForm() {
+    setExpenseForm(createEmptyExpenseForm());
+    setEditingExpenseId(null);
+    clearDraft(currentUser?.id, 'expenseForm');
+  }
+
+  async function saveExpense(event) {
+    event?.preventDefault?.();
+    setExpenseNotice(null);
+
+    const description = expenseForm.description.trim();
+    const amount = Number(expenseForm.amount || 0);
+    const dueDay = Number(expenseForm.dueDay || 0);
+
+    if (!description) {
+      setExpenseNotice({ type: 'error', message: 'Escribe una descripción del gasto.' });
+      return;
+    }
+
+    if (!amount || amount <= 0) {
+      setExpenseNotice({ type: 'error', message: 'El valor estimado debe ser mayor a 0.' });
+      return;
+    }
+
+    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+      setExpenseNotice({ type: 'error', message: 'El día de pago debe estar entre 1 y 31.' });
+      return;
+    }
+
+    const expenseData = {
+      storeId: storeKey,
+      storeName: currentUser?.store || 'Mi Tienda',
+      category: expenseForm.category || 'Otros gastos',
+      description,
+      amount,
+      paymentMethod: expenseForm.paymentMethod || 'Efectivo',
+      expenseDate: getTodayInputDate(),
+      dueDay,
+      isActive: expenseForm.isActive !== false,
+      lastPaidMonth: expenseForm.lastPaidMonth || '',
+      paymentHistory: Array.isArray(expenseForm.paymentHistory) ? expenseForm.paymentHistory : [],
+      notes: String(expenseForm.notes || '').trim(),
+    };
+
+    const payload = mapExpenseToDb(expenseData, currentUser.id);
+
+    if (editingExpenseId) {
+      const { data, error } = await supabase
+        .from('expenses')
+        .update(payload)
+        .eq('id', editingExpenseId)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) {
+        setExpenseNotice({ type: 'error', message: error.message });
+        return;
+      }
+
+      const updatedExpense = mapExpenseFromDb(data);
+      setExpenses(expenses.map(expense => expense.id === editingExpenseId ? updatedExpense : expense));
+      setExpenseNotice({ type: 'success', message: 'Gasto fijo actualizado correctamente.' });
+    } else {
+      const { data, error } = await supabase
+        .from('expenses')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        setExpenseNotice({ type: 'error', message: error.message });
+        return;
+      }
+
+      setExpenses([mapExpenseFromDb(data), ...expenses]);
+      setExpenseNotice({ type: 'success', message: 'Gasto fijo registrado correctamente.' });
+    }
+
+    resetExpenseForm();
+  }
+
+  async function markExpensePaid(expense, paymentData = {}) {
+    if (!expense?.id || !currentUser?.id) return;
+
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const paidAmount = Number(paymentData.amount ?? expense.amount ?? 0);
+
+    if (!paidAmount || paidAmount <= 0) {
+      setExpenseNotice({ type: 'error', message: 'El monto pagado debe ser mayor a 0.' });
+      return;
+    }
+
+    const payment = {
+      id: crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+      month: currentMonth,
+      amount: paidAmount,
+      paymentMethod: paymentData.paymentMethod || expense.paymentMethod || 'Efectivo',
+      paidAt: now.toISOString(),
+      description: expense.description || '',
+      category: expense.category || 'Otros gastos fijos',
+      notes: String(paymentData.notes || '').trim(),
+    };
+    const updatedHistory = [...(Array.isArray(expense.paymentHistory) ? expense.paymentHistory : []), payment];
+
+    const { data, error } = await supabase
+      .from('expenses')
+      .update({
+        last_paid_month: currentMonth,
+        payment_history: updatedHistory,
+      })
+      .eq('id', expense.id)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single();
+
+    if (error) {
+      setExpenseNotice({ type: 'error', message: error.message });
+      return;
+    }
+
+    const updatedExpense = mapExpenseFromDb(data);
+    setExpenses(expenses.map(item => item.id === expense.id ? updatedExpense : item));
+    setExpenseNotice({ type: 'success', message: `Pago de ${expense.description} registrado correctamente.` });
+  }
+
+  function editExpense(expense) {
+    setEditingExpenseId(expense.id);
+    setExpenseNotice(null);
+    setExpenseForm({
+      category: expense.category || 'Otros gastos',
+      description: expense.description || '',
+      amount: expense.amount || '',
+      dueDay: String(expense.dueDay || 1),
+      paymentMethod: expense.paymentMethod || 'Efectivo',
+      isActive: expense.isActive !== false,
+      lastPaidMonth: expense.lastPaidMonth || '',
+      paymentHistory: Array.isArray(expense.paymentHistory) ? expense.paymentHistory : [],
+      notes: expense.notes || '',
+    });
+  }
+
+  async function deleteExpense(id) {
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (error) {
+      setExpenseNotice({ type: 'error', message: error.message });
+      return;
+    }
+
+    setExpenses(expenses.filter(expense => expense.id !== id));
+    setPendingDeleteExpenseId(null);
+    setExpenseNotice({ type: 'success', message: 'Gasto fijo eliminado correctamente.' });
+  }
+
 
   function resetPurchaseForm() {
     setPurchaseForm(emptyPurchaseForm);
@@ -2503,7 +2517,7 @@ function App() {
         return;
       }
 
-      const updatedClient = mapClientFromDb(data);
+      const updatedClient = mapClientWithAccountsFromDb(data);
       setClients(clients.map(client => client.id === editingClientId ? updatedClient : client));
       setClientNotice({ type: 'success', message: 'Cliente actualizado correctamente en Supabase.' });
     } else {
@@ -2519,7 +2533,7 @@ function App() {
         return;
       }
 
-      setClients([mapClientFromDb(data), ...clients]);
+      setClients([mapClientWithAccountsFromDb(data), ...clients]);
       setClientNotice({ type: 'success', message: 'Cliente guardado correctamente en Supabase.' });
     }
 
@@ -2565,6 +2579,382 @@ function App() {
     setPendingDeleteClientId(null);
     if (editingClientId === id) resetClientForm();
     await loadClientsFromSupabase(currentUser.id, false);
+  }
+
+  async function createCustomerAccountPaymentSale({ client, item, amount, paymentMethod, note }) {
+    const safeAmount = toMoneyNumber(amount);
+    if (!currentUser?.id || safeAmount <= 0) return null;
+
+    const method = paymentMethod || 'Efectivo';
+    const cashAmount = method === 'Efectivo' ? safeAmount : 0;
+    const cardAmount = method === 'Tarjeta' ? safeAmount : 0;
+    const transferAmount = method === 'Transferencia' ? safeAmount : 0;
+    const typeLabel = item.type === 'fiado' ? 'fiado' : 'plan acumulativo';
+
+    const newSale = {
+      code: `V-${String(storeSales.length + 1).padStart(4, '0')}`,
+      storeId: storeKey,
+      storeName: currentUser.store,
+      productId: null,
+      product: `Abono ${typeLabel}: ${item.productName}`,
+      customer: client.name || 'Cliente',
+      paymentMethod: method,
+      cashAmount,
+      cardAmount,
+      transferAmount,
+      invoiceEnabled: false,
+      invoiceName: '',
+      invoiceIdentification: '',
+      invoiceAddress: '',
+      invoiceEmail: '',
+      quantity: 0,
+      subtotal: safeAmount,
+      discount: 0,
+      discountPercent: 0,
+      total: safeAmount,
+      profit: 0,
+      status: 'Completada',
+    };
+
+    const salePayload = {
+      ...mapSaleToDb(newSale, currentUser.id),
+      cash_amount: cashAmount,
+      card_amount: cardAmount,
+      transfer_amount: transferAmount,
+    };
+
+    const { data, error } = await supabase
+      .from('sales')
+      .insert(salePayload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error registrando abono como ingreso:', error);
+      throw new Error(`No se pudo registrar el abono en ventas/caja: ${error.message}`);
+    }
+
+    return {
+      ...mapSaleFromDb(data),
+      cashAmount,
+      cardAmount,
+      transferAmount,
+      items: [],
+      accountPaymentNote: note || '',
+    };
+  }
+
+  async function addClientAccountItem(clientId, accountForm) {
+    if (!isCustomerAccountsAvailable(currentUser)) {
+      setClientNotice({ type: 'error', message: 'Esta función está disponible solo para KUEHNS 5.' });
+      return false;
+    }
+
+    const client = storeClients.find(item => String(item.id) === String(clientId));
+    const productSearch = String(accountForm.productSearch || '').trim().toLowerCase();
+    const product = storeProducts.find(item => String(item.id) === String(accountForm.productId)) || storeProducts.find(item => {
+      if (!productSearch) return false;
+      const exactValues = [item.barcode, item.sku, item.code].filter(Boolean).map(value => String(value).trim().toLowerCase());
+      if (exactValues.includes(productSearch)) return true;
+      return getProductDisplayName(item).toLowerCase().includes(productSearch);
+    });
+    const quantity = Number(accountForm.quantity || 0);
+    const unitPrice = Number(accountForm.unitPrice || 0);
+    const initialPayment = toMoneyNumber(accountForm.initialPayment);
+    const total = toMoneyNumber(quantity * unitPrice);
+
+    if (!client) {
+      setClientNotice({ type: 'error', message: 'No se encontró el cliente.' });
+      return false;
+    }
+
+    if (!product) {
+      setClientNotice({ type: 'error', message: 'Selecciona la prenda que quedará pendiente.' });
+      return false;
+    }
+
+    if (quantity <= 0 || Number.isNaN(quantity)) {
+      setClientNotice({ type: 'error', message: 'La cantidad debe ser mayor a 0.' });
+      return false;
+    }
+
+    if (unitPrice <= 0 || Number.isNaN(unitPrice)) {
+      setClientNotice({ type: 'error', message: 'Ingresa el valor acordado de la prenda.' });
+      return false;
+    }
+
+    if (initialPayment < 0 || initialPayment > total) {
+      setClientNotice({ type: 'error', message: 'El abono inicial no puede ser negativo ni mayor al total.' });
+      return false;
+    }
+
+    if (initialPayment >= total && Number(product.stock || 0) < quantity) {
+      setClientNotice({ type: 'error', message: `No hay stock suficiente para completar la venta de ${product.name}. Disponible: ${product.stock}.` });
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const paid = toMoneyNumber(initialPayment);
+    const status = paid >= total ? 'Pagado' : 'Pendiente';
+    const newItem = {
+      id: makeLocalId('cuenta'),
+      type: accountForm.type === 'fiado' ? 'fiado' : 'acumulativo',
+      productId: product.id,
+      productName: getProductDisplayName(product),
+      quantity,
+      unitPrice: toMoneyNumber(unitPrice),
+      total,
+      paid,
+      status,
+      note: accountForm.note || '',
+      createdAt: now,
+      completedAt: status === 'Pagado' ? now : '',
+      payments: paid > 0 ? [{
+        id: makeLocalId('abono'),
+        amount: paid,
+        paymentMethod: accountForm.paymentMethod || 'Efectivo',
+        note: accountForm.note || 'Abono inicial',
+        createdAt: now,
+      }] : [],
+    };
+
+    const nextItems = [newItem, ...safeJsonArray(client.accountItems)];
+    const nextHistory = paid > 0
+      ? [{
+        id: makeLocalId('historial'),
+        itemId: newItem.id,
+        itemName: newItem.productName,
+        amount: paid,
+        paymentMethod: accountForm.paymentMethod || 'Efectivo',
+        note: accountForm.note || 'Abono inicial',
+        createdAt: now,
+      }, ...safeJsonArray(client.paymentHistory)]
+      : safeJsonArray(client.paymentHistory);
+
+    try {
+      if (paid > 0) {
+        await createCustomerAccountPaymentSale({
+          client,
+          item: newItem,
+          amount: paid,
+          paymentMethod: accountForm.paymentMethod || 'Efectivo',
+          note: accountForm.note || 'Abono inicial',
+        });
+      }
+
+      if (status === 'Pagado') {
+        const nextStock = Number(product.stock || 0) - quantity;
+        const { error: productError } = await supabase
+          .from('products')
+          .update({ stock: nextStock, status: nextStock === 0 ? 'Inactivo' : 'Activo' })
+          .eq('id', product.id)
+          .eq('user_id', currentUser.id);
+
+        if (productError) {
+          throw new Error(`El abono se registró, pero no se pudo descontar stock: ${productError.message}`);
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('clients')
+        .update({ account_items: nextItems, payment_history: nextHistory })
+        .eq('id', client.id)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      setClients(prev => prev.map(item => String(item.id) === String(client.id) ? mapClientWithAccountsFromDb(data) : item));
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      setClientNotice({ type: 'success', message: status === 'Pagado' ? 'Prenda pagada y stock descontado correctamente.' : 'Prenda agregada al cliente correctamente.' });
+      return true;
+    } catch (error) {
+      console.error('Error guardando prenda pendiente:', error);
+      setClientNotice({ type: 'error', message: error.message || 'No se pudo guardar la prenda pendiente.' });
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      return false;
+    }
+  }
+
+  async function addClientAccountPayment(clientId, accountItemId, paymentForm) {
+    if (!isCustomerAccountsAvailable(currentUser)) {
+      setClientNotice({ type: 'error', message: 'Esta función está disponible solo para KUEHNS 5.' });
+      return false;
+    }
+
+    const client = storeClients.find(item => String(item.id) === String(clientId));
+    if (!client) {
+      setClientNotice({ type: 'error', message: 'No se encontró el cliente.' });
+      return false;
+    }
+
+    const currentItems = safeJsonArray(client.accountItems);
+    const accountItem = currentItems.find(item => String(item.id) === String(accountItemId));
+    if (!accountItem) {
+      setClientNotice({ type: 'error', message: 'No se encontró la prenda pendiente.' });
+      return false;
+    }
+
+    if (accountItem.status === 'Pagado' || accountItem.status === 'Cancelado') {
+      setClientNotice({ type: 'error', message: 'Esta prenda ya no tiene saldo pendiente.' });
+      return false;
+    }
+
+    const amount = toMoneyNumber(paymentForm.amount);
+    const pending = toMoneyNumber(Number(accountItem.total || 0) - Number(accountItem.paid || 0));
+
+    if (amount <= 0) {
+      setClientNotice({ type: 'error', message: 'El abono debe ser mayor a 0.' });
+      return false;
+    }
+
+    if (amount > pending) {
+      setClientNotice({ type: 'error', message: `El abono no puede ser mayor al saldo pendiente de $${pending.toFixed(2)}.` });
+      return false;
+    }
+
+    const willComplete = amount >= pending - 0.01;
+    const product = storeProducts.find(item => String(item.id) === String(accountItem.productId));
+
+    if (willComplete) {
+      if (!product) {
+        setClientNotice({ type: 'error', message: 'No se encontró el producto para descontar del inventario.' });
+        return false;
+      }
+
+      if (Number(product.stock || 0) < Number(accountItem.quantity || 0)) {
+        setClientNotice({ type: 'error', message: `No hay stock suficiente para completar la venta de ${accountItem.productName}. Disponible: ${product.stock}.` });
+        return false;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const payment = {
+      id: makeLocalId('abono'),
+      amount,
+      paymentMethod: paymentForm.paymentMethod || 'Efectivo',
+      note: paymentForm.note || '',
+      createdAt: now,
+    };
+
+    const nextItems = currentItems.map(item => {
+      if (String(item.id) !== String(accountItemId)) return item;
+      const paid = toMoneyNumber(Number(item.paid || 0) + amount);
+      const status = paid >= Number(item.total || 0) - 0.01 ? 'Pagado' : 'Pendiente';
+      return {
+        ...item,
+        paid,
+        status,
+        completedAt: status === 'Pagado' ? now : item.completedAt || '',
+        payments: [...safeJsonArray(item.payments), payment],
+      };
+    });
+
+    const nextHistory = [{
+      id: makeLocalId('historial'),
+      itemId: accountItem.id,
+      itemName: accountItem.productName,
+      amount,
+      paymentMethod: payment.paymentMethod,
+      note: payment.note,
+      createdAt: now,
+    }, ...safeJsonArray(client.paymentHistory)];
+
+    try {
+      await createCustomerAccountPaymentSale({
+        client,
+        item: accountItem,
+        amount,
+        paymentMethod: payment.paymentMethod,
+        note: payment.note,
+      });
+
+      if (willComplete) {
+        const nextStock = Number(product.stock || 0) - Number(accountItem.quantity || 0);
+        const { error: productError } = await supabase
+          .from('products')
+          .update({ stock: nextStock, status: nextStock === 0 ? 'Inactivo' : 'Activo' })
+          .eq('id', product.id)
+          .eq('user_id', currentUser.id);
+
+        if (productError) {
+          throw new Error(`El abono se registró, pero no se pudo descontar stock: ${productError.message}`);
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('clients')
+        .update({ account_items: nextItems, payment_history: nextHistory })
+        .eq('id', client.id)
+        .eq('user_id', currentUser.id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      setClients(prev => prev.map(item => String(item.id) === String(client.id) ? mapClientWithAccountsFromDb(data) : item));
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      setClientNotice({ type: 'success', message: willComplete ? 'Abono registrado. La prenda quedó pagada y se descontó del inventario.' : 'Abono registrado correctamente.' });
+      return true;
+    } catch (error) {
+      console.error('Error registrando abono:', error);
+      setClientNotice({ type: 'error', message: error.message || 'No se pudo registrar el abono.' });
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      return false;
+    }
+  }
+
+  async function cancelClientAccountItem(clientId, accountItemId) {
+    if (!isCustomerAccountsAvailable(currentUser)) return false;
+
+    const client = storeClients.find(item => String(item.id) === String(clientId));
+    if (!client) return false;
+
+    const currentItems = safeJsonArray(client.accountItems);
+    const accountItem = currentItems.find(item => String(item.id) === String(accountItemId));
+
+    if (!accountItem) {
+      setClientNotice({ type: 'error', message: 'No se encontró la prenda pendiente.' });
+      return false;
+    }
+
+    if (accountItem.status === 'Pagado') {
+      setClientNotice({ type: 'error', message: 'Esta prenda ya está pagada. Si hubo devolución, anula la venta desde el historial correspondiente.' });
+      return false;
+    }
+
+    const paid = Number(accountItem.paid || 0);
+    const confirmMessage = paid > 0
+      ? `Esta prenda tiene $${toMoneyNumber(paid).toFixed(2)} en abonos registrados. Se quitará de los pendientes del cliente, pero los abonos quedarán en el historial de pagos/ingresos. ¿Deseas continuar?`
+      : '¿Deseas quitar esta prenda fiada o en plan acumulativo?';
+
+    if (!window.confirm(confirmMessage)) {
+      return false;
+    }
+
+    const nextItems = currentItems.map(item => String(item.id) === String(accountItemId) ? { ...item, status: 'Cancelado', canceledAt: new Date().toISOString() } : item);
+
+    const { data, error } = await supabase
+      .from('clients')
+      .update({ account_items: nextItems })
+      .eq('id', client.id)
+      .eq('user_id', currentUser.id)
+      .select()
+      .single();
+
+    if (error) {
+      setClientNotice({ type: 'error', message: `No se pudo cancelar: ${error.message}` });
+      return false;
+    }
+
+    setClients(prev => prev.map(item => String(item.id) === String(client.id) ? mapClientWithAccountsFromDb(data) : item));
+    setClientNotice({ type: 'success', message: 'Prenda quitada de fiado / plan acumulativo.' });
+    return true;
   }
 
   function resetProviderForm() {
@@ -2831,6 +3221,7 @@ function App() {
     Inicio: { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home },
     Ventas: { title: 'Ventas', subtitle: 'Registra ventas y revisa el historial reciente.', icon: ShoppingCart },
     Caja: { title: 'Caja', subtitle: 'Controla cierres, cortes y métodos de pago por periodo.', icon: DollarSign },
+    'Gastos fijos': { title: 'Gastos fijos', subtitle: 'Controla pagos mensuales como arriendo, servicios, sueldos y suscripciones.', icon: ReceiptText },
     Compras: { title: 'Compras', subtitle: 'Registra compras a proveedores y aumenta stock.', icon: ClipboardList },
     Productos: {
       title: businessConfig.productMode === 'menu-inventory' ? 'Menú e insumos' : 'Productos',
@@ -2847,9 +3238,12 @@ function App() {
     Admin: { title: 'Panel administrador', subtitle: 'Crea y controla cuentas de clientes de InventiQ.', icon: UserPlus },
   }[active] || { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home };
 
-  const visibleMenu = isInventiQAdmin(currentUser) ? [...menu, { label: 'Admin', icon: UserPlus }] : menu;
+  const menuWithExpenses = menu.some(item => item.label === 'Gastos fijos')
+    ? menu
+    : menu.flatMap(item => item.label === 'Caja' ? [item, { label: 'Gastos fijos', icon: ReceiptText }] : [item]);
 
-  const HeaderIcon = pageInfo.icon;
+  const visibleMenu = isInventiQAdmin(currentUser) ? [...menuWithExpenses, { label: 'Admin', icon: UserPlus }] : menuWithExpenses;
+
 
   if (showSplash) {
     return <SplashScreen />;
@@ -2882,1762 +3276,152 @@ function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <MobileTopBar currentUser={currentUser} logout={logout} active={active} />
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
-        <aside className="sticky top-0 hidden h-screen overflow-y-auto lg:flex flex-col bg-gradient-to-b from-emerald-950 to-teal-950 text-white p-6">
-          <div className="flex-1">
-            <div className="mb-10 flex items-center gap-3">
-              <InventiQIcon className="h-14 w-14 rounded-2xl object-cover shadow-md" />
-              <div>
-                <h1 className="text-2xl font-bold">InventiQ</h1>
-                <p className="text-sm text-emerald-100">Controla tu inventario</p>
-              </div>
-            </div>
-            <nav className="space-y-2">
-              {visibleMenu.map(item => {
-                const Icon = item.icon;
-                const isActive = active === item.label;
-                return (
-                  <button key={item.label} onClick={() => { setActive(item.label); setMobileMoreOpen(false); }} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${isActive ? 'bg-emerald-500/80 shadow-lg' : 'text-emerald-50 hover:bg-white/10'}`}>
-                    <Icon className="h-5 w-5" />
-                    <span className="font-medium">{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="sticky bottom-0 mt-6 space-y-5 border-t border-white/10 bg-teal-950/95 pt-5 backdrop-blur">
-            <div className="flex items-center gap-3">
-              <StoreAvatar currentUser={currentUser} size="md" />
-              <div className="min-w-0">
-                <p className="truncate font-semibold">{currentUser.name}</p>
-                <p className="truncate text-sm text-emerald-100">{currentUser.store}</p>
-              </div>
-            </div>
-            <button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-emerald-50 hover:bg-white/10">
-              <LogOut className="h-4 w-4" /> Cerrar sesión
-            </button>
-          </div>
-        </aside>
+        <DesktopSidebar
+          menu={visibleMenu}
+          active={active}
+          setActive={setActive}
+          setMobileMoreOpen={setMobileMoreOpen}
+          currentUser={currentUser}
+          logout={logout}
+        />
 
         <main className="p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
-          <header className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-white/70 p-3 shadow-sm backdrop-blur sm:mb-8 sm:bg-transparent sm:p-0 sm:shadow-none lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><HeaderIcon className="h-8 w-8" /></div>
-              <div>
-                <h2 className="text-2xl font-extrabold sm:text-3xl lg:text-4xl">{pageInfo.title}</h2>
-                <p className="text-sm text-slate-500 sm:text-base">{pageInfo.subtitle}</p>
-                <p className="mt-1 text-sm font-semibold text-emerald-700">{currentUser.store} · {currentUser.city}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setActive('Productos')} className="hidden rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 sm:inline-flex sm:items-center"><Plus className="mr-2 h-5 w-5" />Agregar producto</button>
-            </div>
-          </header>
+          <PageHeader
+            pageInfo={pageInfo}
+            currentUser={currentUser}
+            onAddProduct={() => setActive('Productos')}
+          />
 
-          {active === 'Inicio' && <HomePage currentUser={currentUser} totalSales={totalSales} totalProducts={totalProducts} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} sales={storeSales} products={storeProducts} bestSeller={bestSeller} totalProfit={totalProfit} setActive={setActive} expirationText={expirationText} />}
-          {active === 'Ventas' && (
-            businessConfig.salesMode === 'food' ? (
-              <FoodSalesPage
-                currentUser={currentUser}
-                sales={storeSales}
-                products={storeProducts}
-                clients={storeClients}
-                saleForm={saleForm}
-                setSaleForm={setSaleForm}
-                saleCart={saleCart}
-                setSaleCart={setSaleCart}
-                addSaleItem={addSaleItem}
-                removeSaleItem={removeSaleItem}
-                updateSaleItemDiscount={updateSaleItemDiscount}
-                clearSaleCart={clearSaleCart}
-                registerSale={registerSale}
-                resetSaleForm={resetSaleForm}
-                cancelSale={cancelSale}
-                totalSales={totalSales}
-                totalProfit={totalProfit}
-                totalDiscount={totalDiscount}
-                totalUnitsSold={totalUnitsSold}
-                saleNotice={saleNotice}
-                salePreview={calculateSalePreview()}
-                salesLoading={salesLoading}
-                setReceiptSale={setReceiptSale}
-              />
-            ) : (
-              <SalesPage
-                currentUser={currentUser}
-                sales={storeSales}
-                products={storeProducts}
-                clients={storeClients}
-                saleForm={saleForm}
-                setSaleForm={setSaleForm}
-                saleCart={saleCart}
-                addSaleItem={addSaleItem}
-                removeSaleItem={removeSaleItem}
-                updateSaleItemDiscount={updateSaleItemDiscount}
-                clearSaleCart={clearSaleCart}
-                registerSale={registerSale}
-                resetSaleForm={resetSaleForm}
-                cancelSale={cancelSale}
-                totalSales={totalSales}
-                totalProfit={totalProfit}
-                totalDiscount={totalDiscount}
-                totalUnitsSold={totalUnitsSold}
-                saleNotice={saleNotice}
-                salePreview={calculateSalePreview()}
-                salesLoading={salesLoading}
-                setReceiptSale={setReceiptSale}
-              />
-            )
-          )}
-          {active === 'Caja' && (
-            businessConfig.cashMode === 'daily-cash' ? (
-              <DailyCashPage
-                currentUser={currentUser}
-                sales={storeSales}
-                purchases={purchases}
-              />
-            ) : (
-              <CashPage sales={storeSales} purchases={purchases} />
-            )
-          )}
-          {active === 'Compras' && <PurchasesPage purchases={purchases} products={storeProducts} providers={storeProviders} purchaseForm={purchaseForm} setPurchaseForm={setPurchaseForm} purchaseCart={purchaseCart} addPurchaseItem={addPurchaseItem} removePurchaseItem={removePurchaseItem} clearPurchaseCart={clearPurchaseCart} registerPurchase={registerPurchase} resetPurchaseForm={resetPurchaseForm} purchaseNotice={purchaseNotice} purchasesLoading={purchasesLoading} />}
-          {active === 'Productos' && (
-            businessConfig.productMode === 'menu-inventory' ? (
-              <FoodProductsPage
-              currentUser={currentUser}
-              setEditingId={setEditingId}
-              setNotice={setNotice}
-              products={storeProducts}
-              setProducts={setProducts}
-              search={search}
-              setSearch={setSearch}
-              filtered={filtered}
-              categories={categories}
-              productCategories={productCategories}
-              customProductCategories={customProductCategories}
-              setCustomProductCategories={setCustomProductCategories}
-              category={category}
-              setCategory={setCategory}
-              form={form}
-              setForm={setForm}
-              saveProduct={saveProduct}
-              resetForm={resetForm}
-              editProduct={editProduct}
-              editingId={editingId}
-              notice={notice}
-              deleteProduct={deleteProduct}
-              pendingDeleteId={pendingDeleteId}
-              setPendingDeleteId={setPendingDeleteId}
-              statusText={statusText}
-              expirationText={expirationText}
-              totalProducts={totalProducts}
-              lowStock={lowStock}
-              noStock={noStock}
-              inventoryValue={inventoryValue}
-              handleProductImage={handleProductImage}
-              productsLoading={productsLoading}
-              importProductsFromExcel={importProductsFromExcel}
-              excelImportPreview={excelImportPreview}
-              confirmExcelImport={confirmExcelImport}
-              cancelExcelImport={cancelExcelImport}
-              excelImportProgress={excelImportProgress}
-            />
-            ) : (
-              <ProductsPage
-              currentUser={currentUser}
-              setEditingId={setEditingId}
-              setNotice={setNotice}
-              products={storeProducts}
-              setProducts={setProducts}
-              filtered={filtered}
-              categories={categories}
-              productCategories={productCategories}
-              customProductCategories={customProductCategories}
-              setCustomProductCategories={setCustomProductCategories}
-              category={category}
-              setCategory={setCategory}
-              form={form}
-              setForm={setForm}
-              saveProduct={saveProduct}
-              resetForm={resetForm}
-              editProduct={editProduct}
-              editingId={editingId}
-              notice={notice}
-              deleteProduct={deleteProduct}
-              pendingDeleteId={pendingDeleteId}
-              setPendingDeleteId={setPendingDeleteId}
-              statusText={statusText}
-              expirationText={expirationText}
-              totalProducts={totalProducts}
-              lowStock={lowStock}
-              noStock={noStock}
-              inventoryValue={inventoryValue}
-              handleProductImage={handleProductImage}
-              productsLoading={productsLoading}
-              importProductsFromExcel={importProductsFromExcel}
-              excelImportPreview={excelImportPreview}
-              confirmExcelImport={confirmExcelImport}
-              cancelExcelImport={cancelExcelImport}
-              excelImportProgress={excelImportProgress}
-            />
-            )
-          )}
-          {active === 'Inventario' && <InventoryPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} lowStock={lowStock} noStock={noStock} inventoryValue={inventoryValue} potentialProfit={potentialProfit} statusText={statusText} expirationText={expirationText} adjustProductStock={adjustProductStock} />}
-          {active === 'Clientes' && <ClientsPage clients={storeClients} sales={storeSales} clientForm={clientForm} setClientForm={setClientForm} saveClient={saveClient} resetClientForm={resetClientForm} editClient={editClient} deleteClient={deleteClient} editingClientId={editingClientId} pendingDeleteClientId={pendingDeleteClientId} setPendingDeleteClientId={setPendingDeleteClientId} clientNotice={clientNotice} clientsLoading={clientsLoading} setActive={setActive} setSaleForm={setSaleForm} />}
-          {active === 'Proveedores' && <ProvidersPage providers={storeProviders} providerForm={providerForm} setProviderForm={setProviderForm} saveProvider={saveProvider} resetProviderForm={resetProviderForm} editProvider={editProvider} deleteProvider={deleteProvider} editingProviderId={editingProviderId} pendingDeleteProviderId={pendingDeleteProviderId} setPendingDeleteProviderId={setPendingDeleteProviderId} providerNotice={providerNotice} productCategories={productCategories} products={storeProducts} providersLoading={providersLoading} setActive={setActive} setPurchaseForm={setPurchaseForm} />}
-          {active === 'Reportes' && <ReportsPage currentUser={currentUser} products={storeProducts} sales={storeSales} purchases={purchases} clients={storeClients} providers={storeProviders} totalSales={totalSales} inventoryValue={inventoryValue} potentialProfit={potentialProfit} bestSeller={bestSeller} totalProfit={totalProfit} expirationText={expirationText} />}
-          {active === 'Configuración' && <SettingsPage currentUser={currentUser} settingsForm={settingsForm} setSettingsForm={setSettingsForm} saveSettings={saveSettings} settingsNotice={settingsNotice} handleStoreLogo={handleStoreLogo} />}
-          {active === 'Admin' && isInventiQAdmin(currentUser) && <AdminPage form={adminCreateUserForm} setForm={setAdminCreateUserForm} notice={adminNotice} createClientAccount={createClientAccount} />}
+          <AppRoutes
+            active={active}
+            businessConfig={businessConfig}
+            currentUser={currentUser}
+            totalSales={totalSales}
+            totalProducts={totalProducts}
+            lowStock={lowStock}
+            noStock={noStock}
+            inventoryValue={inventoryValue}
+            storeSales={storeSales}
+            storeProducts={storeProducts}
+            bestSeller={bestSeller}
+            totalProfit={totalProfit}
+            setActive={setActive}
+            expirationText={expirationText}
+            storeClients={storeClients}
+            saleForm={saleForm}
+            setSaleForm={setSaleForm}
+            saleCart={saleCart}
+            setSaleCart={setSaleCart}
+            addSaleItem={addSaleItem}
+            removeSaleItem={removeSaleItem}
+            updateSaleItemDiscount={updateSaleItemDiscount}
+            clearSaleCart={clearSaleCart}
+            registerSale={registerSale}
+            resetSaleForm={resetSaleForm}
+            cancelSale={cancelSale}
+            totalDiscount={totalDiscount}
+            totalUnitsSold={totalUnitsSold}
+            saleNotice={saleNotice}
+            salePreview={calculateSalePreview()}
+            salesLoading={salesLoading}
+            setReceiptSale={setReceiptSale}
+            purchases={purchases}
+            expenses={expenses}
+            expenseForm={expenseForm}
+            setExpenseForm={setExpenseForm}
+            saveExpense={saveExpense}
+            resetExpenseForm={resetExpenseForm}
+            editExpense={editExpense}
+            deleteExpense={deleteExpense}
+            markExpensePaid={markExpensePaid}
+            editingExpenseId={editingExpenseId}
+            pendingDeleteExpenseId={pendingDeleteExpenseId}
+            setPendingDeleteExpenseId={setPendingDeleteExpenseId}
+            expenseNotice={expenseNotice}
+            expensesLoading={expensesLoading}
+            storeProviders={storeProviders}
+            purchaseForm={purchaseForm}
+            setPurchaseForm={setPurchaseForm}
+            purchaseCart={purchaseCart}
+            addPurchaseItem={addPurchaseItem}
+            removePurchaseItem={removePurchaseItem}
+            clearPurchaseCart={clearPurchaseCart}
+            registerPurchase={registerPurchase}
+            resetPurchaseForm={resetPurchaseForm}
+            purchaseNotice={purchaseNotice}
+            purchasesLoading={purchasesLoading}
+            setEditingId={setEditingId}
+            setNotice={setNotice}
+            setProducts={setProducts}
+            search={search}
+            setSearch={setSearch}
+            filtered={filtered}
+            categories={categories}
+            productCategories={productCategories}
+            customProductCategories={customProductCategories}
+            setCustomProductCategories={setCustomProductCategories}
+            category={category}
+            setCategory={setCategory}
+            form={form}
+            setForm={setForm}
+            saveProduct={saveProduct}
+            resetForm={resetForm}
+            editProduct={editProduct}
+            editingId={editingId}
+            notice={notice}
+            deleteProduct={deleteProduct}
+            pendingDeleteId={pendingDeleteId}
+            setPendingDeleteId={setPendingDeleteId}
+            statusText={statusText}
+            handleProductImage={handleProductImage}
+            productsLoading={productsLoading}
+            importProductsFromExcel={importProductsFromExcel}
+            excelImportPreview={excelImportPreview}
+            confirmExcelImport={confirmExcelImport}
+            cancelExcelImport={cancelExcelImport}
+            excelImportProgress={excelImportProgress}
+            potentialProfit={potentialProfit}
+            adjustProductStock={adjustProductStock}
+            clientForm={clientForm}
+            setClientForm={setClientForm}
+            saveClient={saveClient}
+            resetClientForm={resetClientForm}
+            editClient={editClient}
+            deleteClient={deleteClient}
+            editingClientId={editingClientId}
+            pendingDeleteClientId={pendingDeleteClientId}
+            setPendingDeleteClientId={setPendingDeleteClientId}
+            clientNotice={clientNotice}
+            clientsLoading={clientsLoading}
+            addClientAccountItem={addClientAccountItem}
+            addClientAccountPayment={addClientAccountPayment}
+            cancelClientAccountItem={cancelClientAccountItem}
+            providerForm={providerForm}
+            setProviderForm={setProviderForm}
+            saveProvider={saveProvider}
+            resetProviderForm={resetProviderForm}
+            editProvider={editProvider}
+            deleteProvider={deleteProvider}
+            editingProviderId={editingProviderId}
+            pendingDeleteProviderId={pendingDeleteProviderId}
+            setPendingDeleteProviderId={setPendingDeleteProviderId}
+            providerNotice={providerNotice}
+            providersLoading={providersLoading}
+            settingsForm={settingsForm}
+            setSettingsForm={setSettingsForm}
+            saveSettings={saveSettings}
+            settingsNotice={settingsNotice}
+            handleStoreLogo={handleStoreLogo}
+            adminCreateUserForm={adminCreateUserForm}
+            setAdminCreateUserForm={setAdminCreateUserForm}
+            adminNotice={adminNotice}
+            createClientAccount={createClientAccount}
+          />
         </main>
       </div>
       <MobileBottomNav menu={visibleMenu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
       {/* Botón flotante retirado: el menú inferior ya cubre la navegación móvil. */}
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
-    </div>
-  );
-}
-
-function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit, setActive, expirationText }) {
-  const businessConfig = getBusinessConfig(currentUser?.businessType);
-  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
-  const recentSales = completedSales.slice(0, 5);
-  const lowStockProducts = products
-    .filter(product => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= Number(product.minStock || 0))
-    .slice(0, 5);
-  const expiringProducts = businessConfig.usesExpiration
-    ? products
-      .filter(product => {
-        const exp = expirationText ? expirationText(product) : null;
-        return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
-      })
-      .slice(0, 5)
-    : [];
-
-  const soldMap = completedSales.reduce((acc, sale) => {
-    if (sale.items?.length > 0) {
-      sale.items.forEach(item => {
-        const key = item.product || 'Producto';
-        acc[key] = acc[key] || { name: key, quantity: 0, total: 0 };
-        acc[key].quantity += Number(item.quantity || 0);
-        acc[key].total += Number(item.subtotal || 0);
-      });
-    } else {
-      const key = sale.product || 'Producto';
-      acc[key] = acc[key] || { name: key, quantity: 0, total: 0 };
-      acc[key].quantity += Number(sale.quantity || 0);
-      acc[key].total += Number(sale.total || 0);
-    }
-    return acc;
-  }, {});
-
-  const topSoldProducts = Object.values(soldMap).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
-  const alertCount = lowStock + noStock + expiringProducts.length;
-  const stockOk = products.filter(product => Number(product.stock || 0) > Number(product.minStock || 0)).length;
-  const inventoryHealth = totalProducts > 0 ? Math.round((stockOk / totalProducts) * 100) : 0;
-
-  return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-500 p-6 text-white shadow-xl shadow-emerald-100 sm:p-7">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-50 backdrop-blur">
-              <Activity className="h-4 w-4" /> Dashboard principal
-            </div>
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Bienvenido, {currentUser?.name || 'Usuario'}</h2>
-            <p className="mt-2 text-sm leading-6 text-emerald-50 sm:text-base">
-              Resumen inteligente de {currentUser?.store || 'tu tienda'}: ventas, inventario, alertas y productos clave en un solo lugar.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[560px]">
-            <DashboardMiniStat icon={DollarSign} label="Ventas" value={`$${totalSales.toFixed(2)}`} />
-            <DashboardMiniStat icon={TrendingUp} label="Utilidad" value={`$${totalProfit.toFixed(2)}`} />
-            <DashboardMiniStat icon={Package} label="Productos" value={totalProducts} />
-            <DashboardMiniStat icon={AlertTriangle} label="Alertas" value={alertCount} />
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <DashboardKpi icon={DollarSign} title="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} subtitle="registradas" tone="emerald" />
-        <DashboardKpi icon={TrendingUp} title="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} subtitle="estimada" tone="blue" />
-        <DashboardKpi icon={Boxes} title="Stock bajo" value={lowStock} subtitle="por revisar" tone="amber" />
-        <DashboardKpi icon={ShoppingCart} title="Sin stock" value={noStock} subtitle="requiere compra" tone="red" />
-      </section>
-
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QuickAction icon={ShoppingCart} label="Nueva venta" onClick={() => setActive('Ventas')} tone="emerald" />
-        <QuickAction icon={ClipboardList} label="Registrar compra" onClick={() => setActive('Compras')} tone="teal" />
-        <QuickAction icon={Plus} label="Agregar producto" onClick={() => setActive('Productos')} tone="blue" />
-        <QuickAction icon={BarChart3} label="Ver reportes" onClick={() => setActive('Reportes')} tone="slate" />
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="rounded-[2rem] border border-emerald-100 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-2xl font-extrabold text-slate-900">Resumen de tienda</h3>
-              <p className="text-sm text-slate-500">Control general de inventario y rendimiento.</p>
-            </div>
-            <span className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Salud del inventario: {inventoryHealth}%</span>
-          </div>
-
-          <div className="rounded-[1.75rem] bg-gradient-to-br from-emerald-600 to-teal-600 p-6 text-white">
-            <p className="text-sm font-semibold text-emerald-100">Inventario valorizado</p>
-            <h4 className="mt-2 text-4xl font-extrabold">${inventoryValue.toFixed(2)}</h4>
-            <p className="mt-3 text-sm leading-6 text-emerald-50">
-              Producto estrella: <strong>{topSoldProducts[0]?.name || bestSeller || 'Sin ventas'}</strong>. Mantén atención sobre stock bajo, sin stock{businessConfig.usesExpiration ? ' y caducidades próximas' : ''}.
-            </p>
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <SummaryBox label="Ventas" value={`$${totalSales.toFixed(2)}`} />
-              <SummaryBox label="Productos" value={totalProducts} />
-              <SummaryBox label="Alertas" value={alertCount} />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-extrabold text-slate-900">Ventas recientes</h3>
-              <p className="text-sm text-slate-500">Últimos movimientos registrados.</p>
-            </div>
-            <button onClick={() => setActive('Ventas')} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Ver todas</button>
-          </div>
-          <div className="space-y-3">
-            {recentSales.length === 0 && <EmptyDashboardMessage text="Todavía no hay ventas registradas." />}
-            {recentSales.map(sale => (
-              <div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4">
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900">{sale.code}</p>
-                  <p className="truncate text-sm text-slate-500">{sale.product} · {sale.date}</p>
-                </div>
-                <p className="shrink-0 font-extrabold text-emerald-700">${Number(sale.total || 0).toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
-        <DashboardListCard
-          title="Productos con stock bajo"
-          subtitle="Requieren revisión o reposición"
-          empty="No hay productos con stock bajo."
-          items={lowStockProducts.map(product => ({
-            title: product.name,
-            subtitle: `Stock actual: ${product.stock} · mínimo: ${product.minStock}`,
-            badge: `${product.stock} unidades`,
-            tone: 'amber',
-          }))}
-        />
-        {businessConfig.usesExpiration && <DashboardListCard
-          title="Próximos a caducar"
-          subtitle="Productos que vencen pronto"
-          empty="No hay productos próximos a caducar."
-          items={expiringProducts.map(product => {
-            const exp = expirationText(product);
-            return {
-              title: product.name,
-              subtitle: `Caduca: ${product.expirationDate || 'Sin fecha'} · ${exp.label}`,
-              badge: exp.days !== null ? `${exp.days} días` : 'Revisar',
-              tone: 'red',
-            };
-          })}
-        />}
-        <DashboardListCard
-          title="Productos más vendidos"
-          subtitle="Ranking por unidades vendidas"
-          empty="Todavía no hay ventas suficientes."
-          items={topSoldProducts.map(product => ({
-            title: product.name,
-            subtitle: `${product.quantity} unidades vendidas`,
-            badge: `$${product.total.toFixed(2)}`,
-            tone: 'emerald',
-          }))}
-        />
-      </section>
-    </div>
-  );
-}
-
-function PurchasesPage({ purchases, products, providers, purchaseForm, setPurchaseForm, purchaseCart, addPurchaseItem, removePurchaseItem, clearPurchaseCart, registerPurchase, resetPurchaseForm, purchaseNotice, purchasesLoading }) {
-  const [productSearch, setProductSearch] = useState('');
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [purchasePage, setPurchasePage] = useState(1);
-  const selectedProduct = products.find(product => String(product.id) === String(purchaseForm.productId));
-  const filteredProducts = useMemo(
-    () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT }),
-    [products, productSearch]
-  );
-  const suggestedProvider = selectedProduct ? providers.find(provider => String(provider.category || '').toLowerCase() === String(selectedProduct.category || '').toLowerCase()) : null;
-  const quantity = Number(purchaseForm.quantity || 0);
-  const unitCost = Number(purchaseForm.unitCost || selectedProduct?.cost || 0);
-  const lineTotal = quantity > 0 && unitCost >= 0 ? quantity * unitCost : 0;
-  const total = purchaseCart.reduce((sum, item) => sum + item.total, 0);
-  const purchasesPerPage = 20;
-  const purchaseTotalPages = Math.max(Math.ceil(purchases.length / purchasesPerPage), 1);
-  const safePurchasePage = Math.min(purchasePage, purchaseTotalPages);
-  const purchaseStartIndex = (safePurchasePage - 1) * purchasesPerPage;
-  const paginatedPurchases = purchases.slice(purchaseStartIndex, purchaseStartIndex + purchasesPerPage);
-
-  useEffect(() => {
-    setPurchasePage(1);
-  }, [purchases.length]);
-
-  function handleProductSearch(value) {
-    setProductSearch(value);
-    const normalized = String(value || '').trim().toLowerCase();
-    if (!normalized) return;
-
-    const exactProduct = products.find(product =>
-      String(product.barcode || '').trim().toLowerCase() === normalized ||
-      String(product.sku || '').trim().toLowerCase() === normalized
-    );
-
-    if (exactProduct) {
-      selectProduct(exactProduct.id);
-    }
-  }
-
-  function selectProduct(productId) {
-    const product = products.find(item => String(item.id) === String(productId));
-    const provider = product ? providers.find(item => String(item.category || '').toLowerCase() === String(product.category || '').toLowerCase()) : null;
-
-    setPurchaseForm(prev => ({
-      ...prev,
-      productId,
-      providerId: provider?.id || '',
-      unitCost: product?.cost || '',
-    }));
-  }
-
-  async function copyProviderOrder(provider) {
-    const { message } = buildProviderOrder(provider, products);
-    try {
-      await navigator.clipboard.writeText(message);
-      alert('Pedido sugerido copiado correctamente.');
-    } catch {
-      alert(message);
-    }
-  }
-
-  function openProviderWhatsApp(provider) {
-    const phone = normalizeEcuadorPhone(provider.contact);
-    const { message } = buildProviderOrder(provider, products);
-
-    if (!phone) {
-      alert('Este proveedor no tiene un número válido para WhatsApp.');
-      return;
-    }
-
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-  }
-
-  function openProviderEmail(provider) {
-    const email = String(provider.email || '').trim();
-    const { message } = buildProviderOrder(provider, products);
-
-    if (!email.includes('@')) {
-      alert('Este proveedor no tiene un correo válido.');
-      return;
-    }
-
-    window.location.href = `mailto:${email}?subject=${encodeURIComponent('Pedido de reposición')}&body=${encodeURIComponent(message)}`;
-  }
-
-  return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3">
-        <Metric icon={ClipboardList} label="Compras registradas" value={purchases.length} note="historial" color="emerald" />
-        <Metric icon={DollarSign} label="Total comprado" value={`$${purchases.reduce((sum, item) => sum + item.total, 0).toFixed(2)}`} note="inversión" color="blue" />
-        <Metric icon={Truck} label="Proveedores" value={providers.length} note="registrados" color="amber" />
-      </section>
-
-      {purchasesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando compras desde Supabase...</div>}
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
-        <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
-          <div className="border-b border-slate-100 p-5">
-            <h3 className="flex items-center gap-2 text-xl font-bold"><ClipboardList className="h-5 w-5 text-emerald-600" /> Historial de compras</h3>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {purchases.length === 0 && <div className="p-5"><EmptyState icon={ClipboardList} title="Aún no tienes compras" text="Registra tu primera compra para aumentar stock y controlar mejor tus proveedores." /></div>}
-            {paginatedPurchases.map(purchase => (
-              <div key={purchase.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{purchase.code}</p>
-                  <p className="text-sm text-slate-500">{purchase.product} · {purchase.quantity} unidades · {purchase.date}</p>
-                  <p className="text-xs text-slate-400">Proveedor: {purchase.provider} {purchase.note ? `· ${purchase.note}` : ''}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-slate-900">${purchase.total.toFixed(2)}</p>
-                  <p className="text-xs text-slate-500">Costo unitario: ${purchase.unitCost.toFixed(2)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {purchases.length > purchasesPerPage && (
-            <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-              <span>Mostrando {purchaseStartIndex + 1}-{Math.min(purchaseStartIndex + purchasesPerPage, purchases.length)} de {purchases.length} compras</span>
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={safePurchasePage <= 1} onClick={() => setPurchasePage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
-                <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safePurchasePage} de {purchaseTotalPages}</span>
-                <button type="button" disabled={safePurchasePage >= purchaseTotalPages} onClick={() => setPurchasePage(page => Math.min(page + 1, purchaseTotalPages))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <form onSubmit={registerPurchase} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold">Registrar compra</h3>
-              <p className="text-sm text-slate-500">Agrega varios productos y registra una sola compra.</p>
-            </div>
-            <button type="button" onClick={resetPurchaseForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-50"><RotateCcw className="h-5 w-5" /></button>
-          </div>
-
-          {purchaseNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${purchaseNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-              {purchaseNotice.message}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
-              </div>
-              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-                <Camera className="h-4 w-4" /> Escanear con cámara
-              </button>
-              {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
-              {productSearch && filteredProducts.length > 0 && (
-                <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
-                  {filteredProducts.slice(0, 8).map(product => (
-                    <button
-                      type="button"
-                      key={product.id}
-                      onClick={() => {
-                        selectProduct(product.id);
-                        setProductSearch(getProductDisplayName(product));
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
-                    >
-                      <span>
-                        <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
-                        <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
-                      </span>
-                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedProduct ? (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
-                      <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · {selectedProduct.category} · Stock actual {selectedProduct.stock}</p>
-                    </div>
-                    <button type="button" onClick={() => { setPurchaseForm({ ...purchaseForm, productId: '', unitCost: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para agregarlo a la compra.</div>
-              )}
-              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} resultado(s). Escribe al menos 2 letras o escanea el código.</p>}
-            </label>
-
-            {selectedProduct && (
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold">{getProductDisplayName(selectedProduct)}</p>
-                <p className="text-sm text-slate-500">Categoría: {selectedProduct.category} · Stock actual: {selectedProduct.stock}</p>
-                {suggestedProvider && <p className="mt-2 text-sm font-semibold text-emerald-700">Proveedor sugerido: {suggestedProvider.name}</p>}
-              </div>
-            )}
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Proveedor</span>
-              <select value={purchaseForm.providerId} onChange={e => setPurchaseForm({ ...purchaseForm, providerId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                <option value="">Sin proveedor / compra directa</option>
-                {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name} · {provider.category}</option>)}
-              </select>
-            </label>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cantidad" type="number" min="1" value={purchaseForm.quantity} onChange={v => setPurchaseForm({ ...purchaseForm, quantity: v })} placeholder="1" />
-              <Field label="Costo unitario" type="number" min="0" step="0.01" value={purchaseForm.unitCost} onChange={v => setPurchaseForm({ ...purchaseForm, unitCost: v })} placeholder="0.00" />
-            </div>
-
-            <button type="button" onClick={addPurchaseItem} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar a la compra</button>
-
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="font-bold text-slate-800">Carrito de compra</h4>
-                {purchaseCart.length > 0 && <button type="button" onClick={clearPurchaseCart} className="text-xs font-bold text-red-500 hover:underline">Vaciar</button>}
-              </div>
-              {purchaseCart.length === 0 && <p className="text-sm text-slate-500">Todavía no agregas productos.</p>}
-              <div className="space-y-2">
-                {purchaseCart.map(item => (
-                  <div key={item.productId} className="flex items-center justify-between rounded-2xl bg-white p-3 text-sm shadow-sm">
-                    <div>
-                      <p className="font-bold text-slate-900">{item.product}</p>
-                      <p className="text-xs text-slate-500">{item.quantity} x ${item.unitCost.toFixed(2)}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p className="font-bold text-emerald-700">${item.total.toFixed(2)}</p>
-                      <button type="button" onClick={() => removePurchaseItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Nota</span>
-              <textarea value={purchaseForm.note} onChange={e => setPurchaseForm({ ...purchaseForm, note: e.target.value })} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Factura, pedido, observaciones..." />
-            </label>
-
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <p className="text-sm text-emerald-700">Total de compra</p>
-              <p className="text-3xl font-extrabold text-emerald-900">${total.toFixed(2)}</p>
-            </div>
-
-            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">Registrar compra</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function SalesPage({ currentUser, sales, products, clients, saleForm, setSaleForm, saleCart, addSaleItem, removeSaleItem, updateSaleItemDiscount, clearSaleCart, registerSale, resetSaleForm, cancelSale, totalSales, totalProfit, totalDiscount, totalUnitsSold, saleNotice, salePreview, salesLoading, setReceiptSale }) {
-  const [productSearch, setProductSearch] = useState('');
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [salesPage, setSalesPage] = useState(1);
-  const [saleHistoryFilter, setSaleHistoryFilter] = useState('completed');
-  const { product, subtotal, discount, discountPercent, total, profit, error } = salePreview;
-  const splitPaymentEnabled = isSplitPaymentAvailable(currentUser);
-  const splitPaymentTotal = getSplitPaymentTotal(saleForm);
-  const splitPaymentDifference = toMoneyNumber(splitPaymentTotal - toMoneyNumber(total));
-  const filteredProducts = useMemo(
-    () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
-    [products, productSearch]
-  );
-  const salesPerPage = 20;
-  const completedHistorySales = sales.filter(sale => sale.status !== 'Anulada');
-  const canceledHistorySales = sales.filter(sale => sale.status === 'Anulada');
-  const visibleHistorySales = saleHistoryFilter === 'canceled'
-    ? canceledHistorySales
-    : saleHistoryFilter === 'all'
-      ? sales
-      : completedHistorySales;
-  const salesTotalPages = Math.max(Math.ceil(visibleHistorySales.length / salesPerPage), 1);
-  const safeSalesPage = Math.min(salesPage, salesTotalPages);
-  const salesStartIndex = (safeSalesPage - 1) * salesPerPage;
-  const paginatedSales = visibleHistorySales.slice(salesStartIndex, salesStartIndex + salesPerPage);
-
-  useEffect(() => {
-    setSalesPage(1);
-  }, [sales.length, saleHistoryFilter]);
-
-  function handleProductSearch(value) {
-    const cleanValue = String(value || '').trim();
-    setProductSearch(value);
-
-    const normalized = cleanValue.toLowerCase();
-    if (!normalized) return;
-
-    const exactProduct = products.find(product =>
-      Number(product.stock || 0) > 0 && (
-        String(product.barcode || '').trim().toLowerCase() === normalized ||
-        String(product.sku || '').trim().toLowerCase() === normalized
-      )
-    );
-
-    if (exactProduct) {
-      setSaleForm(prev => ({ ...prev, productId: exactProduct.id }));
-      setProductSearch(getProductDisplayName(exactProduct));
-    }
-  }
-
-  function handleSearchKeyDown(event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-    }
-  }
-
-  function addSelectedProductToCart() {
-    addSaleItem();
-    setProductSearch('');
-  }
-
-  function setSaleType(type) {
-    if (type === 'consumidor') {
-      setSaleForm({
-        ...saleForm,
-        saleType: 'consumidor',
-        customerId: '',
-        customer: '',
-        invoiceEnabled: false,
-        invoiceName: '',
-        invoiceIdentification: '',
-        invoiceAddress: '',
-        invoiceEmail: '',
-      });
-      return;
-    }
-
-    setSaleForm({
-      ...saleForm,
-      saleType: 'factura',
-      invoiceEnabled: true,
-      customer: saleForm.customer || '',
-    });
-  }
-
-  function selectClient(clientId) {
-    const client = clients.find(item => String(item.id) === String(clientId));
-    if (!client) {
-      setSaleForm({
-        ...saleForm,
-        customerId: '',
-        customer: '',
-        invoiceEnabled: true,
-        invoiceName: '',
-        invoiceIdentification: '',
-        invoiceAddress: '',
-        invoiceEmail: '',
-      });
-      return;
-    }
-
-    setSaleForm({
-      ...saleForm,
-      saleType: 'factura',
-      customerId: client.id,
-      customer: client.name,
-      invoiceEnabled: true,
-      invoiceName: client.invoiceName || client.name,
-      invoiceIdentification: client.identification || '',
-      invoiceAddress: client.address || '',
-      invoiceEmail: client.email || '',
-    });
-  }
-
-  return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <Metric icon={DollarSign} label="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} note="total" color="emerald" />
-        <Metric icon={TrendingUp} label="Utilidad estimada" value={`$${totalProfit.toFixed(2)}`} note="ganancia" color="blue" />
-        <Metric icon={Percent} label="Descuentos" value={`$${totalDiscount.toFixed(2)}`} note="aplicados" color="amber" />
-        <Metric icon={Boxes} label="Unidades vendidas" value={totalUnitsSold} note="productos" color="red" />
-      </section>
-
-      {salesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando ventas desde Supabase...</div>}
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
-        <div className="order-2 space-y-5 xl:order-1">
-          <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h3 className="flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Historial de ventas</h3>
-              <p className="mt-1 text-sm text-slate-500">Separa las ventas completadas de las anuladas para revisar mejor el movimiento.</p>
-            </div>
-            <div className="border-b border-slate-100 px-5 py-4">
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setSaleHistoryFilter('completed')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'completed' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  Completadas ({completedHistorySales.length})
-                </button>
-                <button type="button" onClick={() => setSaleHistoryFilter('canceled')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'canceled' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  Anuladas ({canceledHistorySales.length})
-                </button>
-                <button type="button" onClick={() => setSaleHistoryFilter('all')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  Todas ({sales.length})
-                </button>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {visibleHistorySales.length === 0 && <div className="p-5"><EmptyState icon={ShoppingCart} title={saleHistoryFilter === 'canceled' ? 'No tienes ventas anuladas' : 'Aún no tienes ventas completadas'} text={saleHistoryFilter === 'canceled' ? 'Las ventas anuladas aparecerán separadas en esta pestaña.' : 'Registra tu primera venta para empezar a medir ingresos, utilidad y rotación.'} /></div>}
-              {paginatedSales.map(sale => (
-                <div key={sale.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><ShoppingCart className="h-5 w-5" /></div>
-                    <div>
-                      <p className="font-bold">{sale.code}</p>
-                      <p className="text-sm text-slate-500">{sale.product} · {sale.quantity} unidades · {sale.date}</p>
-                      <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {getPaymentDisplay(sale)} {sale.invoiceEnabled ? '· Factura' : ''}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 lg:justify-end">
-                    <div className="text-right">
-                      <p className="font-bold">${sale.total.toFixed(2)}</p>
-                      <p className="text-xs text-slate-500">Utilidad: ${(sale.profit || 0).toFixed(2)}</p>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sale.status === 'Anulada' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{sale.status}</span>
-                    </div>
-                    <button type="button" onClick={() => setReceiptSale(sale)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">
-                      Comprobante
-                    </button>
-                    {sale.status !== 'Anulada' && (
-                      <button onClick={() => cancelSale(sale.id)} className="rounded-xl border border-red-100 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50">
-                        Anular
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {visibleHistorySales.length > salesPerPage && (
-              <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>Mostrando {salesStartIndex + 1}-{Math.min(salesStartIndex + salesPerPage, visibleHistorySales.length)} de {visibleHistorySales.length} ventas</span>
-                <div className="flex items-center gap-2">
-                  <button type="button" disabled={safeSalesPage <= 1} onClick={() => setSalesPage(page => Math.max(page - 1, 1))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
-                  <span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">Página {safeSalesPage} de {salesTotalPages}</span>
-                  <button type="button" disabled={safeSalesPage >= salesTotalPages} onClick={() => setSalesPage(page => Math.min(page + 1, salesTotalPages))} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">Siguiente</button>
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
-
-        <form onSubmit={registerSale} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold">Registrar nueva venta</h3>
-              <p className="text-sm text-slate-500">Agrega varios productos al carrito y registra una sola venta.</p>
-            </div>
-            <button type="button" onClick={resetSaleForm} className="rounded-xl p-2 text-slate-500 hover:bg-slate-50"><RotateCcw className="h-5 w-5" /></button>
-          </div>
-
-          {saleNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${saleNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-              {saleNotice.message}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
-              </div>
-              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-                <Camera className="h-4 w-4" /> Escanear con cámara
-              </button>
-              {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
-              {productSearch && filteredProducts.length > 0 && (
-                <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
-                  {filteredProducts.slice(0, 8).map(product => (
-                    <button
-                      type="button"
-                      key={product.id}
-                      onClick={() => {
-                        setSaleForm(prev => ({ ...prev, productId: product.id }));
-                        setProductSearch(getProductDisplayName(product));
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
-                    >
-                      <span>
-                        <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
-                        <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
-                      </span>
-                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {product ? (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(product)}</p>
-                      <p className="text-sm text-emerald-800">{product.sku || 'Sin SKU'} · Stock disponible {product.stock}</p>
-                    </div>
-                    <button type="button" onClick={() => { setSaleForm(prev => ({ ...prev, productId: '' })); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para agregarlo a la venta.</div>
-              )}
-              {productSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} producto(s) con stock. Escribe al menos 2 letras o escanea el código.</p>}
-            </label>
-
-            {product && (
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="font-bold">{getProductDisplayName(product)}</p>
-                <p className="text-sm text-slate-500">Precio: ${product.price.toFixed(2)} · Costo: ${product.cost.toFixed(2)} · Stock disponible: {product.stock}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cantidad" type="number" value={saleForm.quantity} onChange={v => setSaleForm({ ...saleForm, quantity: v })} placeholder="1" min="1" />
-              <button type="button" onClick={addSelectedProductToCart} className="mt-7 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar al carrito</button>
-            </div>
-
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h4 className="font-bold text-slate-800">Carrito de venta</h4>
-                {saleCart.length > 0 && <button type="button" onClick={clearSaleCart} className="text-xs font-bold text-red-500 hover:underline">Vaciar</button>}
-              </div>
-              {saleCart.length === 0 && <p className="text-sm text-slate-500">Todavía no agregas productos.</p>}
-              <div className="space-y-2">
-                {saleCart.map(item => {
-                  const originalSubtotal = Number(item.originalSubtotal ?? (item.price * item.quantity));
-                  const lineDiscount = Number(item.discount || 0);
-                  const lineTotal = Number(item.subtotal ?? originalSubtotal);
-                  const hasDiscount = lineDiscount > 0;
-
-                  return (
-                    <div key={item.productId} className="rounded-2xl bg-white p-3 text-sm shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-bold text-slate-900">{item.product}</p>
-                          <p className="text-xs text-slate-500">{item.quantity} x ${item.price.toFixed(2)} = ${originalSubtotal.toFixed(2)}</p>
-                          {hasDiscount && <p className="mt-1 text-xs font-semibold text-emerald-700">Descuento: -${lineDiscount.toFixed(2)}</p>}
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <div className="text-right">
-                            <p className="font-bold text-emerald-700">${lineTotal.toFixed(2)}</p>
-                            {hasDiscount && <p className="text-[11px] text-slate-400 line-through">${originalSubtotal.toFixed(2)}</p>}
-                          </div>
-                          <button type="button" onClick={() => removeSaleItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-slate-600">Descuento</span>
-                          {hasDiscount && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-700">-{item.discountPercent.toFixed(2)}%</span>}
-                        </div>
-                        <div className="grid grid-cols-[1fr_110px] gap-2">
-                          <select
-                            value={item.discountType || 'percent'}
-                            onChange={e => updateSaleItemDiscount(item.productId, { discountType: e.target.value, discountValue: '' })}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200"
-                          >
-                            <option value="percent">Porcentaje %</option>
-                            <option value="fixed">Valor $</option>
-                          </select>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={Number(item.discountValue || 0) === 0 ? '' : item.discountValue}
-                            onChange={e => updateSaleItemDiscount(item.productId, { discountValue: e.target.value })}
-                            placeholder={item.discountType === 'fixed' ? 'Ej: 2' : 'Ej: 10'}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de venta</span>
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setSaleType('consumidor')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'consumidor' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                  Consumidor final
-                </button>
-                <button type="button" onClick={() => setSaleType('factura')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'factura' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                  Factura
-                </button>
-              </div>
-            </div>
-
-            {saleForm.saleType === 'factura' && (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <h4 className="mb-3 font-bold text-emerald-900">Factura rápida</h4>
-                <label className="mb-3 block">
-                  <span className="mb-2 block text-sm font-semibold text-emerald-900">Buscar cliente guardado</span>
-                  <select value={saleForm.customerId} onChange={e => selectClient(e.target.value)} className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                    <option value="">Persona no registrada / llenar manual</option>
-                    {clients.map(client => <option key={client.id} value={client.id}>{client.name} {client.wantsInvoice ? '· cliente frecuente' : ''}</option>)}
-                  </select>
-                </label>
-
-                <label className="mb-3 flex items-center gap-3 rounded-2xl bg-white p-4 text-sm font-semibold text-emerald-800">
-                  <input type="checkbox" checked={saleForm.invoiceEnabled} onChange={e => setSaleForm({ ...saleForm, invoiceEnabled: e.target.checked })} className="h-4 w-4" />
-                  Crear factura para esta venta
-                </label>
-
-                {saleForm.invoiceEnabled && (
-                  <div>
-                    <h4 className="mb-3 font-bold text-emerald-900">Datos de facturación</h4>
-                    <div className="space-y-3">
-                      <Field label="Nombre / Razón social" value={saleForm.invoiceName} onChange={v => setSaleForm({ ...saleForm, invoiceName: v, customer: v })} placeholder="Nombre para la factura" />
-                      <Field label="Cédula / RUC" value={saleForm.invoiceIdentification} onChange={v => setSaleForm({ ...saleForm, invoiceIdentification: v })} placeholder="Ej: 1000000001" />
-                      <Field label="Dirección" value={saleForm.invoiceAddress} onChange={v => setSaleForm({ ...saleForm, invoiceAddress: v })} placeholder="Dirección del cliente" />
-                      <Field label="Correo para factura" type="email" value={saleForm.invoiceEmail} onChange={v => setSaleForm({ ...saleForm, invoiceEmail: v })} placeholder="cliente@email.com" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">Método de pago</span>
-              <select
-                value={saleForm.paymentMethod}
-                onChange={e => {
-                  const paymentMethod = e.target.value;
-                  setSaleForm({
-                    ...saleForm,
-                    paymentMethod,
-                    ...(paymentMethod === 'Mixto' ? {} : { cashAmount: '', cardAmount: '', transferAmount: '' }),
-                  });
-                }}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
-              >
-                <option>Efectivo</option>
-                <option>Transferencia</option>
-                <option>Tarjeta</option>
-                <option>Crédito</option>
-                {splitPaymentEnabled && <option>Mixto</option>}
-              </select>
-            </label>
-
-            {splitPaymentEnabled && saleForm.paymentMethod === 'Mixto' && (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="font-bold text-emerald-900">Pago mixto</h4>
-                    <p className="text-xs font-semibold text-emerald-700">Divide el total entre efectivo, tarjeta o transferencia.</p>
-                  </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${Math.abs(splitPaymentDifference) <= 0.01 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                    Suma: ${splitPaymentTotal.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Efectivo" type="number" value={saleForm.cashAmount || ''} onChange={v => setSaleForm({ ...saleForm, cashAmount: v })} placeholder="Ej: 80" min="0" step="0.01" />
-                  <Field label="Tarjeta" type="number" value={saleForm.cardAmount || ''} onChange={v => setSaleForm({ ...saleForm, cardAmount: v })} placeholder="Ej: 40" min="0" step="0.01" />
-                  <Field label="Transferencia" type="number" value={saleForm.transferAmount || ''} onChange={v => setSaleForm({ ...saleForm, transferAmount: v })} placeholder="Ej: 0" min="0" step="0.01" />
-                </div>
-
-                {Math.abs(splitPaymentDifference) > 0.01 && (
-                  <p className="mt-3 text-xs font-bold text-red-600">
-                    Falta o sobra ${Math.abs(splitPaymentDifference).toFixed(2)} para completar el total de la venta.
-                  </p>
-                )}
-              </div>
-            )}
-
-            {error && <div className="rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
-
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <div className="space-y-2 text-sm text-emerald-800">
-                <div className="flex justify-between"><span>Subtotal</span><strong>${subtotal.toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Descuento ({discountPercent.toFixed(2)}%)</span><strong>-${discount.toFixed(2)}</strong></div>
-                <div className="flex justify-between"><span>Utilidad estimada</span><strong>${profit.toFixed(2)}</strong></div>
-              </div>
-              <div className="mt-3 border-t border-emerald-100 pt-3">
-                <p className="text-sm text-emerald-700">Total a cobrar</p>
-                <p className="text-3xl font-extrabold text-emerald-900">${total.toFixed(2)}</p>
-              </div>
-            </div>
-
-            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Registrar venta</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function ProductsPage({
-  currentUser,
-  setEditingId,
-  setNotice,
-  products,
-  setProducts,
-  search,
-  setSearch,
-  filtered,
-  categories,
-  productCategories,
-  customProductCategories,
-  setCustomProductCategories,
-  category,
-  setCategory,
-  form,
-  setForm,
-  saveProduct,
-  resetForm,
-  editProduct,
-  editingId,
-  notice,
-  deleteProduct,
-  pendingDeleteId,
-  setPendingDeleteId,
-  statusText,
-  expirationText,
-  totalProducts,
-  lowStock,
-  noStock,
-  inventoryValue,
-  handleProductImage,
-  productsLoading,
-  importProductsFromExcel,
-  excelImportPreview,
-  confirmExcelImport,
-  cancelExcelImport,
-  excelImportProgress,
-}) {
-  const businessType = currentUser?.businessType || 'general';
-  const businessConfig = getBusinessConfig(businessType);
-  const expiringProducts = businessConfig.usesExpiration ? products.filter(product => {
-    const exp = expirationText ? expirationText(product) : null;
-    return exp && ['Por vencer', 'Vence pronto'].includes(exp.label);
-  }) : [];
-
-  return (
-    <>
-      <section className={`mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 ${businessConfig.usesExpiration ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <Metric icon={Package} label="Total productos" value={totalProducts} note="activos" color="emerald" />
-        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
-        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
-        {businessConfig.usesExpiration && <Metric icon={CalendarDays} label="Por vencer" value={expiringProducts.length} note="productos" color="amber" />}
-        <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
-      </section>
-
-      {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
-
-      <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
-            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-              <Download className="mr-2 inline h-4 w-4" />Descargar formato
-            </button>
-            <label className="cursor-pointer rounded-2xl bg-emerald-600 px-5 py-3 text-center text-sm font-bold text-white hover:bg-emerald-700">
-              Seleccionar Excel
-              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) importProductsFromExcel(file); e.target.value = ''; }} />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      {excelImportPreview && <ExcelImportPreviewModal preview={excelImportPreview} progress={excelImportProgress} onConfirm={confirmExcelImport} onCancel={cancelExcelImport} />}
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-        <ProductTable
-  businessConfig={businessConfig}
-  products={products}
-  search={search}
-  setSearch={setSearch}
-  filtered={filtered}
-  categories={categories}
-  category={category}
-  setCategory={setCategory}
-  deleteProduct={deleteProduct}
-  editProduct={editProduct}
-  pendingDeleteId={pendingDeleteId}
-  setPendingDeleteId={setPendingDeleteId}
-  statusText={statusText}
-  expirationText={expirationText}
-  onCreateCategory={categoryName => {
-    const cleanName = String(categoryName || '').trim();
-
-    if (!cleanName) {
-      return;
-    }
-
-    setCustomProductCategories(prev =>
-      Array.from(new Set([...prev, cleanName]))
-    );
-
-    setCategory(cleanName);
-
-    setForm(prev => ({
-      ...prev,
-      category: cleanName,
-      customCategory: '',
-    }));
-
-    setEditingId(null);
-
-    setNotice({
-      type: 'success',
-      message: `Categoría "${cleanName}" creada. Ya puedes seleccionarla en el formulario.`,
-    });
-  }}
-  onRenameCategory={async (oldName, newName) => {
-    const cleanOldName = String(oldName || '').trim();
-    const cleanNewName = String(newName || '').trim();
-
-    if (!currentUser?.id) {
-      setNotice({
-        type: 'error',
-        message: 'No existe una sesión activa.',
-      });
-      return false;
-    }
-
-    if (!cleanOldName || !cleanNewName || cleanOldName === cleanNewName) {
-      return false;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('products')
-        .update({
-          category: cleanNewName,
-        })
-        .eq('category', cleanOldName)
-        .eq('user_id', currentUser.id);
-
-      if (error) {
-        throw error;
-      }
-
-      if (setProducts) {
-        setProducts(prevProducts =>
-          prevProducts.map(product =>
-            product.category === cleanOldName
-              ? { ...product, category: cleanNewName }
-              : product
-          )
-        );
-      }
-
-      setCustomProductCategories(prev =>
-        Array.from(
-          new Set(
-            [...prev.map(cat => (cat === cleanOldName ? cleanNewName : cat)), cleanNewName]
-              .filter(Boolean)
-          )
-        ).filter(cat => cat !== cleanOldName)
-      );
-
-      if (category === cleanOldName && setCategory) {
-        setCategory(cleanNewName);
-      }
-
-      setForm(prev => ({
-        ...prev,
-        category: prev.category === cleanOldName ? cleanNewName : prev.category,
-        customCategory: prev.customCategory === cleanOldName ? cleanNewName : prev.customCategory,
-      }));
-
-      setNotice({
-        type: 'success',
-        message: `Categoría "${cleanOldName}" actualizada a "${cleanNewName}". Los productos se mantienen en la nueva categoría.`,
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Error al actualizar categoría:', error);
-
-      setNotice({
-        type: 'error',
-        message: `No se pudo actualizar la categoría: ${error.message}`,
-      });
-
-      return false;
-    }
-  }}
-  onDeleteCategory={categoryName => {
-    const cleanName = String(categoryName || '').trim();
-
-    if (!cleanName) {
-      return;
-    }
-
-    setCustomProductCategories(prev =>
-      prev.filter(cat => cat !== cleanName)
-    );
-
-    setNotice({
-      type: 'success',
-      message: `Categoría "${cleanName}" eliminada.`,
-    });
-  }}
-/>
-        <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
-      </section>
-
-      <section className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
-        <h3 className="mb-4 text-lg font-bold text-emerald-900">¿Por qué usar InventiQ?</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <Benefit icon={Package} title="Controla tu inventario" text="en tiempo real" />
-          <Benefit icon={AlertTriangle} title="Evita pérdidas" text="por falta de stock" />
-          <Benefit icon={CheckCircle2} title="Ahorra tiempo" text="en tus procesos" />
-          <Benefit icon={BarChart3} title="Toma mejores decisiones" text="con datos claros" />
-        </div>
-      </section>
-    </>
-  );
-}
-
-function InventoryPage({ currentUser, products, sales, purchases, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText, adjustProductStock }) {
-  const [inventoryView, setInventoryView] = useState('Alertas');
-  const [adjustForm, setAdjustForm] = useState({ productId: '', stock: '', reason: 'Conteo físico' });
-  const [adjustNotice, setAdjustNotice] = useState(null);
-  const [adjustProductSearch, setAdjustProductSearch] = useState('');
-
-  const businessConfig = getBusinessConfig(currentUser?.businessType);
-  const alerts = products.filter(p => p.stock <= p.minStock);
-  const criticalProducts = products.filter(p => p.stock === 0);
-  const availableProducts = products.filter(p => p.stock > p.minStock);
-  const expiredProducts = businessConfig.usesExpiration ? products.filter(p => expirationText(p).label === 'Vencido') : [];
-  const expiringProducts = businessConfig.usesExpiration ? products.filter(p => ['Por vencer', 'Vence pronto'].includes(expirationText(p).label)) : [];
-  const selectedProduct = products.find(product => String(product.id) === String(adjustForm.productId));
-  const adjustSearchResults = useMemo(() => searchProductsForPicker(products, adjustProductSearch, { limit: PRODUCT_SEARCH_LIMIT }), [products, adjustProductSearch]);
-
-  function selectAdjustProduct(productId) {
-    const product = products.find(item => String(item.id) === String(productId));
-    if (!product) return;
-    setAdjustForm({ ...adjustForm, productId: product.id, stock: product.stock });
-    setAdjustProductSearch(getProductDisplayName(product));
-  }
-
-  function handleAdjustProductSearch(value) {
-    setAdjustProductSearch(value);
-    const normalized = String(value || '').trim().toLowerCase();
-    if (!normalized) return;
-
-    const exactProduct = products.find(product =>
-      String(product.barcode || '').trim().toLowerCase() === normalized ||
-      String(product.sku || '').trim().toLowerCase() === normalized
-    );
-
-    if (exactProduct) selectAdjustProduct(exactProduct.id);
-  }
-
-  const inventoryMovements = useMemo(() => {
-    const purchaseMovements = purchases.flatMap(purchase => {
-      const items = purchase.items?.length > 0
-        ? purchase.items
-        : [{ productId: purchase.productId, product: purchase.product, quantity: purchase.quantity }];
-
-      return items.map(item => ({
-        id: `purchase-${purchase.id}-${item.productId || item.product}`,
-        date: purchase.date,
-        product: item.product,
-        type: 'Compra',
-        quantity: `+${item.quantity}`,
-        detail: `${purchase.code} · ${purchase.provider}`,
-        tone: 'emerald',
-      }));
-    });
-
-    const saleMovements = sales.flatMap(sale => {
-      const items = sale.items?.length > 0
-        ? sale.items
-        : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity }];
-
-      return items.map(item => ({
-        id: `sale-${sale.id}-${item.productId || item.product}`,
-        date: sale.date,
-        product: item.product,
-        type: sale.status === 'Anulada' ? 'Anulación' : 'Venta',
-        quantity: sale.status === 'Anulada' ? `+${item.quantity}` : `-${item.quantity}`,
-        detail: `${sale.code} · ${sale.customer || 'Consumidor final'}`,
-        tone: sale.status === 'Anulada' ? 'amber' : 'red',
-      }));
-    });
-
-    return [...purchaseMovements, ...saleMovements].slice(0, 25);
-  }, [purchases, sales]);
-
-  async function submitStockAdjustment(e) {
-    e.preventDefault();
-
-    if (!selectedProduct) {
-      setAdjustNotice({ type: 'error', message: 'Selecciona un producto para ajustar.' });
-      return;
-    }
-
-    try {
-      await adjustProductStock(selectedProduct.id, adjustForm.stock, adjustForm.reason);
-      setAdjustNotice({ type: 'success', message: `Stock de ${selectedProduct.name} ajustado correctamente.` });
-      setAdjustForm({ productId: '', stock: '', reason: 'Conteo físico' });
-      setAdjustProductSearch('');
-    } catch (error) {
-      setAdjustNotice({ type: 'error', message: `No se pudo ajustar el stock: ${error.message}` });
-    }
-  }
-
-  function exportInventory() {
-    const extraLabels = businessConfig.extraLabels || {};
-
-    const rows = products.map(product => {
-      const baseRow = {
-        SKU: product.sku,
-        Codigo_barras: product.barcode || '',
-        Producto: product.name,
-        Categoria: product.category,
-        Precio_unitario_venta: Number(product.price || 0).toFixed(2),
-        Costo_unitario: Number(product.cost || 0).toFixed(2),
-        Stock_actual: product.stock,
-        Stock_minimo: product.minStock,
-        Estado: statusText(product).label,
-        Valor_inventario: (product.cost * product.stock).toFixed(2),
-        Ganancia_potencial: ((product.price - product.cost) * product.stock).toFixed(2),
-      };
-
-      const extraRow = businessConfig.productExtraFields ? {
-        [extraLabels.brand?.label || 'Marca']: product.brand || '',
-        [extraLabels.size?.label || 'Talla_medida']: product.size || '',
-        [extraLabels.color?.label || 'Color_modelo']: product.color || '',
-      } : {};
-
-      const expirationRow = businessConfig.usesExpiration ? {
-        Lote: product.batchNumber || '',
-        Fecha_ingreso: product.entryDate || '',
-        Fecha_caducidad: product.expirationDate || '',
-        Estado_caducidad: expirationText(product).label,
-      } : {};
-
-      return {
-        ...baseRow,
-        ...extraRow,
-        ...expirationRow,
-      };
-    });
-
-    exportToCSV(`inventiq_inventario_${currentUser?.businessType || 'general'}.csv`, rows);
-  }
-
-  const views = ['Alertas', 'Movimientos', 'Ajuste de stock', 'Resumen'];
-
-  return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <Metric icon={DollarSign} label="Valor inventario" value={`$${inventoryValue.toFixed(2)}`} note="actual" color="blue" />
-        <Metric icon={TrendingUp} label="Ganancia potencial" value={`$${potentialProfit.toFixed(2)}`} note="estimada" color="emerald" />
-        <Metric icon={Boxes} label="Stock bajo" value={lowStock} note="productos" color="amber" />
-        <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
-      </section>
-
-      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-emerald-900">Control de inventario</h3>
-            <p className="text-sm text-emerald-800">{alerts.length} productos con alerta, {criticalProducts.length} sin stock{businessConfig.usesExpiration ? `, ${expiringProducts.length} próximos a caducar y ${expiredProducts.length} vencidos` : '. Este tipo de negocio no usa caducidad.'}</p>
-          </div>
-          <button onClick={exportInventory} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">
-            <Download className="mr-2 inline h-5 w-5" />Exportar inventario
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {views.map(view => (
-            <button key={view} onClick={() => setInventoryView(view)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${inventoryView === view ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
-              {view}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {inventoryView === 'Alertas' && (
-        <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-2' : ''}`}>
-          {businessConfig.usesExpiration && <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-5 text-xl font-bold">Alertas de caducidad</h3>
-            <div className="space-y-3">
-              {[...expiredProducts, ...expiringProducts].length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen productos vencidos o próximos a caducar.</p>}
-              {[...expiredProducts, ...expiringProducts].map(product => {
-                const exp = expirationText(product);
-                return (
-                  <div key={`exp-${product.id}`} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
-                    <div>
-                      <p className="font-bold">{product.name}</p>
-                      <p className={`text-sm ${exp.color}`}>Caducidad: {product.expirationDate} · {exp.label} {exp.days !== null ? `(${exp.days} días)` : ''}</p>
-                      <p className="text-xs text-slate-500">Lote: {product.batchNumber || 'No registrado'} · Stock: {product.stock}</p>
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${exp.badge}`}>{exp.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>}
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-5 text-xl font-bold">Alertas de inventario</h3>
-            <div className="space-y-3">
-              {alerts.length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen alertas críticas de inventario.</p>}
-              {alerts.map(product => {
-                const s = statusText(product);
-                return (
-                  <div key={product.id} className="flex items-center justify-between rounded-2xl border border-slate-100 p-4">
-                    <div>
-                      <p className="font-bold">{product.name}</p>
-                      <p className={`text-sm ${s.color}`}>{s.label} · Stock actual {product.stock} · Mínimo {product.minStock}</p>
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${s.badge}`}>{s.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </section>
-      )}
-
-      {inventoryView === 'Movimientos' && (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-2 text-xl font-bold">Movimientos de inventario</h3>
-          <p className="mb-5 text-sm text-slate-500">Entradas por compras, salidas por ventas y devoluciones por anulaciones.</p>
-          <div className="space-y-3">
-            {inventoryMovements.length === 0 && <EmptyState icon={Activity} title="Sin movimientos" text="Cuando registres compras o ventas, aquí aparecerá la bitácora de inventario." />}
-            {inventoryMovements.map(movement => (
-              <div key={movement.id} className="flex flex-col gap-3 rounded-2xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{movement.product}</p>
-                  <p className="text-sm text-slate-500">{movement.type} · {movement.detail}</p>
-                  <p className="text-xs text-slate-400">{movement.date}</p>
-                </div>
-                <span className={`rounded-full px-4 py-2 text-sm font-extrabold ${movement.tone === 'emerald' ? 'bg-emerald-50 text-emerald-700' : movement.tone === 'amber' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
-                  {movement.quantity}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {inventoryView === 'Ajuste de stock' && (
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
-          <form onSubmit={submitStockAdjustment} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-2 text-xl font-bold">Ajuste manual de stock</h3>
-            <p className="mb-5 text-sm text-slate-500">Úsalo cuando el conteo físico no coincide con el sistema.</p>
-
-            {adjustNotice && (
-              <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${adjustNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                {adjustNotice.message}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
-                <div className="relative mb-3">
-                  <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                  <input value={adjustProductSearch} onChange={e => handleAdjustProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o código de barras..." />
-                </div>
-                {adjustProductSearch && adjustSearchResults.length > 0 && !selectedProduct && (
-                  <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
-                    {adjustSearchResults.map(product => (
-                      <button type="button" key={product.id} onClick={() => selectAdjustProduct(product.id)} className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50">
-                        <span>
-                          <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
-                          <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
-                        </span>
-                        <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {selectedProduct ? (
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                        <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
-                        <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · Stock actual {selectedProduct.stock}</p>
-                      </div>
-                      <button type="button" onClick={() => { setAdjustForm({ ...adjustForm, productId: '', stock: '' }); setAdjustProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">Busca y selecciona un producto para ajustar el stock.</div>
-                )}
-                {adjustProductSearch && <p className="mt-2 text-xs text-slate-500">Mostrando máximo {PRODUCT_SEARCH_LIMIT} resultado(s). Escribe al menos 2 letras o escanea el código.</p>}
-              </label>
-              <Field label="Stock contado físicamente" type="number" min="0" value={adjustForm.stock} onChange={v => setAdjustForm({ ...adjustForm, stock: v })} placeholder="Ej: 18" />
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">Motivo</span>
-                <select value={adjustForm.reason} onChange={e => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-                  <option>Conteo físico</option>
-                  <option>Pérdida / daño</option>
-                  {businessConfig.usesExpiration && <option>Producto vencido</option>}
-                  <option>Corrección de inventario</option>
-                  <option>Otro</option>
-                </select>
-              </label>
-              {selectedProduct && (
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                  Stock actual en sistema: <strong>{selectedProduct.stock}</strong><br />
-                  Diferencia: <strong>{Number(adjustForm.stock || 0) - Number(selectedProduct.stock || 0)}</strong>
-                </div>
-              )}
-              <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Guardar ajuste</button>
-            </div>
-          </form>
-
-          <section className="rounded-3xl border border-amber-100 bg-amber-50 p-6">
-            <h3 className="mb-3 text-xl font-bold text-amber-900">Uso recomendado</h3>
-            <p className="text-sm leading-6 text-amber-900">El ajuste manual debe usarse solo cuando se realiza conteo físico, se identifica pérdida/daño{businessConfig.usesExpiration ? ', producto vencido' : ''} o una corrección puntual. Las compras y ventas deben registrarse desde sus secciones correspondientes para mantener la trazabilidad.</p>
-          </section>
-        </section>
-      )}
-
-      {inventoryView === 'Resumen' && (
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-          <DashboardListCard title="Sin stock" subtitle="Requieren reposición urgente" empty="No hay productos sin stock." items={criticalProducts.slice(0, 8).map(product => ({ title: product.name, subtitle: `${product.category} · mínimo ${product.minStock}`, badge: 'Comprar', tone: 'red' }))} />
-          <DashboardListCard title="Stock bajo" subtitle="Debes revisar reposición" empty="No hay stock bajo." items={alerts.filter(product => product.stock > 0).slice(0, 8).map(product => ({ title: product.name, subtitle: `${product.category} · Stock ${product.stock}/${product.minStock}`, badge: 'Alerta', tone: 'amber' }))} />
-          {businessConfig.usesExpiration && <DashboardListCard title="Caducidad" subtitle="Vencidos o próximos a caducar" empty="No hay alertas de caducidad." items={[...expiredProducts, ...expiringProducts].slice(0, 8).map(product => { const exp = expirationText(product); return { title: product.name, subtitle: `${product.category} · ${product.expirationDate || 'Sin fecha'}`, badge: exp.label, tone: exp.label === 'Vencido' ? 'red' : 'amber' }; })} />}
-        </section>
-      )}
-    </div>
-  );
-}
-
-function ClientsPage({ clients, sales, clientForm, setClientForm, saveClient, resetClientForm, editClient, deleteClient, editingClientId, pendingDeleteClientId, setPendingDeleteClientId, clientNotice, clientsLoading, setActive, setSaleForm }) {
-  const completedSales = sales.filter(sale => sale.status !== 'Anulada');
-  const clientsWithStats = clients.map(client => {
-    const clientSales = getClientSales(client);
-    const totalPurchased = clientSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
-    const lastSale = clientSales[0];
-    return { ...client, clientSales, totalPurchased, lastSale };
-  });
-  const bestClient = clientsWithStats.sort((a, b) => b.totalPurchased - a.totalPurchased)[0];
-
-  function sellToClient(client) {
-    setSaleForm(prev => ({
-      ...prev,
-      saleType: 'factura',
-      customerId: client.id,
-      customer: client.name,
-      invoiceEnabled: true,
-      invoiceName: client.invoiceName || client.name,
-      invoiceIdentification: client.identification || '',
-      invoiceAddress: client.address || '',
-      invoiceEmail: client.email || '',
-    }));
-    setActive('Ventas');
-  }
-  function getClientSales(client) {
-    return sales.filter(sale => {
-      if (sale.status === 'Anulada') return false;
-      const saleCustomer = String(sale.customer || '').trim().toLowerCase();
-      const saleInvoiceName = String(sale.invoiceName || '').trim().toLowerCase();
-      const saleId = String(sale.invoiceIdentification || '').trim();
-      const clientName = String(client.name || '').trim().toLowerCase();
-      const clientInvoiceName = String(client.invoiceName || '').trim().toLowerCase();
-      const clientId = String(client.identification || '').trim();
-
-      return (
-        saleCustomer === clientName ||
-        saleInvoiceName === clientName ||
-        (clientInvoiceName && saleCustomer === clientInvoiceName) ||
-        (clientInvoiceName && saleInvoiceName === clientInvoiceName) ||
-        (clientId && saleId && saleId === clientId)
-      );
-    });
-  }
-
-  return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric icon={Users} label="Clientes" value={clients.length} note="registrados" color="emerald" />
-        <Metric icon={ShoppingCart} label="Ventas con cliente" value={completedSales.filter(sale => sale.customer && sale.customer !== 'Consumidor final').length} note="factura / nombre" color="blue" />
-        <Metric icon={DollarSign} label="Mejor cliente" value={bestClient?.totalPurchased ? `$${bestClient.totalPurchased.toFixed(2)}` : '$0.00'} note={bestClient?.name || 'sin datos'} color="amber" />
-        <Metric icon={ReceiptText} label="Facturan" value={clients.filter(client => client.wantsInvoice).length} note="clientes" color="red" />
-      </section>
-
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
-      <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
-        {clientsLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando clientes desde Supabase...</div>}
-        <div className="border-b border-slate-100 p-5">
-          <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-emerald-600" /> Clientes registrados</h3>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {clients.length === 0 && <div className="p-5"><EmptyState icon={Users} title="Aún no tienes clientes" text="Guarda clientes frecuentes para facturar más rápido y consultar su información." /></div>}
-          {clientsWithStats.map(client => {
-            const isDeleting = pendingDeleteClientId === client.id;
-            const clientSales = client.clientSales;
-            const totalPurchased = client.totalPurchased;
-            const lastSale = client.lastSale;
-            return (
-              <div key={client.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">{client.name}</p>
-                  <p className="text-sm text-slate-500">{client.phone} · {client.type}</p>
-                  <div className="mt-1 space-y-1">
-                    <p className="text-xs text-slate-400">{client.email || 'Sin correo'} {client.wantsInvoice ? '· pide factura' : ''}</p>
-                    <p className="text-xs font-semibold text-emerald-700">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
-                    {lastSale && <p className="text-xs text-slate-500">Última compra: {lastSale.code} · {lastSale.date} · ${Number(lastSale.total || 0).toFixed(2)}</p>}
-                    {client.notes && <p className="text-xs text-slate-500">Nota: {client.notes}</p>}
-                  </div>
-                </div>
-                {isDeleting ? (
-                  <div className="flex gap-2">
-                    <button onClick={() => deleteClient(client.id)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600">Confirmar</button>
-                    <button onClick={() => setPendingDeleteClientId(null)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">Cancelar</button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={() => sellToClient(client)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">Vender</button>
-                    <button onClick={() => editClient(client)} className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50"><Edit className="h-4 w-4" /></button>
-                    <button onClick={() => setPendingDeleteClientId(client.id)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <form onSubmit={saveClient} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold">{editingClientId ? 'Editar cliente' : 'Registrar cliente'}</h3>
-            <p className="text-sm text-slate-500">Administra tus clientes frecuentes.</p>
-          </div>
-          <button type="button" onClick={resetClientForm} className="rounded-xl p-2 hover:bg-slate-50">×</button>
-        </div>
-
-        {clientNotice && (
-          <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${clientNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {clientNotice.message}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <Field label="Nombre del cliente" value={clientForm.name} onChange={v => setClientForm({ ...clientForm, name: v })} placeholder="Ej: Juan Pérez" />
-          <Field label="Teléfono" value={clientForm.phone} onChange={v => setClientForm({ ...clientForm, phone: v })} placeholder="Ej: 099 000 0000" />
-          <Field label="Correo" value={clientForm.email} onChange={v => setClientForm({ ...clientForm, email: v })} placeholder="Ej: cliente@email.com" />
-          <Field label="Cédula / RUC" value={clientForm.identification} onChange={v => setClientForm({ ...clientForm, identification: v })} placeholder="Ej: 1000000001" />
-          <Field label="Dirección" value={clientForm.address} onChange={v => setClientForm({ ...clientForm, address: v })} placeholder="Dirección para factura" />
-          <Field label="Nombre para factura" value={clientForm.invoiceName} onChange={v => setClientForm({ ...clientForm, invoiceName: v })} placeholder="Nombre o razón social" />
-          <label className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
-            <input type="checkbox" checked={clientForm.wantsInvoice} onChange={e => setClientForm({ ...clientForm, wantsInvoice: e.target.checked })} className="h-4 w-4" />
-            Cliente frecuente que solicita factura
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de cliente</span>
-            <select value={clientForm.type} onChange={e => setClientForm({ ...clientForm, type: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
-              <option>Nuevo</option>
-              <option>Regular</option>
-              <option>Frecuente</option>
-              <option>Mayorista</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-slate-700">Observaciones</span>
-            <textarea value={clientForm.notes} onChange={e => setClientForm({ ...clientForm, notes: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Preferencias, horarios, notas..." />
-          </label>
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <button type="button" onClick={resetClientForm} className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50">Cancelar</button>
-            <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">{editingClientId ? 'Actualizar cliente' : 'Guardar cliente'}</button>
-          </div>
-        </div>
-      </form>
-    </div>
     </div>
   );
 }
