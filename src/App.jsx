@@ -1,13 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
-import {
-  ADMIN_EMAILS,
-  IMPORT_BATCH_SIZE,
-  PRODUCT_SEARCH_LIMIT,
-  MAX_LABELS_WITHOUT_CONFIRM,
-} from './config/constants';
-import { businessTypes, getBusinessConfig } from './config/businessTypes';
+import { IMPORT_BATCH_SIZE } from './config/constants';
+import { getBusinessConfig } from './config/businessTypes';
+import { getBusinessProfile } from './config/businessProfiles';
 import { getRequiredDataForSection } from './config/sectionData';
+import { getPageInfo, getVisibleMenu } from './config/navigation';
 import {
   STORAGE_KEYS,
   loadFromStorage,
@@ -18,44 +15,40 @@ import {
 } from './utils/storage';
 import {
   getProductDisplayName,
-  getProductVariantText,
-  productMatchesSearch,
   chunkArray,
   validateExcelFile,
 } from './utils/products';
-import { exportToCSV } from './utils/csv';
+import { generateInternalBarcode } from './utils/barcode';
 import {
-  looksLikeBarcodeSearch,
-  filterProductsForBarcodeSearch,
-} from './utils/productSearch';
+  getStoreItems,
+  getProductCategories,
+  getFilteredProducts,
+  getInventoryStats,
+  getSalesStats,
+} from './utils/appSelectors';
 import {
-  generateInternalBarcode,
-  printProductBarcodeLabel,
-  printSelectedBarcodeLabels,
-} from './utils/barcode';
+  buildProductData,
+  getFinalProductCategory,
+  getProductNumericValues,
+  isFoodIngredientCategory,
+  validateProductForm,
+} from './utils/productFormUtils';
 import {
   normalizeExcelRow,
   getExcelValue,
   excelText,
   excelNumber,
   excelDate,
-  downloadProductExcelTemplate,
 } from './utils/excel';
 import {
   fileToDataUrl,
   optimizeImageFile,
 } from './utils/images';
 import {
-  parseInventiqDate,
-  getPeriodRange,
-  isRecordInPeriod,
-  formatPeriodDate,
-} from './utils/dates';
-
-import {
   statusText,
   expirationText,
 } from './utils/inventory';
+import { convertRecipeQuantityToStockUnit } from './utils/recipeUnits';
 import {
   toMoneyNumber,
   isSplitPaymentAvailable,
@@ -78,14 +71,8 @@ import {
   makeLocalId,
   mapClientWithAccountsFromDb,
 } from './utils/clientAccounts';
-
 import {
-  normalizeEcuadorPhone,
-  buildProviderOrder,
-  getProviderEmail,
-} from './utils/providers';
-
-import {
+  getAccountAccessBlockReason,
   isInventiQAdmin,
   validatePasswordSecurity,
 } from './utils/auth';
@@ -96,7 +83,6 @@ import {
   mapSaleToDb,
   mapSaleItemFromDb,
   mapSaleItemToDb,
-  mapClientFromDb,
   mapClientToDb,
   mapProviderFromDb,
   mapProviderToDb,
@@ -105,13 +91,8 @@ import {
   mapPurchaseItemFromDb,
   mapPurchaseItemToDb,
 } from './utils/mappers';
-
 import {
   emptyForm,
-  initialProducts,
-  initialSales,
-  initialClients,
-  initialProviders,
   initialUsers,
   emptyLoginForm,
   emptyRegisterForm,
@@ -122,160 +103,17 @@ import {
   emptyPurchaseForm,
   emptySaleForm,
 } from './data/initialData';
-import Field from './components/Field';
-import Metric from './components/Metric';
-import EmptyState from './components/EmptyState';
-import PasswordSecurityHint from './components/PasswordSecurityHint';
-import Benefit from './components/Benefit';
-import MiniStat from './components/MiniStat';
-import TableCard from './components/TableCard';
-import ListRow from './components/ListRow';
-import ReportRow from './components/ReportRow';
-import DashboardKpi from './components/DashboardKpi';
-import DashboardMiniStat from './components/DashboardMiniStat';
-import QuickAction from './components/QuickAction';
-import SummaryBox from './components/SummaryBox';
-import DashboardListCard from './components/DashboardListCard';
-import EmptyDashboardMessage from './components/EmptyDashboardMessage';
-import AbcBadge from './components/AbcBadge';
 import SplashScreen from './components/SplashScreen';
 import MobileTopBar from './components/MobileTopBar';
 import MobileBottomNav from './components/MobileBottomNav';
 import DesktopSidebar from './components/DesktopSidebar';
 import PageHeader from './components/PageHeader';
 import AppRoutes from './components/AppRoutes';
-import BarcodeScanner from './components/BarcodeScanner';
 import ReceiptModal from './components/ReceiptModal';
-import ExcelImportPreviewModal from './components/ExcelImportPreviewModal';
-import ProductTable from './components/ProductTable';
-import ProductForm from './components/ProductForm';
-import AdminPage from './pages/AdminPage';
-import SettingsPage from './pages/SettingsPage';
-import CashPage from './pages/CashPage';
-import DailyCashPage from './pages/DailyCashPage';
-import ReportsPage from './pages/ReportsPage';
 import AuthPage from './pages/AuthPage';
-import HomePage from './pages/HomePage';
-import FoodSalesPage from './pages/FoodSalesPage';
-import SalesPage from './pages/SalesPage';
-import FoodProductsPage from './pages/FoodProductsPage';
-import ProductsPage from './pages/ProductsPage';
-import PurchasesPage from './pages/PurchasesPage';
-import ProvidersPage from './pages/ProvidersPage';
-import ExpensesPage from './pages/ExpensesPage';
-import InventoryPage from './pages/InventoryPage';
-import ClientsPage from './pages/ClientsPage';
-import { menu } from './config/menu';
-import {
-  Home,
-  ShoppingCart,
-  Package,
-  Boxes,
-  Users,
-  Truck,
-  BarChart3,
-  Settings,
-  Search,
-  Edit,
-  Trash2,
-  Store,
-  DollarSign,
-  AlertTriangle,
-  CheckCircle2,
-  TrendingUp,
-  ClipboardList,
-  UserPlus,
-  Save,
-  CalendarDays,
-  Activity,
-  ReceiptText,
-  Percent,
-  RotateCcw,
-  Lock,
-  User,
-  MoreHorizontal,
-  Download,
-  Camera,
-  Printer,
-  Upload,
-} from 'lucide-react';
-
-function getAvatarLetter(user) {
-  const source = String(user?.store || user?.name || user?.email || 'InventiQ').trim();
-  return source.charAt(0).toUpperCase() || 'I';
-}
-
-function getAccountAccessBlockReason(profile, email) {
-  const currentEmail = String(email || '').trim().toLowerCase();
-  const adminEmails = ADMIN_EMAILS.map(adminEmail =>
-    String(adminEmail || '').trim().toLowerCase()
-  );
-
-  if (adminEmails.includes(currentEmail)) {
-    return null;
-  }
-
-  if (!profile) {
-    return null;
-  }
-
-  const status = String(profile.subscription_status || '').trim().toLowerCase();
-
-  if (profile.is_suspended || status === 'suspendido') {
-    return 'Tu cuenta de InventiQ está suspendida. Comunícate con InventiQ para reactivar tu acceso.';
-  }
-
-  if (status === 'vencido') {
-    return 'Tu plan de InventiQ está vencido. Comunícate con InventiQ para renovar tu acceso.';
-  }
-
-  if (profile.subscription_end) {
-    const today = new Date();
-    const endDate = new Date(profile.subscription_end);
-
-    today.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-
-    if (!Number.isNaN(endDate.getTime()) && endDate < today) {
-      return 'Tu plan de InventiQ ha vencido. Comunícate con InventiQ para renovar tu acceso.';
-    }
-  }
-
-  return null;
-}
-
-function getUsersFromStorage() {
-  return loadFromStorage(STORAGE_KEYS.users, initialUsers);
-}
-
-function getEnhancedClientFromDb(row = {}) {
-  const base = mapClientFromDb(row);
-
-  return {
-    ...base,
-    creditEnabled: Boolean(row.credit_enabled),
-    creditLimit: Number(row.credit_limit || 0),
-    creditBalance: Number(row.credit_balance || 0),
-    loyaltyEnabled: Boolean(row.loyalty_enabled),
-    loyaltyTotal: Number(row.loyalty_total || 0),
-    loyaltyNotes: row.loyalty_notes || '',
-  };
-}
-
-function mapEnhancedClientToDb(clientData, userId) {
-  return {
-    ...mapClientToDb(clientData, userId),
-    credit_enabled: Boolean(clientData.creditEnabled),
-    credit_limit: Number(clientData.creditLimit || 0),
-    credit_balance: Number(clientData.creditBalance || 0),
-    loyalty_enabled: Boolean(clientData.loyaltyEnabled),
-    loyalty_total: Number(clientData.loyaltyTotal || 0),
-    loyalty_notes: clientData.loyaltyNotes || '',
-  };
-}
 
 function App() {
-  const [users, setUsers] = useState(() => getUsersFromStorage());
+  const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.users, initialUsers));
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
@@ -895,21 +733,15 @@ function App() {
   }
 
   const storeKey = currentUser?.id || 'demo';
-  const storeProducts = useMemo(() => products.filter(product => (product.storeId || 'demo') === storeKey), [products, storeKey]);
-  const storeSales = useMemo(() => sales.filter(sale => (sale.storeId || 'demo') === storeKey), [sales, storeKey]);
-  const storeClients = useMemo(() => clients.filter(client => (client.storeId || 'demo') === storeKey), [clients, storeKey]);
-  const storeProviders = useMemo(() => providers.filter(provider => (provider.storeId || 'demo') === storeKey), [providers, storeKey]);
+  const storeProducts = useMemo(() => getStoreItems(products, storeKey), [products, storeKey]);
+  const storeSales = useMemo(() => getStoreItems(sales, storeKey), [sales, storeKey]);
+  const storeClients = useMemo(() => getStoreItems(clients, storeKey), [clients, storeKey]);
+  const storeProviders = useMemo(() => getStoreItems(providers, storeKey), [providers, storeKey]);
 
-  const categories = useMemo(() => {
-    const productCategoryNames = storeProducts
-      .map(product => product.category)
-      .filter(Boolean);
-
-    return [
-      'Todas',
-      ...Array.from(new Set([...customProductCategories, ...productCategoryNames])),
-    ];
-  }, [storeProducts, customProductCategories]);
+  const categories = useMemo(
+    () => getProductCategories(storeProducts, customProductCategories),
+    [storeProducts, customProductCategories]
+  );
 
   const productCategories = useMemo(
     () => categories.filter(cat => cat !== 'Todas'),
@@ -936,58 +768,20 @@ function App() {
     );
   }, [currentUser?.id, customProductCategories]);
 
-  const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase();
-    const searchLooksLikeCode = looksLikeBarcodeSearch(search);
+  const filtered = useMemo(
+    () => getFilteredProducts(storeProducts, search, category),
+    [storeProducts, search, category]
+  );
 
-    return storeProducts.filter(product => {
-      const matchCategory = category === 'Todas' || product.category === category;
+  const inventoryStats = useMemo(
+    () => getInventoryStats(storeProducts),
+    [storeProducts]
+  );
 
-      if (!text) {
-        return matchCategory;
-      }
-
-      const matchSearch = searchLooksLikeCode
-        ? (
-          String(product.barcode || '').trim().toLowerCase() === text ||
-          String(product.sku || '').trim().toLowerCase() === text
-        )
-        : [
-          product.name,
-          product.sku,
-          product.barcode,
-          product.brand,
-          product.size,
-          product.color,
-          product.category,
-        ].some(value => String(value || '').toLowerCase().includes(text));
-
-      return matchSearch && matchCategory;
-    });
-  }, [storeProducts, search, category]);
-
-  const inventoryStats = useMemo(() => {
-    const totalProducts = storeProducts.length;
-    const lowStock = storeProducts.filter(p => p.stock > 0 && p.stock <= p.minStock).length;
-    const noStock = storeProducts.filter(p => p.stock === 0).length;
-    const inventoryValue = storeProducts.reduce((sum, p) => sum + p.cost * p.stock, 0);
-    const potentialProfit = storeProducts.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
-    return { totalProducts, lowStock, noStock, inventoryValue, potentialProfit };
-  }, [storeProducts]);
-
-  const salesStats = useMemo(() => {
-    const completedSales = storeSales.filter(sale => sale.status !== 'Anulada');
-    const totalSales = completedSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
-    const totalProfit = completedSales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
-    const totalDiscount = completedSales.reduce((sum, sale) => sum + Number(sale.discount || 0), 0);
-    const totalUnitsSold = completedSales.reduce((sum, sale) => sum + Number(sale.quantity || 0), 0);
-    const topProduct = completedSales.reduce((acc, sale) => {
-      acc[sale.product] = (acc[sale.product] || 0) + Number(sale.quantity || 0);
-      return acc;
-    }, {});
-    const bestSeller = Object.entries(topProduct).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Sin ventas';
-    return { totalSales, totalProfit, totalDiscount, totalUnitsSold, bestSeller };
-  }, [storeSales]);
+  const salesStats = useMemo(
+    () => getSalesStats(storeSales),
+    [storeSales]
+  );
 
   const { totalProducts, lowStock, noStock, inventoryValue, potentialProfit } = inventoryStats;
   const { totalSales, totalProfit, totalDiscount, totalUnitsSold, bestSeller } = salesStats;
@@ -997,29 +791,6 @@ function App() {
     setEditingId(null);
     setNotice(null);
     clearDraft(currentUser?.id, 'productForm');
-  }
-
-  function validateProduct(finalCategory, price, cost, stock, minStock, options = {}) {
-    const isFoodIngredient = Boolean(options.isFoodIngredient);
-
-    if (!form.name.trim()) {
-      return isFoodIngredient ? 'Ingresa el nombre del insumo.' : 'Ingresa el nombre del producto.';
-    }
-
-    if (!finalCategory.trim()) return 'Selecciona o crea una categoría.';
-
-    if (isFoodIngredient) {
-      if (Number.isNaN(price) || price < 0) return 'El precio referencial no puede ser negativo.';
-    } else if (Number.isNaN(price) || price <= 0) {
-      return 'El precio de venta debe ser mayor a 0.';
-    }
-
-    if (Number.isNaN(cost) || cost < 0) return 'El costo no puede ser negativo. Si no lo conoces, déjalo vacío.';
-    if (Number.isNaN(stock) || stock < 0) return 'El stock no puede ser negativo.';
-    if (Number.isNaN(minStock) || minStock < 0) return 'El stock mínimo no puede ser negativo.';
-    if (!isFoodIngredient && cost > 0 && cost > price) return 'El costo no debería ser mayor al precio de venta.';
-
-    return null;
   }
 
   async function loadProductsFromSupabase(userId, showLoader = true) {
@@ -1204,16 +975,24 @@ function App() {
   async function saveProduct(e) {
     e.preventDefault();
 
-    const finalCategory = form.category === '__new__' ? form.customCategory.trim() : form.category.trim();
-    const categoryText = finalCategory.toLowerCase();
-    const isFoodIngredient = currentUser?.businessType === 'cafeteria' && (
-      categoryText.startsWith('insumos -') || categoryText.includes('insumos')
+    const finalCategory = getFinalProductCategory(form);
+    const isFoodIngredient = isFoodIngredientCategory(
+      finalCategory,
+      currentUser?.businessType
     );
-    const price = isFoodIngredient ? Number(form.price || 0) : Number(form.price);
-    const cost = Number(form.cost || 0);
-    const stock = Number(form.stock);
-    const minStock = Number(form.minStock || 0);
-    const validationError = validateProduct(finalCategory, price, cost, stock, minStock, { isFoodIngredient });
+    const { price, cost, stock, minStock } = getProductNumericValues(
+      form,
+      isFoodIngredient
+    );
+    const validationError = validateProductForm({
+      form,
+      finalCategory,
+      price,
+      cost,
+      stock,
+      minStock,
+      isFoodIngredient,
+    });
 
     if (validationError) {
       setNotice({ type: 'error', message: validationError });
@@ -1237,27 +1016,18 @@ function App() {
       }
     }
 
-    const productData = {
-      storeId: storeKey,
+    const productData = buildProductData({
+      form,
+      storeKey,
       storeName: currentUser.store,
-      sku: form.sku.trim() || `SKU${storeProducts.length + 1}`,
-      barcode: form.barcode.trim(),
-      brand: form.brand.trim(),
-      size: form.size.trim(),
-      color: form.color.trim(),
-      name: form.name.trim(),
-      category: finalCategory,
+      storeProductsCount: storeProducts.length,
+      finalCategory,
       price,
       cost,
       stock,
       minStock,
-      status: stock === 0 ? 'Inactivo' : 'Activo',
-      description: form.description.trim(),
-      batchNumber: form.batchNumber.trim(),
-      entryDate: form.entryDate || '',
-      expirationDate: form.expirationDate || '',
-      imageUrl: uploadedImageUrl,
-    };
+      uploadedImageUrl,
+    });
 
     const productPayload = mapProductToDb(productData, currentUser.id);
 
@@ -1321,20 +1091,23 @@ function App() {
       const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      const businessType = currentUser.businessType || 'general';
-      const businessConfig = getBusinessConfig(businessType);
+      const importBusinessProfile = getBusinessProfile(currentUser.businessProfile || currentUser.businessType || 'general');
+      const businessType = importBusinessProfile.businessType || currentUser.businessType || 'general';
+      const businessConfig = importBusinessProfile.config || getBusinessConfig(businessType);
       const normalizedRows = rawRows.map(normalizeExcelRow);
       const existingCodes = new Set(storeProducts.flatMap(product => [product.sku, product.barcode]).filter(Boolean).map(value => String(value).trim().toLowerCase()));
       const productsToImport = [];
       const skippedRows = [];
 
       normalizedRows.forEach((row, index) => {
-        const name = excelText(getExcelValue(row, ['nombre del producto', 'producto', 'nombre', 'nombre_producto']));
-        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category'], businessType === 'ropa' ? 'Ropa' : 'General'));
+        const name = excelText(getExcelValue(row, ['nombre del producto', 'producto', 'nombre', 'nombre_producto', 'plato', 'insumo']));
+        const defaultCategory = businessConfig.defaultCategories?.[0] || (businessType === 'ropa' ? 'Ropa' : 'General');
+        const category = excelText(getExcelValue(row, ['categoria', 'categoría', 'category', 'tipo'], defaultCategory));
+        const isIngredientImport = isFoodIngredientCategory(category, businessType);
         const price = excelNumber(getExcelValue(row, ['precio de venta', 'precio venta', 'precio_venta', 'precio', 'pvp']), 0);
         const cost = excelNumber(getExcelValue(row, ['costo unitario', 'costo', 'costo opcional', 'precio costo', 'precio_costo']), 0);
         const stock = excelNumber(getExcelValue(row, ['stock actual', 'stock', 'cantidad', 'existencia']), 0);
-        const minStock = excelNumber(getExcelValue(row, ['stock minimo', 'stock mínimo', 'minimo', 'mínimo', 'stock_minimo']), 1);
+        const minStock = excelNumber(getExcelValue(row, ['stock minimo', 'stock mínimo', 'minimo', 'mínimo', 'stock_minimo']), isIngredientImport ? 3 : 0);
         const skuRaw = excelText(getExcelValue(row, ['sku', 'codigo almacen', 'código almacén', 'codigo', 'código', 'codigo interno', 'codigo sku']));
         const barcodeRaw = excelText(getExcelValue(row, ['codigo de barras', 'código de barras', 'barcode', 'barra']));
         const generatedCode = skuRaw || barcodeRaw || generateInternalBarcode(businessType);
@@ -1351,7 +1124,7 @@ function App() {
           return;
         }
 
-        if (price <= 0) {
+        if (!isIngredientImport && price <= 0) {
           skippedRows.push(`Fila ${index + 2}: precio de venta inválido`);
           return;
         }
@@ -1985,60 +1758,8 @@ function App() {
     clearDraft(currentUser?.id, 'purchaseCart');
   }
 
-  function normalizeRecipeUnit(unit) {
-    const text = String(unit || '').trim().toLowerCase();
-
-    if (!text) return '';
-    if (text.includes('mililitro') || text === 'ml' || text.endsWith(' ml')) return 'ml';
-    if (text.includes('litro') || text === 'l' || text.endsWith(' l') || /\d+l$/.test(text)) return 'l';
-    if (text.includes('kilogramo') || text === 'kg' || text.endsWith(' kg')) return 'kg';
-    if (text.includes('gramo') || text === 'g' || text === 'gr' || text.endsWith(' g') || text.endsWith(' gr')) return 'g';
-    if (text.includes('miligramo') || text === 'mg' || text.endsWith(' mg')) return 'mg';
-    if (text.includes('unidad') || text.includes('unid') || text === 'u' || text === 'und' || text.includes('pieza') || text.includes('pz')) return 'unidad';
-
-    return text;
-  }
-
-  function getUnitFamily(unit) {
-    if (['ml', 'l'].includes(unit)) return 'volume';
-    if (['mg', 'g', 'kg'].includes(unit)) return 'mass';
-    if (['unidad'].includes(unit)) return 'unit';
-    return 'custom';
-  }
-
-  function getUnitFactor(unit) {
-    const factors = {
-      ml: 1,
-      l: 1000,
-      mg: 1,
-      g: 1000,
-      kg: 1000000,
-      unidad: 1,
-    };
-
-    return factors[unit] || 1;
-  }
-
-  function convertRecipeQuantityToStockUnit(quantity, recipeUnit, stockUnit) {
-    const normalizedRecipeUnit = normalizeRecipeUnit(recipeUnit);
-    const normalizedStockUnit = normalizeRecipeUnit(stockUnit);
-
-    if (!normalizedRecipeUnit || !normalizedStockUnit || normalizedRecipeUnit === normalizedStockUnit) {
-      return quantity;
-    }
-
-    const recipeFamily = getUnitFamily(normalizedRecipeUnit);
-    const stockFamily = getUnitFamily(normalizedStockUnit);
-
-    if (recipeFamily === 'custom' || stockFamily === 'custom' || recipeFamily !== stockFamily) {
-      return null;
-    }
-
-    return (quantity * getUnitFactor(normalizedRecipeUnit)) / getUnitFactor(normalizedStockUnit);
-  }
-
   async function buildRecipeIngredientAdjustments(cartItems, sourceProducts, direction = 'subtract') {
-    const isCafeteria = currentUser?.businessType === 'cafeteria';
+    const isCafeteria = ['cafeteria', 'restaurante'].includes(currentUser?.businessType);
 
     if (!isCafeteria || !Array.isArray(cartItems) || cartItems.length === 0) {
       return { updates: [], errorMessage: '' };
@@ -2148,7 +1869,7 @@ function App() {
   }
 
   function buildFoodOrderCustomer() {
-    if (currentUser?.businessType !== 'cafeteria') return null;
+    if (!['cafeteria', 'restaurante'].includes(currentUser?.businessType)) return null;
 
     const labels = {
       local: 'En local',
@@ -2170,6 +1891,11 @@ function App() {
     }
 
     return parts.join(' · ');
+  }
+
+  function isRecipeControlledProduct(product) {
+    const isFoodBusiness = ['cafeteria', 'restaurante'].includes(currentUser?.businessType);
+    return isFoodBusiness && Boolean(product?.recipeEnabled || product?.recipe_enabled);
   }
 
   async function registerSale(e) {
@@ -2214,6 +1940,11 @@ function App() {
         setSaleNotice({ type: 'error', message: `No se encontró el producto ${item.product}.` });
         return;
       }
+
+      if (isRecipeControlledProduct(product)) {
+        continue;
+      }
+
       if (item.quantity > product.stock) {
         setSaleNotice({ type: 'error', message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}.` });
         return;
@@ -2286,6 +2017,8 @@ function App() {
 
     for (const item of normalizedSaleCart) {
       const product = storeProducts.find(p => String(p.id) === String(item.productId));
+      if (!product || isRecipeControlledProduct(product)) continue;
+
       const newStock = product.stock - item.quantity;
       const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
 
@@ -2365,7 +2098,7 @@ function App() {
 
     for (const item of items) {
       const product = products.find(p => String(p.id) === String(item.productId));
-      if (!product) continue;
+      if (!product || isRecipeControlledProduct(product)) continue;
 
       const restoredStock = product.stock + item.quantity;
       const { error: productError } = await supabase
@@ -3215,34 +2948,11 @@ function App() {
     setSettingsNotice({ type: 'success', message: 'Configuración actualizada correctamente.' });
   }
 
-  const businessConfig = getBusinessConfig(currentUser?.businessType);
+  const businessProfile = getBusinessProfile(currentUser?.businessProfile || currentUser?.businessType);
+  const businessConfig = businessProfile.config || getBusinessConfig(currentUser?.businessType);
 
-  const pageInfo = {
-    Inicio: { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home },
-    Ventas: { title: 'Ventas', subtitle: 'Registra ventas y revisa el historial reciente.', icon: ShoppingCart },
-    Caja: { title: 'Caja', subtitle: 'Controla cierres, cortes y métodos de pago por periodo.', icon: DollarSign },
-    'Gastos fijos': { title: 'Gastos fijos', subtitle: 'Controla pagos mensuales como arriendo, servicios, sueldos y suscripciones.', icon: ReceiptText },
-    Compras: { title: 'Compras', subtitle: 'Registra compras a proveedores y aumenta stock.', icon: ClipboardList },
-    Productos: {
-      title: businessConfig.productMode === 'menu-inventory' ? 'Menú e insumos' : 'Productos',
-      subtitle: businessConfig.productMode === 'menu-inventory'
-        ? 'Administra productos del menú e insumos de cocina.'
-        : 'Administra los productos de tu tienda fácilmente.',
-      icon: Package,
-    },
-    Inventario: { title: 'Inventario', subtitle: 'Controla stock, alertas y valor de inventario.', icon: Boxes },
-    Clientes: { title: 'Clientes', subtitle: 'Administra clientes frecuentes de la tienda.', icon: Users },
-    Proveedores: { title: 'Proveedores', subtitle: 'Organiza proveedores y entregas estimadas.', icon: Truck },
-    Reportes: { title: 'Reportes', subtitle: 'Analiza ventas, utilidad y decisiones de compra.', icon: BarChart3 },
-    Configuración: { title: 'Configuración', subtitle: 'Ajusta datos generales de la tienda.', icon: Settings },
-    Admin: { title: 'Panel administrador', subtitle: 'Crea y controla cuentas de clientes de InventiQ.', icon: UserPlus },
-  }[active] || { title: 'Inicio', subtitle: 'Resumen general de tu tienda.', icon: Home };
-
-  const menuWithExpenses = menu.some(item => item.label === 'Gastos fijos')
-    ? menu
-    : menu.flatMap(item => item.label === 'Caja' ? [item, { label: 'Gastos fijos', icon: ReceiptText }] : [item]);
-
-  const visibleMenu = isInventiQAdmin(currentUser) ? [...menuWithExpenses, { label: 'Admin', icon: UserPlus }] : menuWithExpenses;
+  const pageInfo = getPageInfo(active, businessConfig, businessProfile);
+  const visibleMenu = getVisibleMenu(isInventiQAdmin(currentUser), businessProfile);
 
 
   if (showSplash) {

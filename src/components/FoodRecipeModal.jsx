@@ -1,10 +1,72 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { convertRecipeQuantityToStockUnit } from '../utils/recipeUnits';
 
 function formatQuantity(value) {
   const number = Number(value || 0);
   return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+
+function getIngredientStockUnit(ingredient) {
+  return ingredient?.unit || ingredient?.size || '';
+}
+
+function buildRecipeSummary(recipeItems, ingredientById) {
+  if (!recipeItems.length) {
+    return {
+      totalCost: 0,
+      maxServings: 0,
+      missingItems: [],
+      conversionWarnings: [],
+    };
+  }
+
+  let totalCost = 0;
+  let maxServings = Infinity;
+  const missingItems = [];
+  const conversionWarnings = [];
+
+  recipeItems.forEach((item) => {
+    const ingredient = ingredientById.get(String(item.ingredient_product_id));
+
+    if (!ingredient) {
+      missingItems.push('Insumo no encontrado');
+      maxServings = 0;
+      return;
+    }
+
+    const recipeQuantity = Number(item.quantity || 0);
+    const stockUnit = getIngredientStockUnit(ingredient);
+    const convertedQuantity = convertRecipeQuantityToStockUnit(recipeQuantity, item.unit, stockUnit);
+
+    if (convertedQuantity === null) {
+      conversionWarnings.push(`${ingredient.name}: ${formatQuantity(recipeQuantity)} ${item.unit || ''} no coincide con ${stockUnit || 'sin unidad'}`);
+      return;
+    }
+
+    const quantityInStockUnit = Number(convertedQuantity || 0);
+    const stock = Number(ingredient.stock || 0);
+    const cost = Number(ingredient.cost || 0);
+
+    totalCost += quantityInStockUnit * cost;
+
+    if (quantityInStockUnit > 0) {
+      maxServings = Math.min(maxServings, Math.floor(stock / quantityInStockUnit));
+
+      if (stock < quantityInStockUnit) {
+        missingItems.push(`${ingredient.name} · disponible ${formatQuantity(stock)} ${stockUnit || ''}`);
+      }
+    }
+  });
+
+  return {
+    totalCost,
+    maxServings: maxServings === Infinity ? 0 : Math.max(maxServings, 0),
+    missingItems,
+    conversionWarnings,
+  };
 }
 
 export default function FoodRecipeModal({
@@ -38,6 +100,11 @@ export default function FoodRecipeModal({
     if (!form.ingredientProductId) return null;
     return ingredientById.get(String(form.ingredientProductId)) || null;
   }, [form.ingredientProductId, ingredientById]);
+
+  const recipeSummary = useMemo(
+    () => buildRecipeSummary(recipeItems, ingredientById),
+    [recipeItems, ingredientById]
+  );
 
   useEffect(() => {
     if (!currentUser?.id || !menuProduct?.id) return;
@@ -283,6 +350,36 @@ export default function FoodRecipeModal({
               </div>
             )}
           </form>
+
+          {recipeItems.length > 0 && (
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Costo estimado</p>
+                <p className="mt-1 text-2xl font-black text-emerald-900">${recipeSummary.totalCost.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-emerald-700">Costo aproximado por producto vendido.</p>
+              </div>
+
+              <div className="rounded-3xl border border-amber-100 bg-amber-50 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-amber-700">Disponibilidad</p>
+                <p className="mt-1 text-2xl font-black text-amber-900">{recipeSummary.maxServings}</p>
+                <p className="mt-1 text-xs text-amber-700">Porciones estimadas con el stock actual.</p>
+              </div>
+
+              <div className={`rounded-3xl border p-4 ${recipeSummary.missingItems.length > 0 || recipeSummary.conversionWarnings.length > 0 ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
+                <p className={`text-xs font-black uppercase tracking-wide ${recipeSummary.missingItems.length > 0 || recipeSummary.conversionWarnings.length > 0 ? 'text-red-700' : 'text-slate-600'}`}>Estado de receta</p>
+                <p className={`mt-1 text-lg font-black ${recipeSummary.missingItems.length > 0 || recipeSummary.conversionWarnings.length > 0 ? 'text-red-900' : 'text-slate-900'}`}>
+                  {recipeSummary.missingItems.length > 0
+                    ? 'Stock insuficiente'
+                    : recipeSummary.conversionWarnings.length > 0
+                      ? 'Revisar unidades'
+                      : 'Lista para vender'}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {recipeSummary.missingItems[0] || recipeSummary.conversionWarnings[0] || 'Los insumos alcanzan para preparar el producto.'}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="mt-5 rounded-3xl border border-slate-200 bg-white">
             <div className="border-b border-slate-100 p-4">

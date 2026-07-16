@@ -1,7 +1,8 @@
 export const businessTypes = [
   { value: 'general', label: 'Tienda general / minimarket' },
   { value: 'ropa', label: 'Tienda de ropa' },
-  { value: 'cafeteria', label: 'Cafetería / restaurante pequeño' },
+  { value: 'cafeteria', label: 'Cafetería' },
+  { value: 'restaurante', label: 'Restaurante' },
   { value: 'ferreteria', label: 'Ferretería / repuestos' },
   { value: 'taller', label: 'Taller / servicios' },
   { value: 'otro', label: 'Otro negocio' },
@@ -81,7 +82,7 @@ export function getBusinessConfig(type = 'general') {
     },
 
     cafeteria: {
-      label: 'Cafetería / restaurante',
+      label: 'Cafetería',
       salesMode: 'food',
       productMode: 'menu-inventory',
       cashMode: 'daily-cash',
@@ -92,12 +93,12 @@ export function getBusinessConfig(type = 'general') {
       usesExpiration: true,
       productExtraFields: true,
 
-      productNamePlaceholder: 'Ej: Capuchino, Cheesecake, Leche 1L, Vaso 12oz',
+      productNamePlaceholder: 'Ej: Capuchino, cheesecake, leche 1L, vaso 12oz',
       categoryPlaceholder: 'Ej: Menú - Café caliente, Insumos - Lácteos',
 
       productSectionTitle: 'Menú e insumos',
       inventorySectionTitle: 'Insumos y stock',
-      salesSectionTitle: 'Pedidos / ventas',
+      salesSectionTitle: 'Ventas de cafetería',
 
       foodLabels: {
         menuTitle: 'Menú',
@@ -111,7 +112,7 @@ export function getBusinessConfig(type = 'general') {
       extraLabels: {
         brand: {
           label: 'Marca / proveedor',
-          placeholder: 'Ej: Café Vélez, proveedor local, Supermaxi',
+          placeholder: 'Ej: Café Vélez, proveedor local',
         },
         size: {
           label: 'Presentación / tamaño',
@@ -119,7 +120,7 @@ export function getBusinessConfig(type = 'general') {
         },
         color: {
           label: 'Variante / uso',
-          placeholder: 'Ej: Bebida caliente, postre, insumo, desechable',
+          placeholder: 'Ej: Bebida caliente, postre, insumo',
         },
       },
 
@@ -130,14 +131,76 @@ export function getBusinessConfig(type = 'general') {
         'Menú - Postres',
         'Menú - Sanduches',
         'Menú - Desayunos',
-        'Menú - Almuerzos',
         'Menú - Combos',
         'Insumos - Café',
         'Insumos - Lácteos',
         'Insumos - Azúcar y endulzantes',
         'Insumos - Panadería',
         'Insumos - Frutas',
-        'Insumos - Salsas',
+        'Insumos - Desechables',
+        'Insumos - Limpieza',
+      ],
+    },
+
+    restaurante: {
+      label: 'Restaurante',
+      salesMode: 'food',
+      productMode: 'menu-inventory',
+      cashMode: 'daily-cash',
+      usesRecipes: true,
+      usesModifiers: true,
+      usesTables: true,
+      usesDailyCash: true,
+      usesExpiration: true,
+      productExtraFields: true,
+
+      productNamePlaceholder: 'Ej: Almuerzo ejecutivo, hamburguesa, arroz, pollo, bebida',
+      categoryPlaceholder: 'Ej: Menú - Platos fuertes, Insumos - Carnes',
+
+      productSectionTitle: 'Menú e insumos',
+      inventorySectionTitle: 'Inventario de cocina',
+      salesSectionTitle: 'Órdenes / ventas',
+
+      foodLabels: {
+        menuTitle: 'Menú del restaurante',
+        ingredientsTitle: 'Insumos de cocina',
+        quickSaleTitle: 'Caja restaurante',
+        orderTitle: 'Orden',
+        recipeTitle: 'Receta',
+        modifiersTitle: 'Extras y acompañantes',
+      },
+
+      extraLabels: {
+        brand: {
+          label: 'Marca / proveedor',
+          placeholder: 'Ej: proveedor local, distribuidor, mercado',
+        },
+        size: {
+          label: 'Presentación / porción',
+          placeholder: 'Ej: 1kg, libra, porción, bandeja',
+        },
+        color: {
+          label: 'Uso / preparación',
+          placeholder: 'Ej: cocina, bebida, acompañante, empaque',
+        },
+      },
+
+      defaultCategories: [
+        'Menú - Platos fuertes',
+        'Menú - Almuerzos',
+        'Menú - Desayunos',
+        'Menú - Bebidas',
+        'Menú - Entradas',
+        'Menú - Postres',
+        'Menú - Combos',
+        'Insumos - Carnes',
+        'Insumos - Pollo',
+        'Insumos - Mariscos',
+        'Insumos - Verduras',
+        'Insumos - Frutas',
+        'Insumos - Granos y secos',
+        'Insumos - Salsas y condimentos',
+        'Insumos - Bebidas',
         'Insumos - Desechables',
         'Insumos - Limpieza',
       ],

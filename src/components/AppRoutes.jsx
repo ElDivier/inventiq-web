@@ -4,6 +4,7 @@ import FoodSalesPage from '../pages/FoodSalesPage';
 import SalesPage from '../pages/SalesPage';
 import CashPage from '../pages/CashPage';
 import DailyCashPage from '../pages/DailyCashPage';
+import FoodCashPage from '../pages/FoodCashPage';
 import ExpensesPage from '../pages/ExpensesPage';
 import PurchasesPage from '../pages/PurchasesPage';
 import FoodProductsPage from '../pages/FoodProductsPage';
@@ -216,7 +217,14 @@ export default function AppRoutes({
       )}
 
       {active === 'Caja' && (
-        businessConfig.cashMode === 'daily-cash' ? (
+        businessConfig.salesMode === 'food' ? (
+          <FoodCashPage
+            currentUser={currentUser}
+            sales={storeSales}
+            purchases={purchases}
+            businessConfig={businessConfig}
+          />
+        ) : businessConfig.cashMode === 'daily-cash' ? (
           <DailyCashPage currentUser={currentUser} sales={storeSales} purchases={purchases} />
         ) : (
           <CashPage sales={storeSales} purchases={purchases} />

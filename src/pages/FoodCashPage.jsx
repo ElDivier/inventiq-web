@@ -55,7 +55,47 @@ function paymentKey(value) {
   return String(value || 'Efectivo').trim().toLowerCase();
 }
 
-export default function FoodCashPage({ currentUser, sales = [], purchases = [] }) {
+function normalizeOrderText(sale) {
+  return [sale?.customer, sale?.product, sale?.code]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function getRestaurantOrderType(sale) {
+  const text = normalizeOrderText(sale);
+
+  if (text.includes('delivery')) return 'delivery';
+  if (text.includes('para llevar')) return 'takeaway';
+  if (text.includes('mesa')) return 'local';
+
+  return 'local';
+}
+
+function getRestaurantOrderReference(sale) {
+  const parts = String(sale?.customer || '')
+    .split('·')
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  const tablePart = parts.find(part => /^mesa\s+/i.test(part));
+  if (tablePart) return tablePart;
+
+  const takeawayPart = parts.find(part => /para llevar/i.test(part));
+  if (takeawayPart) return 'Para llevar';
+
+  const deliveryPart = parts.find(part => /delivery/i.test(part));
+  if (deliveryPart) return 'Delivery';
+
+  return parts[1] || parts[0] || 'Sin referencia';
+}
+
+function addPaymentAmount(acc, key, amount) {
+  const normalizedKey = paymentKey(key);
+  acc[normalizedKey] = (acc[normalizedKey] || 0) + Number(amount || 0);
+}
+
+export default function FoodCashPage({ currentUser, sales = [], purchases = [], businessConfig = {} }) {
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [expenses, setExpenses] = useState([]);
@@ -85,7 +125,15 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
   const paymentTotals = useMemo(() => {
     return sessionSales.reduce((acc, sale) => {
       const method = paymentKey(sale.paymentMethod || sale.payment_method || 'Efectivo');
-      acc[method] = (acc[method] || 0) + Number(sale.total || 0);
+
+      if (method === 'mixto') {
+        addPaymentAmount(acc, 'efectivo', sale.cashAmount || sale.cash_amount || 0);
+        addPaymentAmount(acc, 'tarjeta', sale.cardAmount || sale.card_amount || 0);
+        addPaymentAmount(acc, 'transferencia', sale.transferAmount || sale.transfer_amount || 0);
+        return acc;
+      }
+
+      addPaymentAmount(acc, method, sale.total || 0);
       return acc;
     }, {});
   }, [sessionSales]);
@@ -103,6 +151,52 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
   const salesTotal = useMemo(() => {
     return sessionSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   }, [sessionSales]);
+
+  const sessionPurchases = useMemo(() => {
+    return (purchases || []).filter(purchase => isAfterStart(purchase, sessionStartDate));
+  }, [purchases, sessionStartDate]);
+
+  const purchaseTotal = useMemo(() => {
+    return sessionPurchases.reduce((sum, purchase) => sum + Number(purchase.total || 0), 0);
+  }, [sessionPurchases]);
+
+  const orderTypeStats = useMemo(() => {
+    const base = {
+      local: { label: 'Mesas', count: 0, total: 0 },
+      takeaway: { label: 'Para llevar', count: 0, total: 0 },
+      delivery: { label: 'Delivery', count: 0, total: 0 },
+    };
+
+    sessionSales.forEach((sale) => {
+      const type = getRestaurantOrderType(sale);
+      const key = base[type] ? type : 'local';
+      base[key].count += 1;
+      base[key].total += Number(sale.total || 0);
+    });
+
+    return base;
+  }, [sessionSales]);
+
+  const topServiceAreas = useMemo(() => {
+    const totals = sessionSales.reduce((acc, sale) => {
+      const reference = getRestaurantOrderReference(sale);
+      if (!acc[reference]) {
+        acc[reference] = { reference, count: 0, total: 0 };
+      }
+      acc[reference].count += 1;
+      acc[reference].total += Number(sale.total || 0);
+      return acc;
+    }, {});
+
+    return Object.values(totals)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+  }, [sessionSales]);
+
+  const averageTicket = useMemo(() => {
+    if (sessionSales.length === 0) return 0;
+    return salesTotal / sessionSales.length;
+  }, [salesTotal, sessionSales.length]);
 
   const expectedCash = useMemo(() => {
     return Number(activeSession?.opening_amount || 0) + Number(paymentTotals.efectivo || 0) - cashExpenses;
@@ -300,17 +394,38 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
     ? new Date(activeSession.opened_at).toLocaleString('es-EC')
     : '';
 
+  const isRestaurant = currentUser?.businessType === 'restaurante' || businessConfig?.label === 'Restaurante';
+  const cashCopy = isRestaurant
+    ? {
+        eyebrow: 'Restaurante',
+        title: 'Caja restaurante',
+        description: 'Controla apertura, ventas por mesa, pedidos para llevar, delivery, gastos del turno y cierre de efectivo.',
+        openTitle: 'Abrir caja restaurante',
+        openDescription: 'Registra el efectivo inicial para comenzar el turno de atención.',
+        movementTitle: 'Movimientos del turno',
+        previousTitle: 'Cierres de caja anteriores',
+      }
+    : {
+        eyebrow: 'Cafetería',
+        title: 'Caja diaria',
+        description: '{cashCopy.description}',
+        openTitle: 'Abrir caja',
+        openDescription: 'Registra el efectivo inicial para comenzar el turno.',
+        movementTitle: 'Movimientos recientes',
+        previousTitle: 'Cierres anteriores',
+      };
+
   return (
     <div className="space-y-6">
       <section className="rounded-[2rem] border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-600">Cafetería / restaurante</p>
+            <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-600">{cashCopy.eyebrow}</p>
             <h2 className="mt-2 flex items-center gap-3 text-3xl font-black text-slate-900">
-              <DollarSign className="h-8 w-8 text-emerald-600" /> Caja diaria
+              <DollarSign className="h-8 w-8 text-emerald-600" /> {cashCopy.title}
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Controla apertura, ventas por método de pago, gastos y cierre de efectivo.
+              {cashCopy.description}
             </p>
           </div>
 
@@ -339,8 +454,8 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
               <Unlock className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-xl font-black text-slate-900">Abrir caja</h3>
-              <p className="text-sm text-slate-500">Registra el efectivo inicial para comenzar el turno.</p>
+              <h3 className="text-xl font-black text-slate-900">{cashCopy.openTitle}</h3>
+              <p className="text-sm text-slate-500">{cashCopy.openDescription}</p>
             </div>
           </div>
 
@@ -372,10 +487,53 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
         <>
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <CashMetric icon={Unlock} title="Caja abierta" value={money(activeSession.opening_amount)} detail={openedText} tone="emerald" />
-            <CashMetric icon={TrendingUp} title="Ventas del turno" value={money(salesTotal)} detail={`${sessionSales.length} venta(s)`} tone="blue" />
-            <CashMetric icon={ReceiptText} title="Gastos" value={money(expenseTotal)} detail={`${expenses.length} movimiento(s)`} tone="amber" />
+            <CashMetric icon={TrendingUp} title="Ventas del turno" value={money(salesTotal)} detail={`${sessionSales.length} orden(es)`} tone="blue" />
+            <CashMetric icon={ReceiptText} title="Gastos del turno" value={money(expenseTotal)} detail={`${expenses.length} movimiento(s)`} tone="amber" />
             <CashMetric icon={DollarSign} title="Efectivo esperado" value={money(expectedCash)} detail="Inicial + efectivo - gastos" tone="slate" />
           </section>
+
+          {isRestaurant && (
+            <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">Resumen operativo del restaurante</h3>
+                    <p className="text-sm text-slate-500">Ventas del turno separadas por mesas, para llevar y delivery.</p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right">
+                    <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Ticket promedio</p>
+                    <p className="text-2xl font-black text-emerald-800">{money(averageTicket)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <RestaurantChannelBox label="Mesas" count={orderTypeStats.local.count} total={orderTypeStats.local.total} />
+                  <RestaurantChannelBox label="Para llevar" count={orderTypeStats.takeaway.count} total={orderTypeStats.takeaway.total} />
+                  <RestaurantChannelBox label="Delivery" count={orderTypeStats.delivery.count} total={orderTypeStats.delivery.total} />
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-xl font-black text-slate-900">Mesas y canales destacados</h3>
+                <p className="mb-4 text-sm text-slate-500">Referencias con mayor movimiento en la caja actual.</p>
+                <div className="space-y-3">
+                  {topServiceAreas.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">
+                      Aún no hay órdenes registradas en este turno.
+                    </div>
+                  ) : topServiceAreas.map(area => (
+                    <div key={area.reference} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4">
+                      <div>
+                        <p className="font-black text-slate-900">{area.reference}</p>
+                        <p className="text-xs text-slate-500">{area.count} orden(es)</p>
+                      </div>
+                      <p className="font-black text-emerald-700">{money(area.total)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
             <div className="space-y-6">
@@ -388,6 +546,20 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
                   <PaymentBox label="Crédito" value={paymentTotals['crédito'] || paymentTotals.credito || 0} />
                 </div>
               </div>
+
+              {isRestaurant && (
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="mb-4 text-xl font-black text-slate-900">Abastecimiento del turno</h3>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <PaymentBox label="Compras registradas" value={purchaseTotal} />
+                    <PaymentBox label="Órdenes cobradas" value={salesTotal} />
+                    <PaymentBox label="Ventas - compras" value={salesTotal - purchaseTotal} />
+                  </div>
+                  <p className="mt-3 text-xs font-semibold text-slate-500">
+                    Este resumen ayuda a comparar lo vendido con compras o abastecimientos registrados durante la caja actual.
+                  </p>
+                </div>
+              )}
 
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 className="mb-4 text-xl font-black text-slate-900">Registrar gasto del turno</h3>
@@ -440,7 +612,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="mb-4 text-xl font-black text-slate-900">Movimientos recientes</h3>
+                <h3 className="mb-4 text-xl font-black text-slate-900">{cashCopy.movementTitle}</h3>
                 <div className="space-y-3">
                   {expenses.length === 0 && sessionSales.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
@@ -462,7 +634,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
                         <MovementRow
                           key={sale.id}
                           title={sale.code || 'Venta'}
-                          detail={`${sale.product || 'Pedido'} · ${sale.paymentMethod || 'Efectivo'}`}
+                          detail={`${getRestaurantOrderReference(sale)} · ${sale.product || 'Pedido'} · ${sale.paymentMethod || 'Efectivo'}`}
                           value={Number(sale.total || 0)}
                           tone="emerald"
                         />
@@ -535,7 +707,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
 
       {sessions.filter(session => session.status === 'closed').length > 0 && (
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-4 text-xl font-black text-slate-900">Cierres anteriores</h3>
+          <h3 className="mb-4 text-xl font-black text-slate-900">{cashCopy.previousTitle}</h3>
           <div className="space-y-3">
             {sessions.filter(session => session.status === 'closed').slice(0, 5).map(session => (
               <div key={session.id} className="grid gap-3 rounded-2xl bg-slate-50 p-4 md:grid-cols-4 md:items-center">
@@ -553,6 +725,17 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [] }
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+
+function RestaurantChannelBox({ label, count, total }) {
+  return (
+    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+      <p className="text-xs font-black uppercase tracking-wide text-emerald-700">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-900">{money(total)}</p>
+      <p className="mt-1 text-xs font-bold text-slate-500">{count} orden(es)</p>
     </div>
   );
 }

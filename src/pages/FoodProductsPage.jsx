@@ -117,6 +117,7 @@ export default function FoodProductsPage({
 
   const businessType = currentUser?.businessType || 'cafeteria';
   const businessConfig = getBusinessConfig(businessType);
+  const pageText = getFoodProductsPageTexts(businessType, businessConfig);
 
   const menuProducts = useMemo(
     () => products.filter(isMenuProduct),
@@ -194,7 +195,7 @@ export default function FoodProductsPage({
     setView('menu');
     setForm({
       ...FOOD_EMPTY_FORM,
-      category: 'Menú - Café caliente',
+      category: pageText.defaultMenuCategory,
       minStock: '0',
     });
     focusProductForm();
@@ -208,7 +209,7 @@ export default function FoodProductsPage({
     setView('insumos');
     setForm({
       ...FOOD_EMPTY_FORM,
-      category: 'Insumos - Café',
+      category: pageText.defaultIngredientCategory,
       minStock: '3',
     });
     focusProductForm();
@@ -240,39 +241,39 @@ export default function FoodProductsPage({
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <FoodMetric icon={Package} title="Total ítems" value={products.length} detail="menú e insumos" tone="emerald" />
-        <FoodMetric icon={Coffee} title="Menú" value={menuProducts.length} detail="productos de venta" tone="amber" />
-        <FoodMetric icon={Package} title="Insumos" value={ingredientProducts.length} detail="uso interno" tone="blue" />
-        <FoodMetric icon={AlertTriangle} title="Stock bajo" value={lowStock} detail="ítems" tone="red" />
+        <FoodMetric icon={Package} title="Total ítems" value={products.length} detail={pageText.totalDetail} tone="emerald" />
+        <FoodMetric icon={Coffee} title={pageText.menuMetricTitle} value={menuProducts.length} detail={pageText.menuMetricDetail} tone="amber" />
+        <FoodMetric icon={Package} title="Insumos" value={ingredientProducts.length} detail={pageText.ingredientMetricDetail} tone="blue" />
+        <FoodMetric icon={AlertTriangle} title="Stock bajo" value={lowStock} detail={pageText.lowStockDetail} tone="red" />
         <FoodMetric icon={CalendarDays} title="Por vencer" value={expiringProducts.length} detail="perecibles" tone="amber" />
       </section>
 
       {productsLoading && (
         <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
-          Cargando menú e insumos desde Supabase...
+          {pageText.loadingText}
         </div>
       )}
 
       <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-black uppercase tracking-wide text-amber-600">Cafetería / restaurante</p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">Menú e insumos</h3>
+            <p className="text-sm font-black uppercase tracking-wide text-amber-600">{pageText.kicker}</p>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">{pageText.title}</h3>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Administra por separado los productos que vendes al cliente y los insumos que usas en cocina.
+              {pageText.description}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2 rounded-3xl border border-white/80 bg-white/80 p-2 shadow-sm">
             <FoodViewButton
-              title="Menú"
-              detail={`${menuProducts.length} productos`}
+              title={pageText.menuTabTitle}
+              detail={`${menuProducts.length} ${pageText.menuTabDetail}`}
               active={view === 'menu'}
               onClick={() => selectView('menu')}
             />
             <FoodViewButton
               title="Insumos"
-              detail={`${ingredientProducts.length} insumos`}
+              detail={`${ingredientProducts.length} ${pageText.ingredientTabDetail}`}
               active={view === 'insumos'}
               onClick={() => selectView('insumos')}
             />
@@ -284,10 +285,10 @@ export default function FoodProductsPage({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900">
-              <Upload className="h-5 w-5" /> Importar menú e insumos desde Excel
+              <Upload className="h-5 w-5" /> {pageText.importTitle}
             </h3>
             <p className="mt-1 text-sm text-emerald-800">
-              Usa categorías como Menú - Café caliente, Menú - Postres, Insumos - Lácteos o Insumos - Desechables.
+              {pageText.importDescription}
             </p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -330,12 +331,12 @@ export default function FoodProductsPage({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h3 className="text-xl font-black text-slate-900">
-                  {view === 'menu' ? 'Productos del menú' : 'Insumos de cocina'}
+                  {view === 'menu' ? pageText.menuListTitle : pageText.ingredientsListTitle}
                 </h3>
                 <p className="text-sm text-slate-500">
                   {view === 'menu'
-                    ? 'Productos que se venden al cliente en la caja rápida.'
-                    : 'Materias primas, materiales y productos internos.'}
+                    ? pageText.menuListDescription
+                    : pageText.ingredientsListDescription}
                 </p>
               </div>
 
@@ -345,7 +346,7 @@ export default function FoodProductsPage({
                   onClick={prepareMenuForm}
                   className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-100"
                 >
-                  Agregar al menú
+                  {pageText.addMenuButton}
                 </button>
                 <button
                   type="button"
@@ -363,7 +364,7 @@ export default function FoodProductsPage({
                 <input
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder={view === 'menu' ? 'Buscar producto del menú...' : 'Buscar insumo...'}
+                  placeholder={view === 'menu' ? pageText.searchMenuPlaceholder : pageText.searchIngredientPlaceholder}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
@@ -383,6 +384,7 @@ export default function FoodProductsPage({
           {view === 'menu' ? (
             <MenuGrid
               products={visibleProducts}
+              pageText={pageText}
               pendingDeleteId={pendingDeleteId}
               setPendingDeleteId={setPendingDeleteId}
               editProduct={handleEditProduct}
@@ -393,6 +395,7 @@ export default function FoodProductsPage({
           ) : (
             <IngredientsList
               products={visibleProducts}
+              pageText={pageText}
               pendingDeleteId={pendingDeleteId}
               setPendingDeleteId={setPendingDeleteId}
               editProduct={handleEditProduct}
@@ -432,12 +435,12 @@ export default function FoodProductsPage({
   );
 }
 
-function MenuGrid({ products, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe }) {
+function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe }) {
   if (products.length === 0) {
     return (
       <EmptyFoodState
-        title="No hay productos del menú"
-        text="Agrega productos como capuchino, latte, postres, sanduches o combos."
+        title={pageText.emptyMenuTitle}
+        text={pageText.emptyMenuText}
       />
     );
   }
@@ -494,12 +497,12 @@ function MenuGrid({ products, pendingDeleteId, setPendingDeleteId, editProduct, 
   );
 }
 
-function IngredientsList({ products, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, expirationText }) {
+function IngredientsList({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, expirationText }) {
   if (products.length === 0) {
     return (
       <EmptyFoodState
-        title="No hay insumos registrados"
-        text="Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas."
+        title={pageText.emptyIngredientTitle}
+        text={pageText.emptyIngredientText}
       />
     );
   }
@@ -621,6 +624,73 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
       )}
     </div>
   );
+}
+
+
+function getFoodProductsPageTexts(businessType, businessConfig = {}) {
+  const isRestaurant = businessType === 'restaurante' || businessConfig?.label === 'Restaurante';
+
+  if (isRestaurant) {
+    return {
+      kicker: 'Restaurante',
+      title: 'Menú del restaurante e insumos de cocina',
+      description: 'Administra platos, bebidas, combos e insumos de cocina por separado para controlar costos y stock.',
+      totalDetail: 'platos e insumos',
+      menuMetricTitle: 'Platos',
+      menuMetricDetail: 'productos de venta',
+      ingredientMetricDetail: 'cocina y operación',
+      lowStockDetail: 'ítems críticos',
+      loadingText: 'Cargando menú del restaurante e insumos desde Supabase...',
+      menuTabTitle: 'Menú',
+      menuTabDetail: 'platos',
+      ingredientTabDetail: 'insumos',
+      importTitle: 'Importar menú e insumos del restaurante desde Excel',
+      importDescription: 'Usa categorías como Menú - Platos fuertes, Menú - Bebidas, Insumos - Carnes o Insumos - Verduras.',
+      menuListTitle: 'Platos y bebidas del menú',
+      ingredientsListTitle: 'Insumos de cocina',
+      menuListDescription: 'Productos que se venden al cliente en mesa, para llevar o delivery.',
+      ingredientsListDescription: 'Materias primas, bebidas, empaques y productos internos de operación.',
+      addMenuButton: 'Agregar plato',
+      defaultMenuCategory: 'Menú - Platos fuertes',
+      defaultIngredientCategory: 'Insumos - Carnes',
+      searchMenuPlaceholder: 'Buscar plato, bebida o combo...',
+      searchIngredientPlaceholder: 'Buscar insumo de cocina...',
+      emptyMenuTitle: 'No hay platos en el menú',
+      emptyMenuText: 'Agrega platos, bebidas, entradas, postres o combos para vender en el restaurante.',
+      emptyIngredientTitle: 'No hay insumos de cocina',
+      emptyIngredientText: 'Agrega insumos como arroz, pollo, carne, tomate, aceite, bebidas, empaques o servilletas.',
+    };
+  }
+
+  return {
+    kicker: 'Cafetería',
+    title: 'Menú e insumos',
+    description: 'Administra por separado los productos que vendes al cliente y los insumos que usas en cocina.',
+    totalDetail: 'menú e insumos',
+    menuMetricTitle: 'Menú',
+    menuMetricDetail: 'productos de venta',
+    ingredientMetricDetail: 'uso interno',
+    lowStockDetail: 'ítems',
+    loadingText: 'Cargando menú e insumos desde Supabase...',
+    menuTabTitle: 'Menú',
+    menuTabDetail: 'productos',
+    ingredientTabDetail: 'insumos',
+    importTitle: 'Importar menú e insumos desde Excel',
+    importDescription: 'Usa categorías como Menú - Café caliente, Menú - Postres, Insumos - Lácteos o Insumos - Desechables.',
+    menuListTitle: 'Productos del menú',
+    ingredientsListTitle: 'Insumos de cocina',
+    menuListDescription: 'Productos que se venden al cliente en la caja rápida.',
+    ingredientsListDescription: 'Materias primas, materiales y productos internos.',
+    addMenuButton: 'Agregar al menú',
+    defaultMenuCategory: 'Menú - Café caliente',
+    defaultIngredientCategory: 'Insumos - Café',
+    searchMenuPlaceholder: 'Buscar producto del menú...',
+    searchIngredientPlaceholder: 'Buscar insumo...',
+    emptyMenuTitle: 'No hay productos del menú',
+    emptyMenuText: 'Agrega productos como capuchino, latte, postres, sanduches o combos.',
+    emptyIngredientTitle: 'No hay insumos registrados',
+    emptyIngredientText: 'Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas.',
+  };
 }
 
 function FoodViewButton({ title, detail, active, onClick }) {

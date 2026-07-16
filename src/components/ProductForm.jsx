@@ -19,6 +19,7 @@ export default function ProductForm({
   const [scannerOpen, setScannerOpen] = useState(false);
   const isNewCategory = form.category === '__new__';
   const extraLabels = businessConfig?.extraLabels || {};
+  const isRestaurantBusiness = businessConfig?.label === 'Restaurante';
   const isFoodProductMode = businessConfig?.productMode === 'menu-inventory';
   const isFoodIngredientMode = isFoodProductMode && foodFormMode === 'insumo';
   const isFoodMenuMode = isFoodProductMode && foodFormMode !== 'insumo';
@@ -28,12 +29,22 @@ export default function ProductForm({
     isFoodProductMode,
     isFoodIngredientMode,
     isFoodMenuMode,
+    isRestaurantBusiness,
   });
 
-  const categoryOptions = getCategoryOptions(productCategories, foodFormMode, isFoodProductMode, businessConfig?.defaultCategories);
+  const categoryOptions = getCategoryOptions(
+    productCategories,
+    foodFormMode,
+    isFoodProductMode,
+    businessConfig?.defaultCategories
+  );
 
   function generateProductBarcode() {
-    const businessType = businessConfig?.label === 'Tienda de ropa' ? 'ropa' : 'general';
+    const businessType = businessConfig?.label === 'Tienda de ropa'
+      ? 'ropa'
+      : isRestaurantBusiness
+        ? 'restaurante'
+        : 'general';
     const code = generateInternalBarcode(businessType);
     setForm({ ...form, sku: form.sku || code, barcode: code });
   }
@@ -48,7 +59,7 @@ export default function ProductForm({
         <div>
           {isFoodProductMode && (
             <span className={`mb-2 inline-flex rounded-full px-3 py-1 text-xs font-black ${isFoodIngredientMode ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-              {isFoodIngredientMode ? 'Insumo de cocina' : 'Producto del menú'}
+              {isFoodIngredientMode ? modeText.badgeIngredient : modeText.badgeMenu}
             </span>
           )}
           <h3 className="text-xl font-bold">{modeText.title}</h3>
@@ -99,9 +110,9 @@ export default function ProductForm({
         )}
 
         {isFoodIngredientMode ? (
-          <IngredientFields form={form} updateField={updateField} />
+          <IngredientFields form={form} updateField={updateField} isRestaurantBusiness={isRestaurantBusiness} />
         ) : isFoodMenuMode ? (
-          <MenuFields form={form} updateField={updateField} />
+          <MenuFields form={form} updateField={updateField} isRestaurantBusiness={isRestaurantBusiness} />
         ) : (
           <StandardFields form={form} updateField={updateField} />
         )}
@@ -159,44 +170,44 @@ export default function ProductForm({
               label="Proveedor / marca"
               value={form.brand}
               onChange={value => updateField('brand', value)}
-              placeholder="Ej: Proveedor local, Supermaxi"
+              placeholder={isRestaurantBusiness ? 'Ej: proveedor de carnes, mercado, distribuidor' : 'Ej: Proveedor local, Supermaxi'}
             />
 
             <Field
               label="Unidad / presentación"
               value={form.size}
               onChange={value => updateField('size', value)}
-              placeholder="Ej: 1L, kg, caja, paquete"
+              placeholder={isRestaurantBusiness ? 'Ej: kg, libra, caja, paquete, litro' : 'Ej: 1L, kg, caja, paquete'}
             />
 
             <Field
               label="Uso en cocina"
               value={form.color}
               onChange={value => updateField('color', value)}
-              placeholder="Ej: Bebidas calientes, postres"
+              placeholder={isRestaurantBusiness ? 'Ej: plato fuerte, guarnición, salsa, bebida' : 'Ej: Bebidas calientes, postres'}
             />
           </div>
         ) : isFoodMenuMode ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field
-              label="Marca / proveedor"
+              label={isRestaurantBusiness ? 'Área / línea' : 'Marca / proveedor'}
               value={form.brand}
               onChange={value => updateField('brand', value)}
-              placeholder="Ej: Casa, proveedor local"
+              placeholder={isRestaurantBusiness ? 'Ej: Cocina, parrilla, bar, postres' : 'Ej: Casa, proveedor local'}
             />
 
             <Field
-              label="Tamaño / presentación"
+              label={isRestaurantBusiness ? 'Porción / presentación' : 'Tamaño / presentación'}
               value={form.size}
               onChange={value => updateField('size', value)}
-              placeholder="Ej: 8oz, 12oz, porción, grande"
+              placeholder={isRestaurantBusiness ? 'Ej: personal, familiar, 1 plato, combo' : 'Ej: 8oz, 12oz, porción, grande'}
             />
 
             <Field
-              label="Variante / preparación"
+              label={isRestaurantBusiness ? 'Tipo / preparación' : 'Variante / preparación'}
               value={form.color}
               onChange={value => updateField('color', value)}
-              placeholder="Ej: Caliente, frío, sin azúcar"
+              placeholder={isRestaurantBusiness ? 'Ej: asado, frito, al jugo, vegetariano' : 'Ej: Caliente, frío, sin azúcar'}
             />
           </div>
         ) : businessConfig?.productExtraFields && (
@@ -312,7 +323,7 @@ export default function ProductForm({
   );
 }
 
-function MenuFields({ form, updateField }) {
+function MenuFields({ form, updateField, isRestaurantBusiness }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -327,19 +338,19 @@ function MenuFields({ form, updateField }) {
         />
 
         <Field
-          label="Costo estimado"
+          label={isRestaurantBusiness ? 'Costo estimado del plato' : 'Costo estimado'}
           type="number"
           min="0"
           step="0.01"
           value={form.cost}
           onChange={value => updateField('cost', value)}
-          placeholder="Costo aproximado"
+          placeholder={isRestaurantBusiness ? 'Costo de preparación' : 'Costo aproximado'}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Disponible actual"
+          label={isRestaurantBusiness ? 'Disponible para vender' : 'Disponible actual'}
           type="number"
           min="0"
           value={form.stock}
@@ -348,7 +359,7 @@ function MenuFields({ form, updateField }) {
         />
 
         <Field
-          label="Mínimo disponible"
+          label={isRestaurantBusiness ? 'Mínimo operativo' : 'Mínimo disponible'}
           type="number"
           min="0"
           value={form.minStock}
@@ -360,16 +371,20 @@ function MenuFields({ form, updateField }) {
   );
 }
 
-function IngredientFields({ form, updateField }) {
+function IngredientFields({ form, updateField, isRestaurantBusiness }) {
   return (
     <>
       <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-800">
         <p className="font-bold">Este ítem es un insumo interno.</p>
-        <p className="mt-1">No necesita precio de venta. Se usará para controlar stock, costos y caducidad.</p>
+        <p className="mt-1">
+          {isRestaurantBusiness
+            ? 'No necesita precio de venta. Se usará para stock de cocina, costos por receta y caducidad.'
+            : 'No necesita precio de venta. Se usará para controlar stock, costos y caducidad.'}
+        </p>
       </div>
 
       <Field
-        label="Costo de compra"
+        label={isRestaurantBusiness ? 'Costo de compra del insumo' : 'Costo de compra'}
         type="number"
         min="0"
         step="0.01"
@@ -380,7 +395,7 @@ function IngredientFields({ form, updateField }) {
 
       <div className="grid grid-cols-2 gap-3">
         <Field
-          label="Stock actual del insumo"
+          label={isRestaurantBusiness ? 'Stock actual en cocina' : 'Stock actual del insumo'}
           type="number"
           min="0"
           step="0.001"
@@ -390,7 +405,7 @@ function IngredientFields({ form, updateField }) {
         />
 
         <Field
-          label="Stock mínimo del insumo"
+          label={isRestaurantBusiness ? 'Stock mínimo en cocina' : 'Stock mínimo del insumo'}
           type="number"
           min="0"
           step="0.001"
@@ -468,42 +483,62 @@ function getCategoryOptions(productCategories, foodFormMode, isFoodProductMode, 
   return filtered.length > 0 ? filtered : categories;
 }
 
-function getFormTexts({ editingId, isFoodProductMode, isFoodIngredientMode, isFoodMenuMode }) {
+function getFormTexts({ editingId, isFoodProductMode, isFoodIngredientMode, isFoodMenuMode, isRestaurantBusiness }) {
   if (isFoodIngredientMode) {
     return {
+      badgeIngredient: 'Insumo de cocina',
+      badgeMenu: isRestaurantBusiness ? 'Plato del menú' : 'Producto del menú',
       title: editingId ? 'Editar insumo' : 'Agregar insumo',
       subtitle: editingId
         ? 'Actualiza el insumo seleccionado.'
-        : 'Registra una materia prima o producto interno de cocina.',
+        : isRestaurantBusiness
+          ? 'Registra materia prima, bebidas, empaques o insumos de cocina.'
+          : 'Registra una materia prima o producto interno de cocina.',
       nameLabel: 'Nombre del insumo',
-      namePlaceholder: 'Ej: Leche 1L, café en grano, vasos 12oz',
+      namePlaceholder: isRestaurantBusiness
+        ? 'Ej: Pollo, arroz, tomate, aceite, servilletas'
+        : 'Ej: Leche 1L, café en grano, vasos 12oz',
       categoryLabel: 'Categoría del insumo',
       categoryPlaceholder: 'Seleccionar categoría de insumo',
-      newCategoryPlaceholder: 'Ej: Insumos - Lácteos',
+      newCategoryPlaceholder: isRestaurantBusiness ? 'Ej: Insumos - Carnes' : 'Ej: Insumos - Lácteos',
       descriptionLabel: 'Descripción / notas del insumo',
-      descriptionPlaceholder: 'Ej: proveedor, uso, condiciones de almacenamiento...',
+      descriptionPlaceholder: isRestaurantBusiness
+        ? 'Ej: proveedor, almacenamiento, rendimiento, fecha de compra...'
+        : 'Ej: proveedor, uso, condiciones de almacenamiento...',
       submitLabel: editingId ? 'Actualizar insumo' : 'Guardar insumo',
     };
   }
 
   if (isFoodMenuMode) {
     return {
-      title: editingId ? 'Editar producto del menú' : 'Agregar producto al menú',
+      badgeIngredient: 'Insumo de cocina',
+      badgeMenu: isRestaurantBusiness ? 'Plato del menú' : 'Producto del menú',
+      title: editingId
+        ? isRestaurantBusiness ? 'Editar plato del menú' : 'Editar producto del menú'
+        : isRestaurantBusiness ? 'Agregar plato al menú' : 'Agregar producto al menú',
       subtitle: editingId
-        ? 'Actualiza el producto que vendes al cliente.'
-        : 'Registra una bebida, plato, postre o combo para vender.',
-      nameLabel: 'Nombre del producto del menú',
-      namePlaceholder: 'Ej: Capuchino, cheesecake, sanduche, combo desayuno',
+        ? isRestaurantBusiness ? 'Actualiza el plato o bebida seleccionada.' : 'Actualiza el producto que vendes al cliente.'
+        : isRestaurantBusiness ? 'Registra platos, bebidas, entradas, postres o combos para vender.' : 'Registra una bebida, plato, postre o combo para vender.',
+      nameLabel: isRestaurantBusiness ? 'Nombre del plato o bebida' : 'Nombre del producto del menú',
+      namePlaceholder: isRestaurantBusiness
+        ? 'Ej: Almuerzo ejecutivo, hamburguesa, jugo natural'
+        : 'Ej: Capuchino, cheesecake, sanduche, combo desayuno',
       categoryLabel: 'Categoría del menú',
       categoryPlaceholder: 'Seleccionar categoría del menú',
-      newCategoryPlaceholder: 'Ej: Menú - Café caliente',
-      descriptionLabel: 'Descripción del producto del menú',
-      descriptionPlaceholder: 'Ej: ingredientes visibles, tamaño, preparación...',
-      submitLabel: editingId ? 'Actualizar producto del menú' : 'Guardar producto del menú',
+      newCategoryPlaceholder: isRestaurantBusiness ? 'Ej: Menú - Platos fuertes' : 'Ej: Menú - Café caliente',
+      descriptionLabel: isRestaurantBusiness ? 'Descripción del plato' : 'Descripción del producto del menú',
+      descriptionPlaceholder: isRestaurantBusiness
+        ? 'Ej: ingredientes principales, acompañantes, porción, preparación...'
+        : 'Ej: ingredientes visibles, tamaño, preparación...',
+      submitLabel: editingId
+        ? isRestaurantBusiness ? 'Actualizar plato' : 'Actualizar producto del menú'
+        : isRestaurantBusiness ? 'Guardar plato' : 'Guardar producto del menú',
     };
   }
 
   return {
+    badgeIngredient: 'Insumo de cocina',
+    badgeMenu: 'Producto del menú',
     title: editingId ? 'Editar producto' : 'Agregar nuevo producto',
     subtitle: editingId ? 'Actualiza la información del producto seleccionado.' : 'Registra un producto nuevo en el inventario.',
     nameLabel: 'Nombre del producto',

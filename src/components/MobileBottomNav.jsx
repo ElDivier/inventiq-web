@@ -42,7 +42,7 @@ export default function MobileBottomNav({ menu, active, setActive, mobileMoreOpe
                   }`}
                 >
                   <Icon className="h-5 w-5" />
-                  <span>{item.label}</span>
+                  <span>{item.displayLabel || item.label}</span>
                 </button>
               );
             })}
@@ -73,7 +73,7 @@ export default function MobileBottomNav({ menu, active, setActive, mobileMoreOpe
                 }`}
               >
                 <Icon className="mb-1 h-5 w-5" />
-                <span>{item.label}</span>
+                <span>{item.displayLabel || item.label}</span>
               </button>
             );
           })}

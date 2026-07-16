@@ -36,7 +36,7 @@ export default function DesktopSidebar({
                 className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${isActive ? 'bg-emerald-500/80 shadow-lg' : 'text-emerald-50 hover:bg-white/10'}`}
               >
                 <Icon className="h-5 w-5" />
-                <span className="font-medium">{item.label}</span>
+                <span className="font-medium">{item.displayLabel || item.label}</span>
               </button>
             );
           })}

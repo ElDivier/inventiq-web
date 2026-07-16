@@ -25,7 +25,7 @@ export default function PageHeader({ pageInfo, currentUser, onAddProduct }) {
           className="hidden rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 sm:inline-flex sm:items-center"
         >
           <Plus className="mr-2 h-5 w-5" />
-          Agregar producto
+          {pageInfo.actionLabel || 'Agregar producto'}
         </button>
       </div>
     </header>
