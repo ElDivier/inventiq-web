@@ -54,11 +54,11 @@ export default function ProductForm({
   }
 
   return (
-    <form onSubmit={saveProduct} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
+    <form onSubmit={saveProduct} className="iq-form-panel order-1 xl:order-2">
       <div className="mb-6 flex items-center justify-between">
         <div>
           {isFoodProductMode && (
-            <span className={`mb-2 inline-flex rounded-full px-3 py-1 text-xs font-black ${isFoodIngredientMode ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+            <span className={`mb-2 inline-flex rounded-full px-3 py-1 text-xs font-black ${isFoodIngredientMode ? 'bg-amber-50 text-amber-700' : 'bg-cyan-50 text-cyan-800'}`}>
               {isFoodIngredientMode ? modeText.badgeIngredient : modeText.badgeMenu}
             </span>
           )}
@@ -72,7 +72,7 @@ export default function ProductForm({
       </div>
 
       {notice && (
-        <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+        <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
           {notice.message}
         </div>
       )}
@@ -90,7 +90,7 @@ export default function ProductForm({
           <select
             value={form.category}
             onChange={event => updateField('category', event.target.value)}
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+            className="iq-input"
           >
             <option value="">{modeText.categoryPlaceholder}</option>
             {categoryOptions.map(category => (
@@ -136,7 +136,7 @@ export default function ProductForm({
             <button
               type="button"
               onClick={generateProductBarcode}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+              className="iq-primary-button w-full"
             >
               <Plus className="h-4 w-4" />
               Generar código
@@ -145,7 +145,7 @@ export default function ProductForm({
             <button
               type="button"
               onClick={() => setScannerOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+              className="iq-secondary-button w-full"
             >
               <Camera className="h-4 w-4" />
               Escanear existente
@@ -153,7 +153,7 @@ export default function ProductForm({
           </div>
 
           <p className="mt-2 text-xs text-slate-500">
-            Puedes generar un código interno para InventiQ o escribir/escanear el código que el ítem ya trae.
+            Puedes generar un código interno para INVENTIQ o escribir/escanear el código que el ítem ya trae.
           </p>
 
           {scannerOpen && (
@@ -265,7 +265,7 @@ export default function ProductForm({
           <textarea
             value={form.description}
             onChange={event => updateField('description', event.target.value)}
-            className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+            className="iq-input min-h-24 resize-y"
             placeholder={modeText.descriptionPlaceholder}
           />
         </label>
@@ -290,7 +290,7 @@ export default function ProductForm({
           ) : (
             <div>
               <p className="font-semibold text-slate-700">Subir imagen</p>
-              <p>PNG, JPG o WEBP. InventiQ optimiza la imagen automáticamente.</p>
+              <p>PNG, JPG o WEBP. INVENTIQ optimiza la imagen automáticamente.</p>
             </div>
           )}
 
@@ -306,14 +306,14 @@ export default function ProductForm({
           <button
             type="button"
             onClick={resetForm}
-            className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50"
+            className="iq-secondary-button"
           >
             Cancelar
           </button>
 
           <button
             type="submit"
-            className="rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700"
+            className="iq-primary-button"
           >
             {modeText.submitLabel}
           </button>

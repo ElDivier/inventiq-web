@@ -63,7 +63,7 @@ export function buildInventoryMovements(purchases, sales) {
       type: 'Compra',
       quantity: `+${item.quantity}`,
       detail: `${purchase.code} · ${purchase.provider}`,
-      tone: 'emerald',
+      tone: 'cyan',
     }));
   });
 

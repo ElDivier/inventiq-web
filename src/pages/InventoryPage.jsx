@@ -171,7 +171,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
     function badgeClasses(tone) {
       if (tone === 'red') return 'bg-red-50 text-red-700';
       if (tone === 'amber') return 'bg-amber-50 text-amber-700';
-      return 'bg-emerald-50 text-emerald-700';
+      return 'bg-cyan-50 text-cyan-800';
     }
 
     return (
@@ -181,7 +181,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
           <p className="text-sm text-slate-500">{subtitle}</p>
         </div>
         <div className="space-y-3">
-          {items.length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{empty}</p>}
+          {items.length === 0 && <p className="rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">{empty}</p>}
           {items.map(item => (
             <div key={item.key} className="flex items-start justify-between gap-3 rounded-2xl border border-slate-100 p-4">
               <div>
@@ -208,13 +208,13 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
         <Metric icon={ShoppingCart} label="Sin stock" value={noStock} note="productos" color="red" />
       </section>
 
-      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+      <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-emerald-900">Control de inventario</h3>
-            <p className="text-sm text-emerald-800">{alerts.length} productos con alerta, {criticalProducts.length} sin stock{businessConfig.usesExpiration ? `, ${expiringProducts.length} próximos a caducar y ${expiredProducts.length} vencidos` : '. Este tipo de negocio no usa caducidad.'}</p>
+            <h3 className="text-lg font-bold text-cyan-950">Control de inventario</h3>
+            <p className="text-sm text-cyan-900">{alerts.length} productos con alerta, {criticalProducts.length} sin stock{businessConfig.usesExpiration ? `, ${expiringProducts.length} próximos a caducar y ${expiredProducts.length} vencidos` : '. Este tipo de negocio no usa caducidad.'}</p>
           </div>
-          <button onClick={exportInventory} className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">
+          <button onClick={exportInventory} className="rounded-2xl bg-cyan-700 px-5 py-3 font-bold text-white hover:bg-cyan-800">
             <Download className="mr-2 inline h-5 w-5" />Exportar inventario
           </button>
         </div>
@@ -223,7 +223,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
       <section className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {views.map(view => (
-            <button key={view} onClick={() => setInventoryView(view)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${inventoryView === view ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+            <button key={view} onClick={() => setInventoryView(view)} className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${inventoryView === view ? 'bg-cyan-700 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
               {view}
             </button>
           ))}
@@ -241,7 +241,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
               {expirationAlerts.length > 0 && <span className="text-xs font-bold text-slate-500">{expirationAlerts.length} alerta(s)</span>}
             </div>
             <div className="space-y-3">
-              {expirationAlerts.length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen productos vencidos o próximos a caducar.</p>}
+              {expirationAlerts.length === 0 && <p className="rounded-2xl bg-cyan-50 p-4 text-cyan-800">No existen productos vencidos o próximos a caducar.</p>}
               {expirationAlertsData.items.map(product => {
                 const exp = expirationText(product);
                 return (
@@ -268,7 +268,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
               {alerts.length > 0 && <span className="text-xs font-bold text-slate-500">{alerts.length} alerta(s)</span>}
             </div>
             <div className="space-y-3">
-              {alerts.length === 0 && <p className="rounded-2xl bg-emerald-50 p-4 text-emerald-700">No existen alertas críticas de inventario.</p>}
+              {alerts.length === 0 && <p className="rounded-2xl bg-cyan-50 p-4 text-cyan-800">No existen alertas críticas de inventario.</p>}
               {inventoryAlertsData.items.map(product => {
                 const s = statusText(product);
                 return (
@@ -305,7 +305,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
                   <p className="text-sm text-slate-500">{movement.type} · {movement.detail}</p>
                   <p className="text-xs text-slate-400">{movement.date}</p>
                 </div>
-                <span className={`rounded-full px-4 py-2 text-sm font-extrabold ${movement.tone === 'emerald' ? 'bg-emerald-50 text-emerald-700' : movement.tone === 'amber' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
+                <span className={`rounded-full px-4 py-2 text-sm font-extrabold ${['emerald', 'cyan'].includes(movement.tone) ? 'bg-cyan-50 text-cyan-800' : movement.tone === 'amber' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'}`}>
                   {movement.quantity}
                 </span>
               </div>
@@ -322,7 +322,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
             <p className="mb-5 text-sm text-slate-500">Úsalo cuando el conteo físico no coincide con el sistema.</p>
 
             {adjustNotice && (
-              <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${adjustNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${adjustNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
                 {adjustNotice.message}
               </div>
             )}
@@ -332,30 +332,30 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
                 <div className="relative mb-3">
                   <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                  <input value={adjustProductSearch} onChange={e => handleAdjustProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar por nombre, SKU o código de barras..." />
+                  <input value={adjustProductSearch} onChange={e => handleAdjustProductSearch(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-cyan-200" placeholder="Buscar por nombre, SKU o código de barras..." />
                 </div>
                 {adjustProductSearch && adjustSearchResults.length > 0 && !selectedProduct && (
                   <div className="mb-3 max-h-56 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-sm">
                     {adjustSearchResults.map(product => (
-                      <button type="button" key={product.id} onClick={() => selectAdjustProduct(product.id)} className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50">
+                      <button type="button" key={product.id} onClick={() => selectAdjustProduct(product.id)} className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-cyan-50">
                         <span>
                           <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
                           <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
                         </span>
-                        <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                        <span className="text-xs font-bold text-cyan-800">Stock {product.stock}</span>
                       </button>
                     ))}
                   </div>
                 )}
                 {selectedProduct ? (
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                        <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
-                        <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · Stock actual {selectedProduct.stock}</p>
+                        <p className="text-xs font-bold uppercase text-cyan-800">Producto seleccionado</p>
+                        <p className="mt-1 font-bold text-cyan-950">{getProductDisplayName(selectedProduct)}</p>
+                        <p className="text-sm text-cyan-900">{selectedProduct.sku || 'Sin SKU'} · Stock actual {selectedProduct.stock}</p>
                       </div>
-                      <button type="button" onClick={() => { setAdjustForm({ ...adjustForm, productId: '', stock: '' }); setAdjustProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                      <button type="button" onClick={() => { setAdjustForm({ ...adjustForm, productId: '', stock: '' }); setAdjustProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-cyan-800 hover:bg-cyan-100">Cambiar</button>
                     </div>
                   </div>
                 ) : (
@@ -366,7 +366,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
               <Field label="Stock contado físicamente" type="number" min="0" value={adjustForm.stock} onChange={v => setAdjustForm({ ...adjustForm, stock: v })} placeholder="Ej: 18" />
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-slate-700">Motivo</span>
-                <select value={adjustForm.reason} onChange={e => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+                <select value={adjustForm.reason} onChange={e => setAdjustForm({ ...adjustForm, reason: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200">
                   <option>Conteo físico</option>
                   <option>Pérdida / daño</option>
                   {businessConfig.usesExpiration && <option>Producto vencido</option>}
@@ -380,7 +380,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
                   Diferencia: <strong>{Number(adjustForm.stock || 0) - Number(selectedProduct.stock || 0)}</strong>
                 </div>
               )}
-              <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700">Guardar ajuste</button>
+              <button type="submit" className="iq-primary-button iq-action-wide">Guardar ajuste</button>
             </div>
           </form>
 

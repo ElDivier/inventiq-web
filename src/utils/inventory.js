@@ -17,8 +17,8 @@ export function statusText(product) {
 
   return {
     label: 'Disponible',
-    color: 'text-emerald-600',
-    badge: 'bg-emerald-50 text-emerald-700',
+    color: 'text-cyan-700',
+    badge: 'bg-cyan-50 text-cyan-800',
   };
 }
 
@@ -69,8 +69,8 @@ export function expirationText(product) {
 
   return {
     label: 'Vigente',
-    color: 'text-emerald-600',
-    badge: 'bg-emerald-50 text-emerald-700',
+    color: 'text-cyan-700',
+    badge: 'bg-cyan-50 text-cyan-800',
     days,
   };
 }

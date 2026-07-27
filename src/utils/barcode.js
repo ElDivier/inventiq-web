@@ -76,7 +76,7 @@ export function buildBarcodeLabelHtml(productsToPrint, options = {}) {
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>Etiquetas InventiQ</title>
+        <title>Etiquetas INVENTIQ</title>
         <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
         <style>
           @page { size: ${pageWidth}mm ${labelHeight}mm; margin: 0; }
@@ -89,7 +89,7 @@ export function buildBarcodeLabelHtml(productsToPrint, options = {}) {
           svg { width: ${Math.max(labelWidth - 4, 20)}mm; max-height: ${Math.max(labelHeight - 12, 12)}mm; }
           .code { margin-top: 1mm; font-size: 9px; font-weight: 700; letter-spacing: 0.4px; }
           .no-print { margin: 10px; text-align: center; }
-          .no-print button { background: #059669; color: white; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+          .no-print button { background: linear-gradient(105deg, #126bfa 0%, #0ea5e9 54%, #12d6c5 100%); color: white; border: 0; border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
           @media print { .no-print { display: none; } }
         </style>
       </head>

@@ -1,18 +1,28 @@
-export default function QuickAction({ icon: Icon, label, onClick, tone = 'emerald' }) {
+import { ArrowUpRight } from 'lucide-react';
+
+export default function QuickAction({ icon: Icon, label, onClick, tone = 'cyan', helper }) {
   const styles = {
-    emerald: 'bg-emerald-50 text-emerald-700',
-    teal: 'bg-teal-50 text-teal-700',
-    blue: 'bg-blue-50 text-blue-700',
-    slate: 'bg-slate-50 text-slate-700',
+    emerald: 'bg-cyan-50 text-cyan-700 group-hover:bg-cyan-100',
+    cyan: 'bg-cyan-50 text-cyan-700 group-hover:bg-cyan-100',
+    teal: 'bg-sky-50 text-sky-700 group-hover:bg-sky-100',
+    blue: 'bg-blue-50 text-blue-700 group-hover:bg-blue-100',
+    slate: 'bg-slate-100 text-slate-700 group-hover:bg-slate-200',
   };
 
   return (
-    <button onClick={onClick} className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${styles[tone]}`}>
-        <Icon className="h-6 w-6" />
+    <button
+      type="button"
+      onClick={onClick}
+      className="group dashboard-quick-action"
+    >
+      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition ${styles[tone] || styles.cyan}`}>
+        <Icon className="h-5 w-5" />
       </div>
-      <p className="text-xs font-semibold text-slate-500">Acción rápida</p>
-      <p className="mt-1 text-base font-extrabold text-slate-900 sm:text-lg">{label}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-black text-[#10233f]">{label}</p>
+        <p className="truncate text-xs font-semibold text-slate-400">{helper || 'Acceso rápido'}</p>
+      </div>
+      <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-cyan-600" />
     </button>
   );
 }

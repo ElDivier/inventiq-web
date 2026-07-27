@@ -88,7 +88,8 @@ function normalizePhone(phone) {
 
 function MetricCard({ icon: Icon, label, value, note, tone = 'emerald' }) {
   const tones = {
-    emerald: 'bg-emerald-50 text-emerald-700',
+    emerald: 'bg-cyan-50 text-cyan-800',
+    cyan: 'bg-cyan-50 text-cyan-800',
     amber: 'bg-amber-50 text-amber-700',
     red: 'bg-red-50 text-red-700',
     blue: 'bg-blue-50 text-blue-700',
@@ -121,7 +122,7 @@ function Field({ label, value, onChange, type = 'text', placeholder = '', childr
           onChange={event => onChange(event.target.value)}
           placeholder={placeholder}
           required={required}
-          className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+          className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
         />
       )}
     </label>
@@ -282,14 +283,14 @@ export default function ProvidersPage({
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <MetricCard icon={Truck} label="Proveedores" value={providers.length} note="registrados" tone="emerald" />
+        <MetricCard icon={Truck} label="Proveedores" value={providers.length} note="registrados" tone="cyan" />
         <MetricCard icon={Package} label="Reposición" value={productsForReorder.length} note="con mínimo configurado" tone="amber" />
         <MetricCard icon={AlertTriangle} label="Sin proveedor" value={withoutProviderCount} note="por asignar" tone="red" />
         <MetricCard icon={ClipboardList} label="Categorías cubiertas" value={providersWithCategory} note="proveedores con categoría" tone="blue" />
       </section>
 
       {providersLoading && (
-        <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+        <div className="rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">
           Cargando proveedores desde Supabase...
         </div>
       )}
@@ -323,7 +324,7 @@ export default function ProvidersPage({
             <button
               type="button"
               onClick={() => setReorderFilter('with-provider')}
-              className={`rounded-2xl px-4 py-2 text-sm font-bold transition ${reorderFilter === 'with-provider' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-emerald-700 hover:bg-emerald-50'}`}
+              className={`rounded-2xl px-4 py-2 text-sm font-bold transition ${reorderFilter === 'with-provider' ? 'bg-cyan-700 text-white shadow-sm' : 'bg-white text-cyan-800 hover:bg-cyan-50'}`}
             >
               Con proveedor ({withProviderCount})
             </button>
@@ -367,7 +368,7 @@ export default function ProvidersPage({
                       </div>
                     </div>
 
-                    <div className={`mt-3 rounded-2xl p-3 text-sm font-bold ${provider ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    <div className={`mt-3 rounded-2xl p-3 text-sm font-bold ${provider ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
                       Proveedor: {provider ? provider.name : 'Sin proveedor asignado'}
                     </div>
 
@@ -376,8 +377,9 @@ export default function ProvidersPage({
                         type="button"
                         onClick={() => startPurchaseFromSuggestion(product, provider)}
                         disabled={!provider}
-                        className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                        className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2.5 text-xs font-black tracking-wide text-white shadow-[0_10px_24px_rgba(14,116,144,0.28)] transition hover:scale-[1.02] hover:from-blue-700 hover:to-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:bg-none disabled:text-slate-500 disabled:shadow-none"
                       >
+                        <ShoppingCart className="h-4 w-4" />
                         Crear compra
                       </button>
                       {!provider && (
@@ -387,8 +389,9 @@ export default function ProvidersPage({
                             updateForm('category', getProductCategory(product));
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
-                          className="rounded-2xl border border-red-200 bg-white px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-50"
+                          className="inline-flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-black tracking-wide text-amber-800 shadow-sm transition hover:scale-[1.02] hover:bg-amber-100"
                         >
+                          <Plus className="h-4 w-4" />
                           Asignar categoría
                         </button>
                       )}
@@ -433,7 +436,7 @@ export default function ProvidersPage({
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-extrabold text-slate-900">{editingProviderId ? 'Editar proveedor' : 'Registrar proveedor'}</h3>
-              <p className="text-sm text-slate-500">Asigna una categoría para que InventiQ sugiera reposiciones.</p>
+              <p className="text-sm text-slate-500">Asigna una categoría para que INVENTIQ sugiera reposiciones.</p>
             </div>
             <button type="button" onClick={resetProviderForm} className="rounded-2xl p-2 text-slate-500 hover:bg-slate-50">
               <RotateCcw className="h-5 w-5" />
@@ -441,7 +444,7 @@ export default function ProvidersPage({
           </div>
 
           {providerNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-bold ${providerNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-bold ${providerNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {providerNotice.message}
             </div>
           )}
@@ -457,7 +460,7 @@ export default function ProvidersPage({
                 onChange={event => updateForm('category', event.target.value)}
                 placeholder="Ej. Bebidas, limpieza, ropa..."
                 required
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
               />
               <datalist id="provider-categories">
                 {productCategories.map(category => <option key={category} value={category} />)}
@@ -475,12 +478,12 @@ export default function ProvidersPage({
                 value={providerForm.notes || ''}
                 onChange={event => updateForm('notes', event.target.value)}
                 placeholder="Productos, condiciones, horarios de atención..."
-                className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
               />
             </label>
           </div>
 
-          <button type="submit" className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700">
+          <button type="submit" className="iq-primary-button iq-action-wide mt-5">
             {editingProviderId ? <Save className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
             {editingProviderId ? 'Guardar cambios' : 'Guardar proveedor'}
           </button>
@@ -499,7 +502,7 @@ export default function ProvidersPage({
                   value={providerSearch}
                   onChange={event => setProviderSearch(event.target.value)}
                   placeholder="Buscar proveedor..."
-                  className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
             </div>
@@ -524,7 +527,7 @@ export default function ProvidersPage({
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <h4 className="text-lg font-extrabold text-slate-900">{provider.name}</h4>
-                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700">{provider.category || 'Sin categoría'}</span>
+                            <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-extrabold text-cyan-800">{provider.category || 'Sin categoría'}</span>
                             {categoryProducts.length > 0 && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-extrabold text-amber-700">{categoryProducts.length} por reponer</span>}
                           </div>
                           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
@@ -536,17 +539,17 @@ export default function ProvidersPage({
                         </div>
 
                         <div className="flex flex-wrap gap-2 lg:justify-end">
-                          <button type="button" onClick={() => copyOrderForProvider(provider)} className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 hover:bg-slate-50">Copiar pedido</button>
-                          <button type="button" onClick={() => openWhatsApp(provider)} className="rounded-2xl border border-emerald-200 px-3 py-2 text-xs font-extrabold text-emerald-700 hover:bg-emerald-50">WhatsApp</button>
-                          <button type="button" onClick={() => openEmail(provider)} className="rounded-2xl border border-blue-200 px-3 py-2 text-xs font-extrabold text-blue-700 hover:bg-blue-50">Correo</button>
-                          <button type="button" onClick={() => editProvider(provider)} className="rounded-2xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"><Edit className="h-4 w-4" /></button>
+                          <button type="button" onClick={() => copyOrderForProvider(provider)} className="iq-action-neutral">Copiar pedido</button>
+                          <button type="button" onClick={() => openWhatsApp(provider)} className="iq-action-secondary">WhatsApp</button>
+                          <button type="button" onClick={() => openEmail(provider)} className="iq-action-secondary">Correo</button>
+                          <button type="button" onClick={() => editProvider(provider)} className="iq-action-icon" title="Editar proveedor"><Edit className="h-4 w-4" /></button>
                           {isDeleting ? (
                             <div className="flex gap-2">
-                              <button type="button" onClick={() => deleteProvider(provider.id)} className="rounded-2xl bg-red-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-red-700">Confirmar</button>
-                              <button type="button" onClick={() => setPendingDeleteProviderId(null)} className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-extrabold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                              <button type="button" onClick={() => deleteProvider(provider.id)} className="iq-action-danger iq-action-danger-solid">Confirmar</button>
+                              <button type="button" onClick={() => setPendingDeleteProviderId(null)} className="iq-action-neutral">Cancelar</button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => setPendingDeleteProviderId(provider.id)} className="rounded-2xl border border-red-200 p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                            <button type="button" onClick={() => setPendingDeleteProviderId(provider.id)} className="iq-action-icon iq-action-icon-danger" title="Eliminar proveedor"><Trash2 className="h-4 w-4" /></button>
                           )}
                         </div>
                       </div>

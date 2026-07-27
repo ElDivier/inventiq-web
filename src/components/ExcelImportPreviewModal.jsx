@@ -4,8 +4,8 @@ export default function ExcelImportPreviewModal({ preview, progress, onConfirm, 
   const sampleProducts = preview.products.slice(0, 8);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] bg-white shadow-2xl">
+    <div className="iq-modal-overlay">
+      <div className="iq-modal-card max-h-[90vh] w-full max-w-5xl overflow-y-auto">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-2xl font-extrabold text-slate-900">Vista previa de importación</h3>
@@ -27,9 +27,9 @@ export default function ExcelImportPreviewModal({ preview, progress, onConfirm, 
               <p className="text-3xl font-extrabold text-slate-900">{preview.totalRows}</p>
             </div>
 
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <p className="text-xs font-bold uppercase text-emerald-700">Listos para importar</p>
-              <p className="text-3xl font-extrabold text-emerald-900">{preview.products.length}</p>
+            <div className="rounded-2xl bg-cyan-50 p-4">
+              <p className="text-xs font-bold uppercase text-cyan-800">Listos para importar</p>
+              <p className="text-3xl font-extrabold text-cyan-950">{preview.products.length}</p>
             </div>
 
             <div className="rounded-2xl bg-amber-50 p-4">
@@ -100,15 +100,15 @@ export default function ExcelImportPreviewModal({ preview, progress, onConfirm, 
           </section>
 
           {progress && (
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-              <div className="flex items-center justify-between text-sm font-bold text-emerald-800">
+            <section className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+              <div className="flex items-center justify-between text-sm font-bold text-cyan-900">
                 <span>Importando bloque {progress.batch} de {progress.batches}</span>
                 <span>{progress.imported} / {progress.total}</span>
               </div>
 
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
                 <div
-                  className="h-full rounded-full bg-emerald-600 transition-all"
+                  className="h-full rounded-full bg-cyan-700 transition-all"
                   style={{
                     width: `${Math.round((progress.imported / Math.max(progress.total, 1)) * 100)}%`,
                   }}
@@ -131,7 +131,7 @@ export default function ExcelImportPreviewModal({ preview, progress, onConfirm, 
               type="button"
               disabled={Boolean(progress)}
               onClick={onConfirm}
-              className="rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-2xl bg-cyan-700 px-5 py-3 font-bold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {progress ? 'Importando...' : `Importar ${preview.products.length} producto(s)`}
             </button>

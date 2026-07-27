@@ -1,5 +1,5 @@
 function getAvatarLetter(user) {
-  const source = String(user?.store || user?.name || user?.email || 'InventiQ').trim();
+  const source = String(user?.store || user?.name || user?.email || 'INVENTIQ').trim();
   return source.charAt(0).toUpperCase() || 'I';
 }
 

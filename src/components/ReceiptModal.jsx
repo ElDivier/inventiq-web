@@ -61,7 +61,7 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
   const subtotal = Number(sale.subtotal ?? sale.total ?? 0);
   const discount = Number(sale.discount || 0);
   const total = Number(sale.total || 0);
-  const storeName = currentUser?.store || sale.storeName || 'InventiQ';
+  const storeName = currentUser?.store || sale.storeName || 'INVENTIQ';
   const footer = currentUser?.receiptFooter || 'Gracias por su compra.';
   const paymentBreakdown = getPaymentBreakdown(sale);
 
@@ -79,7 +79,8 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(15, 23, 42, 0.55);
+          background: rgba(3, 18, 37, 0.74);
+          backdrop-filter: blur(10px);
           padding: 16px;
         }
 
@@ -87,9 +88,10 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
           width: min(420px, 100%);
           max-height: 92vh;
           overflow: auto;
-          border-radius: 24px;
-          background: #ffffff;
-          box-shadow: 0 25px 70px rgba(15, 23, 42, 0.28);
+          border: 1px solid rgba(125, 211, 252, 0.26);
+          border-radius: 28px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          box-shadow: 0 30px 90px rgba(3, 18, 37, 0.38);
         }
 
         .receipt-modal-header {
@@ -97,15 +99,17 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          border-bottom: 1px solid #e2e8f0;
+          border-bottom: 1px solid #dce8f4;
+          background: linear-gradient(135deg, rgba(239,246,255,0.95), rgba(236,254,255,0.8));
           padding: 16px 18px;
         }
 
         .receipt-modal-title {
           margin: 0;
-          font-size: 18px;
-          font-weight: 800;
-          color: #064e3b;
+          font-size: 21px;
+          font-weight: 900;
+          letter-spacing: -0.02em;
+          color: #10233f;
         }
 
         .receipt-modal-actions {
@@ -119,24 +123,29 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
           border: 0;
           border-radius: 14px;
           padding: 12px 14px;
-          font-weight: 800;
+          font-size: 14px;
+          font-weight: 900;
+          letter-spacing: 0.005em;
           cursor: pointer;
         }
 
         .receipt-button-print {
-          background: #059669;
+          background: linear-gradient(105deg, #126bfa 0%, #0ea5e9 54%, #12d6c5 100%);
           color: #ffffff;
+          box-shadow: 0 12px 26px rgba(14, 165, 233, 0.24);
+          text-shadow: 0 1px 0 rgba(7, 26, 51, 0.12);
         }
 
         .receipt-button-close {
-          background: #f1f5f9;
+          border: 1px solid #dbe5f0;
+          background: #ffffff;
           color: #334155;
         }
 
         .receipt-preview-wrap {
           display: flex;
           justify-content: center;
-          background: #f8fafc;
+          background: #eef5fb;
           padding: 18px;
         }
 
@@ -343,7 +352,7 @@ export default function ReceiptModal({ sale, currentUser, onClose }) {
             <div className="receipt-footer">
               {footer}
               <br />
-              <span className="receipt-muted">Comprobante generado por InventiQ</span>
+              <span className="receipt-muted">Comprobante generado por INVENTIQ</span>
             </div>
           </div>
         </div>

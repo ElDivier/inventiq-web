@@ -99,12 +99,12 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
         <Metric icon={Truck} label="Proveedores" value={providers.length} note="registrados" color="amber" />
       </section>
 
-      {purchasesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando compras desde Supabase...</div>}
+      {purchasesLoading && <div className="rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">Cargando compras desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
-        <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
+        <section className="order-2 iq-operation-card xl:order-1">
           <div className="border-b border-slate-100 p-5">
-            <h3 className="flex items-center gap-2 text-xl font-bold"><ClipboardList className="h-5 w-5 text-emerald-600" /> Historial de compras</h3>
+            <h3 className="flex items-center gap-2 text-xl font-bold"><ClipboardList className="h-5 w-5 text-cyan-700" /> Historial de compras</h3>
           </div>
           <div className="divide-y divide-slate-100">
             {purchases.length === 0 && <div className="p-5"><EmptyState icon={ClipboardList} title="Aún no tienes compras" text="Registra tu primera compra para aumentar stock y controlar mejor tus proveedores." /></div>}
@@ -134,7 +134,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
           )}
         </section>
 
-        <form onSubmit={registerPurchase} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
+        <form onSubmit={registerPurchase} className="order-1 iq-operation-card iq-operation-card-accent iq-sticky-workspace p-6 xl:order-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar compra</h3>
@@ -144,7 +144,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
           </div>
 
           {purchaseNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${purchaseNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${purchaseNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {purchaseNotice.message}
             </div>
           )}
@@ -154,9 +154,9 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto comprado</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-cyan-200" placeholder="Buscar o escanear código de barras..." />
               </div>
-              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-200 px-4 py-3 text-sm font-bold text-cyan-800 hover:bg-cyan-50">
                 <Camera className="h-4 w-4" /> Escanear con cámara
               </button>
               {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
@@ -170,26 +170,26 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
                         selectProduct(product.id);
                         setProductSearch(getProductDisplayName(product));
                       }}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-cyan-50"
                     >
                       <span>
                         <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
                         <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
                       </span>
-                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                      <span className="text-xs font-bold text-cyan-800">Stock {product.stock}</span>
                     </button>
                   ))}
                 </div>
               )}
               {selectedProduct ? (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(selectedProduct)}</p>
-                      <p className="text-sm text-emerald-800">{selectedProduct.sku || 'Sin SKU'} · {selectedProduct.category} · Stock actual {selectedProduct.stock}</p>
+                      <p className="text-xs font-bold uppercase text-cyan-800">Producto seleccionado</p>
+                      <p className="mt-1 font-bold text-cyan-950">{getProductDisplayName(selectedProduct)}</p>
+                      <p className="text-sm text-cyan-900">{selectedProduct.sku || 'Sin SKU'} · {selectedProduct.category} · Stock actual {selectedProduct.stock}</p>
                     </div>
-                    <button type="button" onClick={() => { setPurchaseForm({ ...purchaseForm, productId: '', unitCost: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                    <button type="button" onClick={() => { setPurchaseForm({ ...purchaseForm, productId: '', unitCost: '' }); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-cyan-800 hover:bg-cyan-100">Cambiar</button>
                   </div>
                 </div>
               ) : (
@@ -202,13 +202,13 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="font-bold">{getProductDisplayName(selectedProduct)}</p>
                 <p className="text-sm text-slate-500">Categoría: {selectedProduct.category} · Stock actual: {selectedProduct.stock}</p>
-                {suggestedProvider && <p className="mt-2 text-sm font-semibold text-emerald-700">Proveedor sugerido: {suggestedProvider.name}</p>}
+                {suggestedProvider && <p className="mt-2 text-sm font-semibold text-cyan-800">Proveedor sugerido: {suggestedProvider.name}</p>}
               </div>
             )}
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Proveedor</span>
-              <select value={purchaseForm.providerId} onChange={e => setPurchaseForm({ ...purchaseForm, providerId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+              <select value={purchaseForm.providerId} onChange={e => setPurchaseForm({ ...purchaseForm, providerId: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200">
                 <option value="">Sin proveedor / compra directa</option>
                 {providers.map(provider => <option key={provider.id} value={provider.id}>{provider.name} · {provider.category}</option>)}
               </select>
@@ -219,7 +219,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
               <Field label="Costo unitario" type="number" min="0" step="0.01" value={purchaseForm.unitCost} onChange={v => setPurchaseForm({ ...purchaseForm, unitCost: v })} placeholder="0.00" />
             </div>
 
-            <button type="button" onClick={addPurchaseItem} className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar a la compra</button>
+            <button type="button" onClick={addPurchaseItem} className="iq-primary-button w-full">Agregar a la compra</button>
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -235,7 +235,7 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
                       <p className="text-xs text-slate-500">{item.quantity} x ${item.unitCost.toFixed(2)}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <p className="font-bold text-emerald-700">${item.total.toFixed(2)}</p>
+                      <p className="font-bold text-cyan-800">${item.total.toFixed(2)}</p>
                       <button type="button" onClick={() => removePurchaseItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
@@ -245,15 +245,15 @@ function PurchasesPage({ purchases, products, providers, purchaseForm, setPurcha
 
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Nota</span>
-              <textarea value={purchaseForm.note} onChange={e => setPurchaseForm({ ...purchaseForm, note: e.target.value })} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Factura, pedido, observaciones..." />
+              <textarea value={purchaseForm.note} onChange={e => setPurchaseForm({ ...purchaseForm, note: e.target.value })} className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200" placeholder="Factura, pedido, observaciones..." />
             </label>
 
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <p className="text-sm text-emerald-700">Total de compra</p>
-              <p className="text-3xl font-extrabold text-emerald-900">${total.toFixed(2)}</p>
+            <div className="iq-total-highlight">
+              <p className="text-sm text-cyan-800">Total de compra</p>
+              <p className="text-3xl font-extrabold text-cyan-950">${total.toFixed(2)}</p>
             </div>
 
-            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">Registrar compra</button>
+            <button type="submit" className="iq-primary-button w-full">Registrar compra</button>
           </div>
         </form>
       </section>

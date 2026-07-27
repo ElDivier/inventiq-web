@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { businessTypes, getBusinessConfig } from '../config/businessTypes';
+import LandingLeadsPanel from '../components/LandingLeadsPanel';
 
 const STATUS_OPTIONS = [
   { value: 'activo', label: 'Activo' },
@@ -122,7 +123,7 @@ function getClientStatus(client) {
   return {
     label: 'Activo',
     value: 'activo',
-    className: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    className: 'bg-cyan-50 text-cyan-800 border-cyan-100',
   };
 }
 
@@ -278,7 +279,7 @@ export default function AdminPage({
           id: adminUser.id,
           business_type: previewBusinessType,
           owner_name: adminUser.email,
-          store_name: 'InventiQ Admin',
+          store_name: 'INVENTIQ Admin',
           city: 'Administración',
         }, { onConflict: 'id' });
 
@@ -493,11 +494,11 @@ export default function AdminPage({
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-6 shadow-sm">
+    <div className="flex flex-col gap-6">
+      <section className="order-1 rounded-3xl border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.25em] text-emerald-600">InventiQ Admin</p>
+            <p className="text-sm font-bold uppercase tracking-[0.25em] text-cyan-700">INVENTIQ Admin</p>
             <h2 className="mt-2 text-3xl font-black text-slate-900">Panel de administración</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
               Gestiona clientes, planes, vencimientos, pagos y acceso a la plataforma.
@@ -508,7 +509,7 @@ export default function AdminPage({
             type="button"
             onClick={loadClients}
             disabled={clientsLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-100 bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {clientsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
             Actualizar clientes
@@ -516,11 +517,11 @@ export default function AdminPage({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="order-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
             <p className="text-sm font-black uppercase tracking-wide text-slate-500">Modo de vista previa</p>
-            <h3 className="mt-1 text-2xl font-black text-slate-900">Revisar InventiQ como otro tipo de negocio</h3>
+            <h3 className="mt-1 text-2xl font-black text-slate-900">Revisar INVENTIQ como otro tipo de negocio</h3>
             <p className="mt-2 text-sm text-slate-500">
               Cambia el tipo de negocio de tu cuenta administradora para revisar cómo se adaptan textos, campos y categorías.
               Esto no cambia los clientes; solo afecta tu cuenta de administrador.
@@ -549,7 +550,7 @@ export default function AdminPage({
               type="button"
               onClick={applyAdminPreviewBusinessType}
               disabled={previewSaving}
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {previewSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
               Aplicar vista de {previewConfig.label}
@@ -558,9 +559,9 @@ export default function AdminPage({
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Nombre de producto</p>
-            <p className="mt-2 text-sm font-bold text-emerald-950">{previewConfig.productNamePlaceholder}</p>
+          <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-800">Nombre de producto</p>
+            <p className="mt-2 text-sm font-bold text-cyan-950">{previewConfig.productNamePlaceholder}</p>
           </div>
 
           <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4">
@@ -590,13 +591,13 @@ export default function AdminPage({
         )}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="order-3 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <AdminMetric
           icon={Users}
           title="Clientes activos"
           value={stats.active}
           detail={`${stats.total} cliente(s) registrados`}
-          tone="emerald"
+          tone="cyan"
         />
         <AdminMetric
           icon={AlertTriangle}
@@ -621,20 +622,24 @@ export default function AdminPage({
         />
       </section>
 
+      <div className="order-4">
+        <LandingLeadsPanel />
+      </div>
+
       {(notice || adminPageNotice) && (
-        <div className={`rounded-3xl p-4 text-sm font-semibold ${
+        <div className={`order-5 rounded-3xl p-4 text-sm font-semibold ${
           (notice || adminPageNotice)?.type === 'success'
-            ? 'border border-emerald-100 bg-emerald-50 text-emerald-700'
+            ? 'border border-cyan-100 bg-cyan-50 text-cyan-800'
             : 'border border-red-100 bg-red-50 text-red-700'
         }`}>
           {(notice || adminPageNotice)?.message}
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="order-2 grid grid-cols-1 gap-6">
+        <div className="order-2 mx-auto w-full max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+            <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700">
               <Plus className="h-5 w-5" />
             </div>
             <div>
@@ -649,7 +654,7 @@ export default function AdminPage({
                 value={form.name || ''}
                 onChange={event => setCreateField('name', event.target.value)}
                 className="input-admin"
-                placeholder="Ej: Diego Revelo"
+                placeholder="Nombre completo del responsable"
               />
             </AdminField>
 
@@ -658,7 +663,7 @@ export default function AdminPage({
                 value={form.store || ''}
                 onChange={event => setCreateField('store', event.target.value)}
                 className="input-admin"
-                placeholder="Ej: KUEHNS 5"
+                placeholder="Nombre comercial del negocio"
               />
             </AdminField>
 
@@ -668,7 +673,7 @@ export default function AdminPage({
                   value={form.city || ''}
                   onChange={event => setCreateField('city', event.target.value)}
                   className="input-admin"
-                  placeholder="Ej: Cuenca"
+                  placeholder="Ciudad del negocio"
                 />
               </AdminField>
 
@@ -723,14 +728,14 @@ export default function AdminPage({
 
             <button
               type="submit"
-              className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700"
+              className="w-full rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-cyan-800"
             >
               Crear cuenta del cliente
             </button>
           </form>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-xl font-black text-slate-900">Clientes registrados</h3>
@@ -742,7 +747,7 @@ export default function AdminPage({
               <input
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-100"
                 placeholder="Buscar cliente..."
               />
             </div>
@@ -825,7 +830,7 @@ export default function AdminPage({
                           <button
                             type="button"
                             onClick={() => startEditClient(client)}
-                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-cyan-700"
                             title="Editar cliente"
                           >
                             <Edit className="h-4 w-4" />
@@ -834,7 +839,7 @@ export default function AdminPage({
                           <button
                             type="button"
                             onClick={() => renewAnnualPlan(client)}
-                            className="rounded-xl border border-emerald-100 bg-white p-2 text-emerald-600 hover:bg-emerald-50"
+                            className="rounded-xl border border-cyan-100 bg-white p-2 text-cyan-700 hover:bg-cyan-50"
                             title="Renovar plan anual"
                           >
                             <CalendarDays className="h-4 w-4" />
@@ -843,7 +848,7 @@ export default function AdminPage({
                           <button
                             type="button"
                             onClick={() => toggleSuspendClient(client)}
-                            className={`rounded-xl border p-2 ${client.is_suspended ? 'border-emerald-100 text-emerald-600 hover:bg-emerald-50' : 'border-red-100 text-red-500 hover:bg-red-50'}`}
+                            className={`rounded-xl border p-2 ${client.is_suspended ? 'border-cyan-100 text-cyan-700 hover:bg-cyan-50' : 'border-red-100 text-red-500 hover:bg-red-50'}`}
                             title={client.is_suspended ? 'Reactivar cuenta' : 'Suspender cuenta'}
                           >
                             {client.is_suspended ? <CheckCircle2 className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
@@ -858,8 +863,8 @@ export default function AdminPage({
                       )}
 
                       {isEditing && (
-                        <div className="mt-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
-                          <div className="mb-4 flex items-center gap-2 text-emerald-800">
+                        <div className="mt-4 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
+                          <div className="mb-4 flex items-center gap-2 text-cyan-900">
                             <ShieldCheck className="h-4 w-4" />
                             <h4 className="text-sm font-black">Editar administración del cliente</h4>
                           </div>
@@ -973,7 +978,7 @@ export default function AdminPage({
                               type="button"
                               onClick={saveClientAdminData}
                               disabled={savingClient}
-                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {savingClient ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                               Guardar cambios
@@ -1013,7 +1018,8 @@ export default function AdminPage({
 
 function AdminMetric({ icon: Icon, title, value, detail, tone }) {
   const tones = {
-    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    emerald: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
     slate: 'bg-slate-50 text-slate-600 border-slate-100',

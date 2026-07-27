@@ -1,15 +1,13 @@
 export default function ReportRow({ title, subtitle, right, badge }) {
   return (
-    <div className="flex items-center justify-between gap-4 p-5">
-      <div>
-        <p className="font-bold text-slate-900">{title}</p>
-        <p className="text-sm text-slate-500">{subtitle}</p>
+    <div className="iq-list-row gap-4">
+      <div className="min-w-0">
+        <p className="truncate font-extrabold text-slate-900">{title}</p>
+        <p className="truncate text-sm text-slate-500">{subtitle}</p>
       </div>
-      <div className="text-right">
-        <p className="font-bold text-slate-900">{right}</p>
-        <span className="mt-1 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-          {badge}
-        </span>
+      <div className="shrink-0 text-right">
+        <p className="font-black text-slate-900">{right}</p>
+        <span className="iq-soft-badge mt-1">{badge}</span>
       </div>
     </div>
   );

@@ -234,11 +234,11 @@ export default function FoodRecipeModal({
   if (!menuProduct) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div className="iq-modal-overlay">
+      <div className="iq-modal-card max-h-[92vh] w-full max-w-4xl overflow-hidden">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
           <div>
-            <p className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-emerald-600">
+            <p className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-cyan-700">
               <BookOpen className="h-4 w-4" /> Receta del producto
             </p>
             <h3 className="mt-1 text-2xl font-black text-slate-900">{menuProduct.name}</h3>
@@ -258,13 +258,13 @@ export default function FoodRecipeModal({
 
         <div className="max-h-[calc(92vh-94px)] overflow-y-auto p-5">
           {notice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {notice.message}
             </div>
           )}
 
-          <form onSubmit={addIngredientToRecipe} className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
-            <h4 className="mb-3 text-sm font-black uppercase tracking-wide text-emerald-800">
+          <form onSubmit={addIngredientToRecipe} className="iq-modal-section iq-modal-section-accent">
+            <h4 className="mb-3 text-sm font-black uppercase tracking-wide text-cyan-900">
               Agregar insumo a la receta
             </h4>
 
@@ -282,7 +282,7 @@ export default function FoodRecipeModal({
                       unit: prev.unit || ingredient?.size || '',
                     }));
                   }}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                 >
                   <option value="">Seleccionar insumo</option>
                   {availableIngredients.map(ingredient => (
@@ -301,7 +301,7 @@ export default function FoodRecipeModal({
                   step="0.001"
                   value={form.quantity}
                   onChange={event => setForm(prev => ({ ...prev, quantity: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                   placeholder="0"
                 />
               </label>
@@ -311,7 +311,7 @@ export default function FoodRecipeModal({
                 <input
                   value={form.unit}
                   onChange={event => setForm(prev => ({ ...prev, unit: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                   placeholder={selectedIngredient?.size || 'g, ml, und'}
                 />
               </label>
@@ -321,7 +321,7 @@ export default function FoodRecipeModal({
                 <input
                   value={form.notes}
                   onChange={event => setForm(prev => ({ ...prev, notes: event.target.value }))}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                   placeholder="Opcional"
                 />
               </label>
@@ -329,7 +329,7 @@ export default function FoodRecipeModal({
               <button
                 type="submit"
                 disabled={saving || availableIngredients.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Agregar
@@ -337,7 +337,7 @@ export default function FoodRecipeModal({
             </div>
 
             {selectedIngredient && (
-              <div className="mt-3 rounded-2xl border border-emerald-100 bg-white p-3 text-xs text-slate-600">
+              <div className="mt-3 rounded-2xl border border-cyan-100 bg-white p-3 text-xs text-slate-600">
                 <p className="font-black text-slate-800">{selectedIngredient.name}</p>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <span>Stock disponible: <strong>{selectedIngredient.stock}</strong></span>
@@ -345,7 +345,7 @@ export default function FoodRecipeModal({
                   <span>Costo referencial: <strong>{Number(selectedIngredient.cost || 0).toFixed(2)}</strong></span>
                 </div>
                 <p className="mt-2 text-amber-700">
-                  Puedes usar unidades compatibles. Ejemplo: si el stock está en L, puedes poner la receta en ml y InventiQ hará la conversión.
+                  Puedes usar unidades compatibles. Ejemplo: si el stock está en L, puedes poner la receta en ml y INVENTIQ hará la conversión.
                 </p>
               </div>
             )}
@@ -353,10 +353,10 @@ export default function FoodRecipeModal({
 
           {recipeItems.length > 0 && (
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
-                <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Costo estimado</p>
-                <p className="mt-1 text-2xl font-black text-emerald-900">${recipeSummary.totalCost.toFixed(2)}</p>
-                <p className="mt-1 text-xs text-emerald-700">Costo aproximado por producto vendido.</p>
+              <div className="iq-modal-section iq-modal-section-accent">
+                <p className="text-xs font-black uppercase tracking-wide text-cyan-800">Costo estimado</p>
+                <p className="mt-1 text-2xl font-black text-cyan-950">${recipeSummary.totalCost.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-cyan-800">Costo aproximado por producto vendido.</p>
               </div>
 
               <div className="rounded-3xl border border-amber-100 bg-amber-50 p-4">
@@ -408,7 +408,7 @@ export default function FoodRecipeModal({
                         <p className="text-xs text-slate-400">{ingredient?.category || 'Sin categoría'}</p>
                       </div>
 
-                      <div className="text-sm font-black text-emerald-700">
+                      <div className="text-sm font-black text-cyan-800">
                         {formatQuantity(item.quantity)} {item.unit || ''}
                       </div>
 
@@ -432,9 +432,9 @@ export default function FoodRecipeModal({
             )}
           </div>
 
-          <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-900">
             <p className="font-bold">Receta activa para control de insumos.</p>
-            <p className="mt-1">Al vender este producto del menú, InventiQ descontará automáticamente las cantidades indicadas de cada insumo. InventiQ convierte automáticamente unidades compatibles como L/ml y kg/g.</p>
+            <p className="mt-1">Al vender este producto del menú, INVENTIQ descontará automáticamente las cantidades indicadas de cada insumo. INVENTIQ convierte automáticamente unidades compatibles como L/ml y kg/g.</p>
           </div>
         </div>
       </div>

@@ -171,8 +171,8 @@ export default function BarcodeScanner({ onScan, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[2rem] bg-white p-5 shadow-2xl">
+    <div className="iq-modal-overlay">
+      <div className="iq-modal-card w-full max-w-md p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-extrabold text-slate-900">Escanear código</h3>
@@ -193,23 +193,23 @@ export default function BarcodeScanner({ onScan, onClose }) {
         {error ? (
           <div className="rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">{error}</div>
         ) : detectedValue ? (
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 text-center">
-            <p className="text-sm font-bold text-emerald-700">Código detectado</p>
-            <p className="mt-2 break-all text-2xl font-extrabold text-emerald-950">{detectedValue}</p>
-            <p className="mt-2 text-xs text-emerald-700">Confirma que coincida con el número impreso debajo del código.</p>
+          <div className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5 text-center">
+            <p className="text-sm font-bold text-cyan-800">Código detectado</p>
+            <p className="mt-2 break-all text-2xl font-extrabold text-cyan-950">{detectedValue}</p>
+            <p className="mt-2 text-xs text-cyan-800">Confirma que coincida con el número impreso debajo del código.</p>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => acceptValue(detectedValue)}
-                className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+                className="rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white hover:bg-cyan-800"
               >
                 Usar código
               </button>
               <button
                 type="button"
                 onClick={retryScan}
-                className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                className="rounded-2xl border border-cyan-200 bg-white px-4 py-3 text-sm font-bold text-cyan-800 hover:bg-cyan-50"
               >
                 Reintentar
               </button>
@@ -222,7 +222,7 @@ export default function BarcodeScanner({ onScan, onClose }) {
         )}
 
         {!error && !detectedValue && (
-          <p className="mt-3 text-center text-xs font-bold text-emerald-700">{scannerMode}</p>
+          <p className="mt-3 text-center text-xs font-bold text-cyan-800">{scannerMode}</p>
         )}
 
         <div className="mt-4 rounded-2xl bg-slate-50 p-3">
@@ -231,7 +231,7 @@ export default function BarcodeScanner({ onScan, onClose }) {
             <input
               value={manualValue}
               onChange={e => setManualValue(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
               placeholder="Código manual"
             />
             <button

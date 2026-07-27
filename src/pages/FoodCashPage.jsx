@@ -417,12 +417,12 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-6 shadow-sm">
+      <section className="iq-module-hero iq-module-hero-food">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-600">{cashCopy.eyebrow}</p>
             <h2 className="mt-2 flex items-center gap-3 text-3xl font-black text-slate-900">
-              <DollarSign className="h-8 w-8 text-emerald-600" /> {cashCopy.title}
+              <DollarSign className="h-8 w-8 text-cyan-700" /> {cashCopy.title}
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
               {cashCopy.description}
@@ -433,7 +433,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
             type="button"
             onClick={loadCashData}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm font-black text-emerald-700 shadow-sm hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="iq-action-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
             Actualizar caja
@@ -442,15 +442,15 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       </section>
 
       {notice && (
-        <div className={`rounded-3xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'border border-emerald-100 bg-emerald-50 text-emerald-700' : 'border border-red-100 bg-red-50 text-red-700'}`}>
+        <div className={`rounded-3xl p-4 text-sm font-semibold ${notice.type === 'success' ? 'border border-cyan-100 bg-cyan-50 text-cyan-800' : 'border border-red-100 bg-red-50 text-red-700'}`}>
           {notice.message}
         </div>
       )}
 
       {!activeSession ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="iq-operation-card p-6">
           <div className="mb-5 flex items-center gap-3">
-            <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+            <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700">
               <Unlock className="h-5 w-5" />
             </div>
             <div>
@@ -468,7 +468,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 step="0.01"
                 value={openingAmount}
                 onChange={event => setOpeningAmount(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                 placeholder="0.00"
               />
             </label>
@@ -476,7 +476,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-5 py-3 text-sm font-black text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlock className="h-4 w-4" />}
               Abrir caja
@@ -486,7 +486,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       ) : (
         <>
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <CashMetric icon={Unlock} title="Caja abierta" value={money(activeSession.opening_amount)} detail={openedText} tone="emerald" />
+            <CashMetric icon={Unlock} title="Caja abierta" value={money(activeSession.opening_amount)} detail={openedText} tone="cyan" />
             <CashMetric icon={TrendingUp} title="Ventas del turno" value={money(salesTotal)} detail={`${sessionSales.length} orden(es)`} tone="blue" />
             <CashMetric icon={ReceiptText} title="Gastos del turno" value={money(expenseTotal)} detail={`${expenses.length} movimiento(s)`} tone="amber" />
             <CashMetric icon={DollarSign} title="Efectivo esperado" value={money(expectedCash)} detail="Inicial + efectivo - gastos" tone="slate" />
@@ -494,15 +494,15 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
 
           {isRestaurant && (
             <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="iq-operation-card p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <h3 className="text-xl font-black text-slate-900">Resumen operativo del restaurante</h3>
                     <p className="text-sm text-slate-500">Ventas del turno separadas por mesas, para llevar y delivery.</p>
                   </div>
-                  <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-right">
-                    <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Ticket promedio</p>
-                    <p className="text-2xl font-black text-emerald-800">{money(averageTicket)}</p>
+                  <div className="rounded-2xl bg-cyan-50 px-4 py-3 text-right">
+                    <p className="text-xs font-black uppercase tracking-wide text-cyan-800">Ticket promedio</p>
+                    <p className="text-2xl font-black text-cyan-900">{money(averageTicket)}</p>
                   </div>
                 </div>
 
@@ -513,7 +513,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="iq-operation-card p-6">
                 <h3 className="text-xl font-black text-slate-900">Mesas y canales destacados</h3>
                 <p className="mb-4 text-sm text-slate-500">Referencias con mayor movimiento en la caja actual.</p>
                 <div className="space-y-3">
@@ -527,7 +527,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                         <p className="font-black text-slate-900">{area.reference}</p>
                         <p className="text-xs text-slate-500">{area.count} orden(es)</p>
                       </div>
-                      <p className="font-black text-emerald-700">{money(area.total)}</p>
+                      <p className="font-black text-cyan-800">{money(area.total)}</p>
                     </div>
                   ))}
                 </div>
@@ -537,7 +537,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
             <div className="space-y-6">
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">Resumen por método de pago</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <PaymentBox label="Efectivo" value={paymentTotals.efectivo || 0} />
@@ -548,7 +548,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
               </div>
 
               {isRestaurant && (
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="iq-operation-card p-6">
                   <h3 className="mb-4 text-xl font-black text-slate-900">Abastecimiento del turno</h3>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <PaymentBox label="Compras registradas" value={purchaseTotal} />
@@ -561,7 +561,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 </div>
               )}
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">Registrar gasto del turno</h3>
                 <form onSubmit={addExpense} className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_0.5fr_0.6fr_auto] lg:items-end">
                   <label className="block">
@@ -569,7 +569,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                     <input
                       value={expenseForm.description}
                       onChange={event => setExpenseForm(prev => ({ ...prev, description: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                       placeholder="Ej: fundas, transporte, limpieza"
                     />
                   </label>
@@ -582,7 +582,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                       step="0.01"
                       value={expenseForm.amount}
                       onChange={event => setExpenseForm(prev => ({ ...prev, amount: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                       placeholder="0.00"
                     />
                   </label>
@@ -592,7 +592,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                     <select
                       value={expenseForm.paymentMethod}
                       onChange={event => setExpenseForm(prev => ({ ...prev, paymentMethod: event.target.value }))}
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                     >
                       <option>Efectivo</option>
                       <option>Transferencia</option>
@@ -603,7 +603,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                   <button
                     type="submit"
                     disabled={saving}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     Agregar
@@ -611,7 +611,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 </form>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">{cashCopy.movementTitle}</h3>
                 <div className="space-y-3">
                   {expenses.length === 0 && sessionSales.length === 0 ? (
@@ -636,7 +636,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                           title={sale.code || 'Venta'}
                           detail={`${getRestaurantOrderReference(sale)} · ${sale.product || 'Pedido'} · ${sale.paymentMethod || 'Efectivo'}`}
                           value={Number(sale.total || 0)}
-                          tone="emerald"
+                          tone="cyan"
                         />
                       ))}
                     </>
@@ -645,7 +645,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
               </div>
             </div>
 
-            <form onSubmit={closeCash} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <form onSubmit={closeCash} className="iq-operation-card p-6">
               <div className="mb-5 flex items-center gap-3">
                 <div className="rounded-2xl bg-red-50 p-3 text-red-600">
                   <Lock className="h-5 w-5" />
@@ -660,7 +660,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 <SummaryLine label="Efectivo inicial" value={activeSession.opening_amount} />
                 <SummaryLine label="Ventas en efectivo" value={paymentTotals.efectivo || 0} />
                 <SummaryLine label="Gastos en efectivo" value={-cashExpenses} />
-                <div className="rounded-2xl bg-emerald-50 p-4">
+                <div className="rounded-2xl bg-cyan-50 p-4">
                   <SummaryLine label="Efectivo esperado" value={expectedCash} strong />
                 </div>
 
@@ -672,12 +672,12 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                     step="0.01"
                     value={closingAmount}
                     onChange={event => setClosingAmount(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                     placeholder="0.00"
                   />
                 </label>
 
-                <div className={`rounded-2xl p-4 text-sm font-black ${closingDifference === 0 ? 'bg-slate-50 text-slate-600' : closingDifference > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                <div className={`rounded-2xl p-4 text-sm font-black ${closingDifference === 0 ? 'bg-slate-50 text-slate-600' : closingDifference > 0 ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
                   Diferencia: {money(closingDifference)}
                 </div>
 
@@ -686,7 +686,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                   <textarea
                     value={closingNotes}
                     onChange={event => setClosingNotes(event.target.value)}
-                    className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
                     placeholder="Ej: faltante por cambio, gasto no registrado, etc."
                   />
                 </label>
@@ -706,7 +706,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       )}
 
       {sessions.filter(session => session.status === 'closed').length > 0 && (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="iq-operation-card p-6">
           <h3 className="mb-4 text-xl font-black text-slate-900">{cashCopy.previousTitle}</h3>
           <div className="space-y-3">
             {sessions.filter(session => session.status === 'closed').slice(0, 5).map(session => (
@@ -717,7 +717,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                 </div>
                 <p className="text-sm font-bold text-slate-600">Esperado: {money(session.expected_cash)}</p>
                 <p className="text-sm font-bold text-slate-600">Contado: {money(session.closing_amount)}</p>
-                <p className={`text-sm font-black ${Number(session.difference || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                <p className={`text-sm font-black ${Number(session.difference || 0) < 0 ? 'text-red-600' : 'text-cyan-700'}`}>
                   Diferencia: {money(session.difference)}
                 </p>
               </div>
@@ -732,8 +732,8 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
 
 function RestaurantChannelBox({ label, count, total }) {
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-      <p className="text-xs font-black uppercase tracking-wide text-emerald-700">{label}</p>
+    <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+      <p className="text-xs font-black uppercase tracking-wide text-cyan-800">{label}</p>
       <p className="mt-2 text-2xl font-black text-slate-900">{money(total)}</p>
       <p className="mt-1 text-xs font-bold text-slate-500">{count} orden(es)</p>
     </div>
@@ -742,14 +742,15 @@ function RestaurantChannelBox({ label, count, total }) {
 
 function CashMetric({ icon: Icon, title, value, detail, tone }) {
   const tones = {
-    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    emerald: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     slate: 'bg-slate-50 text-slate-600 border-slate-100',
   };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="iq-operation-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-slate-500">{title}</p>
@@ -783,7 +784,7 @@ function MovementRow({ title, detail, value, tone }) {
         <p className="truncate font-black text-slate-900">{title}</p>
         <p className="truncate text-sm text-slate-500">{detail}</p>
       </div>
-      <p className={`shrink-0 font-black ${tone === 'red' ? 'text-red-600' : 'text-emerald-600'}`}>
+      <p className={`shrink-0 font-black ${tone === 'red' ? 'text-red-600' : 'text-cyan-700'}`}>
         {value < 0 ? '-' : '+'}{money(Math.abs(value))}
       </p>
     </div>
@@ -792,7 +793,7 @@ function MovementRow({ title, detail, value, tone }) {
 
 function SummaryLine({ label, value, strong = false }) {
   return (
-    <div className={`flex items-center justify-between gap-3 ${strong ? 'font-black text-emerald-800' : 'text-slate-600'}`}>
+    <div className={`flex items-center justify-between gap-3 ${strong ? 'font-black text-cyan-900' : 'text-slate-600'}`}>
       <span>{label}</span>
       <span>{money(value)}</span>
     </div>

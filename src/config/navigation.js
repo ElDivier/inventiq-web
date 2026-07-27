@@ -131,7 +131,7 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
     },
     Admin: {
       title: 'Panel administrador',
-      subtitle: 'Crea y controla cuentas de clientes de InventiQ.',
+      subtitle: 'Crea y controla cuentas de clientes de INVENTIQ.',
       icon: UserPlus,
       actionLabel: businessProfile?.labels?.addProduct || 'Agregar producto',
     },

@@ -178,11 +178,11 @@ export default function ReportsPage({
         />
       </section>
 
-      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+      <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-emerald-900">Reportes exportables</h3>
-            <p className="text-sm text-emerald-800">
+            <h3 className="text-lg font-bold text-cyan-950">Reportes exportables</h3>
+            <p className="text-sm text-cyan-900">
               Descarga ventas, compras, productos, clientes, proveedores y reposición sugerida para análisis externo.
             </p>
           </div>
@@ -190,7 +190,7 @@ export default function ReportsPage({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <button
               onClick={exportSales}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Ventas
@@ -198,7 +198,7 @@ export default function ReportsPage({
 
             <button
               onClick={exportPurchases}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Compras
@@ -206,7 +206,7 @@ export default function ReportsPage({
 
             <button
               onClick={exportProducts}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Productos
@@ -214,7 +214,7 @@ export default function ReportsPage({
 
             <button
               onClick={exportClients}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Clientes
@@ -222,7 +222,7 @@ export default function ReportsPage({
 
             <button
               onClick={exportProviders}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Proveedores
@@ -230,7 +230,7 @@ export default function ReportsPage({
 
             <button
               onClick={exportLowStock}
-              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-sm hover:bg-emerald-50"
+              className="rounded-2xl bg-white px-4 py-3 text-sm font-bold text-cyan-800 shadow-sm hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" />
               Reposición
@@ -243,7 +243,7 @@ export default function ReportsPage({
         <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold">
-              <Activity className="h-5 w-5 text-emerald-600" />
+              <Activity className="h-5 w-5 text-cyan-700" />
               Baja rotación o sin movimiento
             </h3>
           </div>
@@ -270,7 +270,7 @@ export default function ReportsPage({
         <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
             <h3 className="flex items-center gap-2 text-xl font-bold">
-              <ClipboardList className="h-5 w-5 text-emerald-600" />
+              <ClipboardList className="h-5 w-5 text-cyan-700" />
               Compra sugerida
             </h3>
           </div>

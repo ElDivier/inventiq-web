@@ -201,13 +201,13 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
     return (
       <div className="mt-3">
         {!isOpen ? null : (
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50/60 p-4">
             <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h4 className="font-bold text-emerald-950">Fiado / plan acumulativo</h4>
-                <p className="text-xs font-semibold text-emerald-700">Busca por código de barras o nombre. Los abonos entran como ingreso y el stock baja al completar el pago.</p>
+                <h4 className="font-bold text-cyan-950">Fiado / plan acumulativo</h4>
+                <p className="text-xs font-semibold text-cyan-800">Busca por código de barras o nombre. Los abonos entran como ingreso y el stock baja al completar el pago.</p>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">Pendiente: ${totals.pending.toFixed(2)}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-cyan-800">Pendiente: ${totals.pending.toFixed(2)}</span>
             </div>
 
             <form onSubmit={e => submitAccountItem(e, client)} className="mb-4 rounded-2xl bg-white p-3">
@@ -218,10 +218,10 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                     value={getAccountForm(client.id).productSearch}
                     onChange={e => handleAccountProductSearch(client.id, e.target.value)}
                     placeholder="Escanea código o escribe nombre"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                   />
                   {selectedProduct ? (
-                    <p className="mt-1 text-xs font-semibold text-emerald-700">
+                    <p className="mt-1 text-xs font-semibold text-cyan-800">
                       {getProductDisplayName(selectedProduct)} · Stock {selectedProduct.stock}
                     </p>
                   ) : getAccountForm(client.id).productSearch ? (
@@ -231,7 +231,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
 
                 <label className="block">
                   <span className="mb-1 block text-xs font-bold text-slate-600">Tipo</span>
-                  <select value={getAccountForm(client.id).type} onChange={e => updateAccountForm(client.id, { type: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200">
+                  <select value={getAccountForm(client.id).type} onChange={e => updateAccountForm(client.id, { type: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200">
                     <option value="acumulativo">Plan acumulativo</option>
                     <option value="fiado">Fiado</option>
                   </select>
@@ -243,7 +243,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
 
                 <label className="block">
                   <span className="mb-1 block text-xs font-bold text-slate-600">Método</span>
-                  <select value={getAccountForm(client.id).paymentMethod} onChange={e => updateAccountForm(client.id, { paymentMethod: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200">
+                  <select value={getAccountForm(client.id).paymentMethod} onChange={e => updateAccountForm(client.id, { paymentMethod: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200">
                     <option>Efectivo</option>
                     <option>Transferencia</option>
                     <option>Tarjeta</option>
@@ -254,7 +254,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
               <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
                 <Field label="Nota" value={getAccountForm(client.id).note} onChange={v => updateAccountForm(client.id, { note: v })} placeholder="Ej: separa para retirar el viernes" />
                 <div className="flex items-end">
-                  <button type="submit" className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Agregar prenda</button>
+                  <button type="submit" className="w-full rounded-xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white hover:bg-cyan-800">Agregar prenda</button>
                 </div>
               </div>
             </form>
@@ -277,7 +277,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-bold text-slate-900">{item.productName}</p>
-                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">{typeLabel}</span>
+                            <span className="rounded-full bg-cyan-100 px-2 py-1 text-xs font-bold text-cyan-800">{typeLabel}</span>
                             <span className={`rounded-full px-2 py-1 text-xs font-bold ${isPaid ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{isPaid ? 'Pagado' : 'Pendiente'}</span>
                           </div>
                           <p className="mt-1 text-xs text-slate-500">Cantidad: {item.quantity} · Registrado: {formatShortDate(item.createdAt)}</p>
@@ -285,7 +285,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold text-slate-600">
                           <div className="rounded-xl bg-slate-50 p-2"><span className="block text-slate-400">Total</span>${total.toFixed(2)}</div>
-                          <div className="rounded-xl bg-emerald-50 p-2 text-emerald-700"><span className="block text-emerald-500">Abonado</span>${paid.toFixed(2)}</div>
+                          <div className="rounded-xl bg-cyan-50 p-2 text-cyan-800"><span className="block text-cyan-500">Abonado</span>${paid.toFixed(2)}</div>
                           <div className="rounded-xl bg-amber-50 p-2 text-amber-700"><span className="block text-amber-500">Falta</span>${pending.toFixed(2)}</div>
                         </div>
                       </div>
@@ -295,7 +295,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                           <Field label="Abono" type="number" value={paymentForm.amount} onChange={v => updatePaymentForm(item.id, { amount: v })} placeholder={`Máx. ${pending.toFixed(2)}`} min="0" step="0.01" />
                           <label className="block">
                             <span className="mb-1 block text-xs font-bold text-slate-600">Método</span>
-                            <select value={paymentForm.paymentMethod} onChange={e => updatePaymentForm(item.id, { paymentMethod: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200">
+                            <select value={paymentForm.paymentMethod} onChange={e => updatePaymentForm(item.id, { paymentMethod: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200">
                               <option>Efectivo</option>
                               <option>Transferencia</option>
                               <option>Tarjeta</option>
@@ -303,7 +303,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                           </label>
                           <Field label="Nota del abono" value={paymentForm.note} onChange={v => updatePaymentForm(item.id, { note: v })} placeholder="Ej: segundo abono" />
                           <div className="flex items-end gap-2">
-                            <button type="submit" className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">Abonar</button>
+                            <button type="submit" className="rounded-xl bg-cyan-700 px-4 py-3 text-sm font-bold text-white hover:bg-cyan-800">Abonar</button>
                             <button type="button" onClick={() => cancelClientAccountItem(client.id, item.id)} className="rounded-xl border border-red-100 px-3 py-3 text-sm font-bold text-red-600 hover:bg-red-50">Quitar</button>
                           </div>
                         </form>
@@ -316,7 +316,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                             {safeJsonArray(item.payments).map(payment => (
                               <div key={payment.id} className="flex flex-wrap justify-between gap-2 text-xs text-slate-600">
                                 <span>{formatShortDate(payment.createdAt)} · {payment.paymentMethod}</span>
-                                <strong className="text-emerald-700">${toMoneyNumber(payment.amount).toFixed(2)}</strong>
+                                <strong className="text-cyan-800">${toMoneyNumber(payment.amount).toFixed(2)}</strong>
                               </div>
                             ))}
                           </div>
@@ -352,11 +352,11 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <section className="order-2 rounded-3xl border border-slate-200 bg-white shadow-sm xl:order-1">
-          {clientsLoading && <div className="border-b border-emerald-100 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando clientes desde Supabase...</div>}
+          {clientsLoading && <div className="border-b border-cyan-100 bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">Cargando clientes desde Supabase...</div>}
           <div className="border-b border-slate-100 p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-emerald-600" /> Clientes registrados</h3>
+                <h3 className="flex items-center gap-2 text-xl font-bold"><Users className="h-5 w-5 text-cyan-700" /> Clientes registrados</h3>
                 <p className="mt-1 text-sm text-slate-500">Busca por nombre, teléfono, correo o cédula. Se muestran 15 clientes por página.</p>
               </div>
               <div className="relative w-full lg:max-w-sm">
@@ -365,7 +365,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                   value={clientSearch}
                   onChange={e => setClientSearch(e.target.value)}
                   placeholder="Buscar cliente..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
             </div>
@@ -391,7 +391,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                           <button
                             type="button"
                             onClick={() => toggleClientAccounts(client.id)}
-                            className={`rounded-full px-3 py-1 text-xs font-bold transition ${expandedAccounts[client.id] ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                            className={`rounded-full px-3 py-1 text-xs font-bold transition ${expandedAccounts[client.id] ? 'bg-cyan-700 text-white hover:bg-cyan-800' : 'bg-cyan-50 text-cyan-800 hover:bg-cyan-100'}`}
                           >
                             Fiado / Plan acumulativo
                           </button>
@@ -400,7 +400,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                       <p className="text-sm text-slate-500">{client.phone} · {client.type}</p>
                       <div className="mt-1 space-y-1">
                         <p className="text-xs text-slate-400">{client.email || 'Sin correo'} {client.wantsInvoice ? '· pide factura' : ''}</p>
-                        <p className="text-xs font-semibold text-emerald-700">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
+                        <p className="text-xs font-semibold text-cyan-800">Historial: {clientSales.length} compra(s) · Total ${totalPurchased.toFixed(2)}</p>
                         {customerAccountsEnabled && totals.pending > 0 && <p className="text-xs font-bold text-amber-600">Pendiente fiado/acumulativo: ${totals.pending.toFixed(2)}</p>}
                         {lastSale && <p className="text-xs text-slate-500">Última compra: {lastSale.code} · {lastSale.date} · ${Number(lastSale.total || 0).toFixed(2)}</p>}
                         {client.notes && <p className="text-xs text-slate-500">Nota: {client.notes}</p>}
@@ -408,14 +408,14 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                     </div>
                     {isDeleting ? (
                       <div className="flex gap-2">
-                        <button onClick={() => deleteClient(client.id)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-bold text-white hover:bg-red-600">Confirmar</button>
-                        <button onClick={() => setPendingDeleteClientId(null)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">Cancelar</button>
+                        <button onClick={() => deleteClient(client.id)} className="iq-action-danger iq-action-danger-solid">Confirmar</button>
+                        <button onClick={() => setPendingDeleteClientId(null)} className="iq-action-neutral">Cancelar</button>
                       </div>
                     ) : (
                       <div className="flex gap-2">
-                        <button onClick={() => sellToClient(client)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">Vender</button>
-                        <button onClick={() => editClient(client)} className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50"><Edit className="h-4 w-4" /></button>
-                        <button onClick={() => setPendingDeleteClientId(client.id)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => sellToClient(client)} className="iq-action-primary">Vender</button>
+                        <button onClick={() => editClient(client)} className="iq-action-icon" title="Editar cliente"><Edit className="h-4 w-4" /></button>
+                        <button onClick={() => setPendingDeleteClientId(client.id)} className="iq-action-icon iq-action-icon-danger" title="Eliminar cliente"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     )}
                   </div>
@@ -443,7 +443,7 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
                     key={page}
                     type="button"
                     onClick={() => setClientPage(page)}
-                    className={`rounded-xl px-3 py-2 text-xs font-bold transition ${safeClientPage === page ? 'bg-emerald-600 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold transition ${safeClientPage === page ? 'bg-cyan-700 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                   >
                     {page}
                   </button>
@@ -464,14 +464,14 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
         <form onSubmit={saveClient} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
           <div className="mb-6 flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold">{editingClientId ? 'Editar cliente' : 'Registrar cliente'}</h3>
+              <h3 className="iq-strong-title text-xl">{editingClientId ? 'Editar cliente' : 'Registrar cliente'}</h3>
               <p className="text-sm text-slate-500">Administra tus clientes frecuentes.</p>
             </div>
             <button type="button" onClick={resetClientForm} className="rounded-xl p-2 hover:bg-slate-50">×</button>
           </div>
 
           {clientNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${clientNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${clientNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {clientNotice.message}
             </div>
           )}
@@ -483,13 +483,13 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
             <Field label="Cédula / RUC" value={clientForm.identification} onChange={v => setClientForm({ ...clientForm, identification: v })} placeholder="Ej: 1000000001" />
             <Field label="Dirección" value={clientForm.address} onChange={v => setClientForm({ ...clientForm, address: v })} placeholder="Dirección para factura" />
             <Field label="Nombre para factura" value={clientForm.invoiceName} onChange={v => setClientForm({ ...clientForm, invoiceName: v })} placeholder="Nombre o razón social" />
-            <label className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+            <label className="flex items-center gap-3 rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-900">
               <input type="checkbox" checked={clientForm.wantsInvoice} onChange={e => setClientForm({ ...clientForm, wantsInvoice: e.target.checked })} className="h-4 w-4" />
               Cliente frecuente que solicita factura
             </label>
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de cliente</span>
-              <select value={clientForm.type} onChange={e => setClientForm({ ...clientForm, type: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+              <select value={clientForm.type} onChange={e => setClientForm({ ...clientForm, type: e.target.value })} className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200">
                 <option>Nuevo</option>
                 <option>Regular</option>
                 <option>Frecuente</option>
@@ -498,11 +498,11 @@ export default function ClientsPage({ currentUser, clients, products, sales, cli
             </label>
             <label className="block">
               <span className="mb-2 block text-sm font-semibold text-slate-700">Observaciones</span>
-              <textarea value={clientForm.notes} onChange={e => setClientForm({ ...clientForm, notes: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Preferencias, horarios, notas..." />
+              <textarea value={clientForm.notes} onChange={e => setClientForm({ ...clientForm, notes: e.target.value })} className="min-h-24 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200" placeholder="Preferencias, horarios, notas..." />
             </label>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button type="button" onClick={resetClientForm} className="rounded-2xl border border-slate-200 px-4 py-3 font-semibold hover:bg-slate-50">Cancelar</button>
-              <button type="submit" className="rounded-2xl bg-emerald-600 px-4 py-3 font-bold text-white hover:bg-emerald-700">{editingClientId ? 'Actualizar cliente' : 'Guardar cliente'}</button>
+              <button type="submit" className="iq-primary-button iq-action-wide">{editingClientId ? 'Actualizar cliente' : 'Guardar cliente'}</button>
             </div>
           </div>
         </form>

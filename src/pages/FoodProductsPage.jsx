@@ -241,7 +241,7 @@ export default function FoodProductsPage({
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <FoodMetric icon={Package} title="Total ítems" value={products.length} detail={pageText.totalDetail} tone="emerald" />
+        <FoodMetric icon={Package} title="Total ítems" value={products.length} detail={pageText.totalDetail} tone="cyan" />
         <FoodMetric icon={Coffee} title={pageText.menuMetricTitle} value={menuProducts.length} detail={pageText.menuMetricDetail} tone="amber" />
         <FoodMetric icon={Package} title="Insumos" value={ingredientProducts.length} detail={pageText.ingredientMetricDetail} tone="blue" />
         <FoodMetric icon={AlertTriangle} title="Stock bajo" value={lowStock} detail={pageText.lowStockDetail} tone="red" />
@@ -249,12 +249,12 @@ export default function FoodProductsPage({
       </section>
 
       {productsLoading && (
-        <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+        <div className="rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">
           {pageText.loadingText}
         </div>
       )}
 
-      <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-5 shadow-sm">
+      <section className="iq-module-hero iq-module-hero-food">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-amber-600">{pageText.kicker}</p>
@@ -281,13 +281,13 @@ export default function FoodProductsPage({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+      <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900">
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-cyan-950">
               <Upload className="h-5 w-5" /> {pageText.importTitle}
             </h3>
-            <p className="mt-1 text-sm text-emerald-800">
+            <p className="mt-1 text-sm text-cyan-900">
               {pageText.importDescription}
             </p>
           </div>
@@ -295,11 +295,11 @@ export default function FoodProductsPage({
             <button
               type="button"
               onClick={() => downloadProductExcelTemplate(businessType)}
-              className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+              className="rounded-2xl border border-cyan-200 bg-white px-5 py-3 text-center text-sm font-bold text-cyan-800 hover:bg-cyan-50"
             >
               <Download className="mr-2 inline h-4 w-4" /> Descargar formato
             </button>
-            <label className="cursor-pointer rounded-2xl bg-emerald-600 px-5 py-3 text-center text-sm font-bold text-white hover:bg-emerald-700">
+            <label className="cursor-pointer rounded-2xl bg-cyan-700 px-5 py-3 text-center text-sm font-bold text-white hover:bg-cyan-800">
               Seleccionar Excel
               <input
                 type="file"
@@ -327,7 +327,7 @@ export default function FoodProductsPage({
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
         <div className="space-y-5">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="iq-operation-card p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h3 className="text-xl font-black text-slate-900">
@@ -344,7 +344,7 @@ export default function FoodProductsPage({
                 <button
                   type="button"
                   onClick={prepareMenuForm}
-                  className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700 hover:bg-emerald-100"
+                  className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-800 hover:bg-cyan-100"
                 >
                   {pageText.addMenuButton}
                 </button>
@@ -365,14 +365,14 @@ export default function FoodProductsPage({
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   placeholder={view === 'menu' ? pageText.searchMenuPlaceholder : pageText.searchIngredientPlaceholder}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
 
               <select
                 value={foodCategory}
                 onChange={event => setFoodCategory(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-100"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-cyan-100"
               >
                 {activeCategories.map(item => (
                   <option key={item} value={item}>{item === 'Todas' ? 'Todas las categorías' : item}</option>
@@ -451,7 +451,7 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
         const isPendingDelete = pendingDeleteId === product.id;
 
         return (
-          <div key={product.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div key={product.id} className="iq-menu-product-card p-4">
             <div className="flex items-start gap-3">
               {product.imageUrl ? (
                 <img src={product.imageUrl} alt={product.name} className="h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-100" />
@@ -472,10 +472,10 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
 
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
-                <p className="text-2xl font-black text-emerald-700">{formatMoney(product.price)}</p>
+                <p className="text-2xl font-black text-cyan-800">{formatMoney(product.price)}</p>
                 <p className="text-xs text-slate-400">Existencia: {product.stock}</p>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-black ${Number(product.stock || 0) > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${Number(product.stock || 0) > 0 ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
                 {Number(product.stock || 0) > 0 ? 'Disponible' : 'Sin stock'}
               </span>
             </div>
@@ -508,7 +508,7 @@ function IngredientsList({ products, pageText, pendingDeleteId, setPendingDelete
   }
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+    <div className="iq-operation-card overflow-hidden">
       <div className="hidden bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[1.3fr_0.9fr_0.7fr_0.7fr_0.8fr_140px] lg:gap-3">
         <span>Insumo</span>
         <span>Categoría</span>
@@ -572,14 +572,14 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
           <button
             type="button"
             onClick={() => deleteProduct(product.id)}
-            className="rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700"
+            className="iq-action-danger iq-action-danger-solid"
           >
             Sí
           </button>
           <button
             type="button"
             onClick={() => setPendingDeleteId(null)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
+            className="iq-action-neutral"
           >
             No
           </button>
@@ -590,7 +590,7 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
             <button
               type="button"
               onClick={() => openRecipe?.(product)}
-              className="rounded-xl border border-amber-100 p-2 text-amber-600 hover:bg-amber-50"
+              className="iq-action-icon"
               title="Configurar receta"
             >
               <BookOpen className="h-4 w-4" />
@@ -599,7 +599,7 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
           <button
             type="button"
             onClick={() => printLabel(product)}
-            className="rounded-xl border border-emerald-100 p-2 text-emerald-600 hover:bg-emerald-50"
+            className="iq-action-icon"
             title="Imprimir etiqueta"
           >
             <Printer className="h-4 w-4" />
@@ -607,7 +607,7 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
           <button
             type="button"
             onClick={() => editProduct(product)}
-            className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+            className="iq-action-icon"
             title="Editar"
           >
             <Edit className="h-4 w-4" />
@@ -615,7 +615,7 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
           <button
             type="button"
             onClick={() => setPendingDeleteId(product.id)}
-            className="rounded-xl border border-red-100 p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+            className="iq-action-icon iq-action-icon-danger"
             title="Eliminar"
           >
             <Trash2 className="h-4 w-4" />
@@ -698,24 +698,25 @@ function FoodViewButton({ title, detail, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl px-5 py-4 text-center transition ${active ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+      className={`rounded-2xl px-5 py-4 text-center transition ${active ? 'bg-cyan-700 text-white shadow-sm shadow-cyan-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
     >
       <span className="block text-sm font-black">{title}</span>
-      <span className={`mt-1 block text-xs font-bold ${active ? 'text-emerald-50' : 'text-slate-400'}`}>{detail}</span>
+      <span className={`mt-1 block text-xs font-bold ${active ? 'text-cyan-50' : 'text-slate-400'}`}>{detail}</span>
     </button>
   );
 }
 
 function FoodMetric({ icon: Icon, title, value, detail, tone }) {
   const tones = {
-    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    emerald: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
     red: 'bg-red-50 text-red-600 border-red-100',
   };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="iq-operation-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-bold text-slate-500">{title}</p>
@@ -732,7 +733,7 @@ function FoodMetric({ icon: Icon, title, value, detail, tone }) {
 
 function EmptyFoodState({ title, text }) {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
+    <div className="iq-empty-state p-10">
       <Package className="mx-auto h-10 w-10 text-slate-300" />
       <h4 className="mt-3 text-lg font-black text-slate-700">{title}</h4>
       <p className="mt-1 text-sm text-slate-500">{text}</p>

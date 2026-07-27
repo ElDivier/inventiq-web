@@ -16,14 +16,14 @@ export default function SettingsPage({
     <form onSubmit={saveSettings} className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <div className="space-y-5">
         {settingsNotice && (
-          <div className={`rounded-2xl p-4 text-sm font-semibold ${settingsNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          <div className={`rounded-2xl p-4 text-sm font-semibold ${settingsNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
             {settingsNotice.message}
           </div>
         )}
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold">
-            <Store className="h-5 w-5 text-emerald-600" />
+          <h3 className="iq-strong-title mb-5 flex items-center gap-2 text-xl">
+            <Store className="h-5 w-5 text-cyan-700" />
             Datos de la tienda
           </h3>
 
@@ -97,7 +97,7 @@ export default function SettingsPage({
 
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"
+              className="iq-primary-button iq-action-wide"
             >
               <Save className="h-5 w-5" />
               Guardar cambios
@@ -106,8 +106,8 @@ export default function SettingsPage({
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold">
-            <Lock className="h-5 w-5 text-emerald-600" />
+          <h3 className="iq-strong-title mb-5 flex items-center gap-2 text-xl">
+            <Lock className="h-5 w-5 text-cyan-700" />
             Seguridad de cuenta
           </h3>
 
@@ -150,7 +150,7 @@ export default function SettingsPage({
 
             <button
               type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"
+              className="iq-primary-button iq-action-wide"
             >
               <Save className="h-5 w-5" />
               Guardar cambios
@@ -161,8 +161,8 @@ export default function SettingsPage({
 
       <aside className="space-y-5">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold">
-            <Camera className="h-5 w-5 text-emerald-600" />
+          <h3 className="iq-strong-title mb-5 flex items-center gap-2 text-xl">
+            <Camera className="h-5 w-5 text-cyan-700" />
             Logo de la tienda
           </h3>
 
@@ -203,8 +203,8 @@ export default function SettingsPage({
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold">
-            <ReceiptText className="h-5 w-5 text-emerald-600" />
+          <h3 className="iq-strong-title mb-5 flex items-center gap-2 text-xl">
+            <ReceiptText className="h-5 w-5 text-cyan-700" />
             Comprobante
           </h3>
 
@@ -215,21 +215,21 @@ export default function SettingsPage({
             <textarea
               value={settingsForm.receiptFooter}
               onChange={e => setSettingsForm({ ...settingsForm, receiptFooter: e.target.value })}
-              className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+              className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
               placeholder="Ej: Gracias por su compra."
             />
           </label>
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 flex items-center gap-2 text-xl font-bold">
-            <Lock className="h-5 w-5 text-emerald-600" />
+          <h3 className="iq-strong-title mb-5 flex items-center gap-2 text-xl">
+            <Lock className="h-5 w-5 text-cyan-700" />
             Privacidad y seguridad
           </h3>
 
           <div className="space-y-3 text-sm text-slate-600">
-            <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800">
-              <p className="font-bold text-emerald-900">Privacidad activa</p>
+            <div className="rounded-2xl bg-cyan-50 p-4 text-cyan-900">
+              <p className="font-bold text-cyan-950">Privacidad activa</p>
               <p className="mt-1">
                 La información de esta tienda se mantiene separada de otros usuarios mediante políticas de seguridad en la base de datos.
               </p>
@@ -239,7 +239,7 @@ export default function SettingsPage({
               <p className="font-bold text-slate-900">Datos protegidos por cuenta</p>
               <p className="mt-1">
                 Tus productos, ventas, compras, clientes y proveedores solo pertenecen a tu usuario.
-                InventiQ usa reglas de seguridad en Supabase para separar la información de cada tienda.
+                INVENTIQ usa reglas de seguridad en Supabase para separar la información de cada tienda.
               </p>
             </div>
 

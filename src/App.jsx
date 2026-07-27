@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { IMPORT_BATCH_SIZE } from './config/constants';
 import { getBusinessConfig } from './config/businessTypes';
@@ -111,8 +111,21 @@ import PageHeader from './components/PageHeader';
 import AppRoutes from './components/AppRoutes';
 import ReceiptModal from './components/ReceiptModal';
 import AuthPage from './pages/AuthPage';
+import LandingPage from './pages/LandingPage';
+
+
+function getPublicRoute(pathname = '') {
+  const normalized = String(pathname || '/')
+    .split('?')[0]
+    .replace(/\/+$/, '') || '/';
+
+  if (normalized === '/app') return 'app';
+  if (normalized === '/iniciar-sesion' || normalized === '/login') return 'login';
+  return 'landing';
+}
 
 function App() {
+  const [publicRoute, setPublicRoute] = useState(() => getPublicRoute(typeof window !== 'undefined' ? window.location.pathname : '/'));
   const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.users, initialUsers));
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -166,7 +179,7 @@ function App() {
   const [receiptSale, setReceiptSale] = useState(null);
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.innerWidth < 768;
+    return getPublicRoute(window.location.pathname) === 'app' && window.innerWidth < 768;
   });
   const [excelImportPreview, setExcelImportPreview] = useState(null);
   const [excelImportProgress, setExcelImportProgress] = useState(null);
@@ -181,6 +194,29 @@ function App() {
     purchases: false,
     expenses: false,
   });
+
+  const navigateTo = useCallback((path, options = {}) => {
+    if (typeof window === 'undefined') return;
+    const method = options.replace ? 'replaceState' : 'pushState';
+    window.history[method]({}, '', path);
+    setPublicRoute(getPublicRoute(path));
+    window.scrollTo({ top: 0, behavior: options.instant ? 'auto' : 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      setPublicRoute(getPublicRoute(window.location.pathname));
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && currentUser && publicRoute === 'login') {
+      navigateTo('/app', { replace: true, instant: true });
+    }
+  }, [authLoading, currentUser, publicRoute, navigateTo]);
 
   useEffect(() => {
     if (!showSplash) return;
@@ -576,12 +612,13 @@ function App() {
       setAuthMode('login');
       setAuthNotice(null);
       setLoginForm(emptyLoginForm);
+      navigateTo('/app', { replace: true, instant: true });
     }
   }
 
   async function register(e) {
     e.preventDefault();
-    setAuthNotice({ type: 'error', message: 'El registro público está desactivado. Solicita la creación de tu cuenta al administrador de InventiQ.' });
+    setAuthNotice({ type: 'error', message: 'El registro público está desactivado. Solicita la creación de tu cuenta al administrador de INVENTIQ.' });
   }
 
   async function createClientAccount(e) {
@@ -675,7 +712,7 @@ function App() {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/iniciar-sesion`,
     });
 
     if (error) {
@@ -730,6 +767,7 @@ function App() {
     setActive('Inicio');
     setAuthMode('login');
     setAuthNotice(null);
+    navigateTo('/iniciar-sesion', { replace: true, instant: true });
   }
 
   const storeKey = currentUser?.id || 'demo';
@@ -2954,12 +2992,7 @@ function App() {
   const pageInfo = getPageInfo(active, businessConfig, businessProfile);
   const visibleMenu = getVisibleMenu(isInventiQAdmin(currentUser), businessProfile);
 
-
-  if (showSplash) {
-    return <SplashScreen />;
-  }
-
-  if (!currentUser || authMode === 'update-password') {
+  if (authMode === 'update-password') {
     return (
       <AuthPage
         authMode={authMode}
@@ -2978,14 +3011,51 @@ function App() {
         resetPasswordForm={resetPasswordForm}
         setResetPasswordForm={setResetPasswordForm}
         updateRecoveredPassword={updateRecoveredPassword}
+        onBackToLanding={() => navigateTo('/', { instant: true })}
       />
     );
   }
 
+  if (publicRoute === 'landing') {
+    return <LandingPage currentUser={currentUser} onNavigate={navigateTo} />;
+  }
+
+  if (authLoading || (publicRoute === 'login' && currentUser)) {
+    return <SplashScreen />;
+  }
+
+  if (!currentUser) {
+    return (
+      <AuthPage
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        loginForm={loginForm}
+        setLoginForm={setLoginForm}
+        registerForm={registerForm}
+        setRegisterForm={setRegisterForm}
+        authNotice={authNotice}
+        setAuthNotice={setAuthNotice}
+        login={login}
+        register={register}
+        resetEmail={resetEmail}
+        setResetEmail={setResetEmail}
+        resetPassword={resetPassword}
+        resetPasswordForm={resetPasswordForm}
+        setResetPasswordForm={setResetPasswordForm}
+        updateRecoveredPassword={updateRecoveredPassword}
+        onBackToLanding={() => navigateTo('/', { instant: true })}
+      />
+    );
+  }
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="inventiq-app-shell min-h-screen overflow-x-hidden text-slate-900">
       <MobileTopBar currentUser={currentUser} logout={logout} active={active} />
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
+      <div className="min-h-screen">
         <DesktopSidebar
           menu={visibleMenu}
           active={active}
@@ -2995,12 +3065,14 @@ function App() {
           logout={logout}
         />
 
-        <main className="p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:p-8 lg:pb-8 lg:pt-8">
-          <PageHeader
-            pageInfo={pageInfo}
-            currentUser={currentUser}
-            onAddProduct={() => setActive('Productos')}
-          />
+        <main className="relative min-w-0 p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:ml-[280px] lg:p-8 lg:pb-8 lg:pt-8">
+          {active !== 'Inicio' && (
+            <PageHeader
+              pageInfo={pageInfo}
+              currentUser={currentUser}
+              onAddProduct={() => setActive('Productos')}
+            />
+          )}
 
           <AppRoutes
             active={active}

@@ -1,4 +1,4 @@
-export const ADMIN_EMAILS = ['revelodiego19@gmail.com'];
+export const ADMIN_EMAILS = ['inventiqweb@gmail.com'];
 
 export const IMPORT_BATCH_SIZE = 200;
 

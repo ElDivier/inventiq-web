@@ -148,18 +148,18 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
         <Metric icon={Boxes} label="Unidades vendidas" value={totalUnitsSold} note="productos" color="red" />
       </section>
 
-      {salesLoading && <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando ventas desde Supabase...</div>}
+      {salesLoading && <div className="rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">Cargando ventas desde Supabase...</div>}
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_430px]">
         <div className="order-2 space-y-5 xl:order-1">
-          <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <section className="iq-operation-card">
             <div className="border-b border-slate-100 p-5">
-              <h3 className="flex items-center gap-2 text-xl font-bold"><ReceiptText className="h-5 w-5 text-emerald-600" /> Historial de ventas</h3>
+              <h3 className="iq-strong-title flex items-center gap-2 text-xl"><ReceiptText className="h-5 w-5 text-cyan-700" /> Historial de ventas</h3>
               <p className="mt-1 text-sm text-slate-500">Separa las ventas completadas de las anuladas para revisar mejor el movimiento.</p>
             </div>
             <div className="border-b border-slate-100 px-5 py-4">
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setSaleHistoryFilter('completed')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'completed' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                <button type="button" onClick={() => setSaleHistoryFilter('completed')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'completed' ? 'bg-cyan-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                   Completadas ({completedHistorySales.length})
                 </button>
                 <button type="button" onClick={() => setSaleHistoryFilter('canceled')} className={`rounded-xl px-4 py-2 text-xs font-bold transition ${saleHistoryFilter === 'canceled' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
@@ -175,7 +175,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
               {paginatedSales.map(sale => (
                 <div key={sale.id} className="flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><ShoppingCart className="h-5 w-5" /></div>
+                    <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700"><ShoppingCart className="h-5 w-5" /></div>
                     <div>
                       <p className="font-bold">{sale.code}</p>
                       <p className="text-sm text-slate-500">{sale.product} · {sale.quantity} unidades · {sale.date}</p>
@@ -186,13 +186,13 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                     <div className="text-right">
                       <p className="font-bold">${sale.total.toFixed(2)}</p>
                       <p className="text-xs text-slate-500">Utilidad: ${(sale.profit || 0).toFixed(2)}</p>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sale.status === 'Anulada' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{sale.status}</span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${sale.status === 'Anulada' ? 'bg-red-50 text-red-700' : 'bg-cyan-50 text-cyan-800'}`}>{sale.status}</span>
                     </div>
-                    <button type="button" onClick={() => setReceiptSale(sale)} className="rounded-xl border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50">
+                    <button type="button" onClick={() => setReceiptSale(sale)} className="iq-action-secondary">
                       Comprobante
                     </button>
                     {sale.status !== 'Anulada' && (
-                      <button onClick={() => cancelSale(sale.id)} className="rounded-xl border border-red-100 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50">
+                      <button onClick={() => cancelSale(sale.id)} className="iq-action-danger">
                         Anular
                       </button>
                     )}
@@ -213,7 +213,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
           </section>
         </div>
 
-        <form onSubmit={registerSale} className="order-1 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:order-2">
+        <form onSubmit={registerSale} className="order-1 iq-operation-card iq-operation-card-accent iq-sticky-workspace p-6 xl:order-2">
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold">Registrar nueva venta</h3>
@@ -223,7 +223,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
           </div>
 
           {saleNotice && (
-            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${saleNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-4 rounded-2xl p-4 text-sm font-semibold ${saleNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {saleNotice.message}
             </div>
           )}
@@ -233,9 +233,9 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
               <span className="mb-2 block text-sm font-semibold text-slate-700">Buscar producto</span>
               <div className="relative mb-3">
                 <Search className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-emerald-200" placeholder="Buscar o escanear código de barras..." />
+                <input value={productSearch} onChange={e => handleProductSearch(e.target.value)} onFocus={event => event.target.select()} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-cyan-200" placeholder="Buscar o escanear código de barras..." />
               </div>
-              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+              <button type="button" onClick={() => setScannerOpen(true)} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-200 px-4 py-3 text-sm font-bold text-cyan-800 hover:bg-cyan-50">
                 <Camera className="h-4 w-4" /> Escanear con cámara
               </button>
               {scannerOpen && <BarcodeScanner onScan={handleProductSearch} onClose={() => setScannerOpen(false)} />}
@@ -249,26 +249,26 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                         setSaleForm(prev => ({ ...prev, productId: product.id }));
                         setProductSearch(getProductDisplayName(product));
                       }}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-emerald-50"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm hover:bg-cyan-50"
                     >
                       <span>
                         <strong className="text-slate-900">{getProductDisplayName(product)}</strong>
                         <span className="block text-xs text-slate-500">{product.sku || 'Sin SKU'} · {product.category}</span>
                       </span>
-                      <span className="text-xs font-bold text-emerald-700">Stock {product.stock}</span>
+                      <span className="text-xs font-bold text-cyan-800">Stock {product.stock}</span>
                     </button>
                   ))}
                 </div>
               )}
               {product ? (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase text-emerald-700">Producto seleccionado</p>
-                      <p className="mt-1 font-bold text-emerald-950">{getProductDisplayName(product)}</p>
-                      <p className="text-sm text-emerald-800">{product.sku || 'Sin SKU'} · Stock disponible {product.stock}</p>
+                      <p className="text-xs font-bold uppercase text-cyan-800">Producto seleccionado</p>
+                      <p className="mt-1 font-bold text-cyan-950">{getProductDisplayName(product)}</p>
+                      <p className="text-sm text-cyan-900">{product.sku || 'Sin SKU'} · Stock disponible {product.stock}</p>
                     </div>
-                    <button type="button" onClick={() => { setSaleForm(prev => ({ ...prev, productId: '' })); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Cambiar</button>
+                    <button type="button" onClick={() => { setSaleForm(prev => ({ ...prev, productId: '' })); setProductSearch(''); }} className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-cyan-800 hover:bg-cyan-100">Cambiar</button>
                   </div>
                 </div>
               ) : (
@@ -286,7 +286,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Cantidad" type="number" value={saleForm.quantity} onChange={v => setSaleForm({ ...saleForm, quantity: v })} placeholder="1" min="1" />
-              <button type="button" onClick={addSelectedProductToCart} className="mt-7 rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Agregar al carrito</button>
+              <button type="button" onClick={addSelectedProductToCart} className="mt-7 rounded-2xl bg-cyan-700 px-4 py-3 font-semibold text-white hover:bg-cyan-800">Agregar al carrito</button>
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -308,11 +308,11 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                         <div>
                           <p className="font-bold text-slate-900">{item.product}</p>
                           <p className="text-xs text-slate-500">{item.quantity} x ${item.price.toFixed(2)} = ${originalSubtotal.toFixed(2)}</p>
-                          {hasDiscount && <p className="mt-1 text-xs font-semibold text-emerald-700">Descuento: -${lineDiscount.toFixed(2)}</p>}
+                          {hasDiscount && <p className="mt-1 text-xs font-semibold text-cyan-800">Descuento: -${lineDiscount.toFixed(2)}</p>}
                         </div>
                         <div className="flex items-start gap-3">
                           <div className="text-right">
-                            <p className="font-bold text-emerald-700">${lineTotal.toFixed(2)}</p>
+                            <p className="font-bold text-cyan-800">${lineTotal.toFixed(2)}</p>
                             {hasDiscount && <p className="text-[11px] text-slate-400 line-through">${originalSubtotal.toFixed(2)}</p>}
                           </div>
                           <button type="button" onClick={() => removeSaleItem(item.productId)} className="rounded-xl border border-red-100 p-2 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
@@ -322,13 +322,13 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                       <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <span className="text-xs font-bold text-slate-600">Descuento</span>
-                          {hasDiscount && <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-700">-{item.discountPercent.toFixed(2)}%</span>}
+                          {hasDiscount && <span className="rounded-full bg-cyan-100 px-2 py-1 text-[11px] font-bold text-cyan-800">-{item.discountPercent.toFixed(2)}%</span>}
                         </div>
                         <div className="grid grid-cols-[1fr_110px] gap-2">
                           <select
                             value={item.discountType || 'percent'}
                             onChange={e => updateSaleItemDiscount(item.productId, { discountType: e.target.value, discountValue: '' })}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-emerald-200"
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-cyan-200"
                           >
                             <option value="percent">Porcentaje %</option>
                             <option value="fixed">Valor $</option>
@@ -340,7 +340,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                             value={Number(item.discountValue || 0) === 0 ? '' : item.discountValue}
                             onChange={e => updateSaleItemDiscount(item.productId, { discountValue: e.target.value })}
                             placeholder={item.discountType === 'fixed' ? 'Ej: 2' : 'Ej: 10'}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-200"
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-cyan-200"
                           />
                         </div>
                       </div>
@@ -353,34 +353,34 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
             <div>
               <span className="mb-2 block text-sm font-semibold text-slate-700">Tipo de venta</span>
               <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setSaleType('consumidor')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'consumidor' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <button type="button" onClick={() => setSaleType('consumidor')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'consumidor' ? 'border-cyan-200 bg-cyan-50 text-cyan-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   Consumidor final
                 </button>
-                <button type="button" onClick={() => setSaleType('factura')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'factura' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <button type="button" onClick={() => setSaleType('factura')} className={`rounded-2xl border px-4 py-3 text-sm font-bold transition ${saleForm.saleType === 'factura' ? 'border-cyan-200 bg-cyan-50 text-cyan-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                   Factura
                 </button>
               </div>
             </div>
 
             {saleForm.saleType === 'factura' && (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                <h4 className="mb-3 font-bold text-emerald-900">Factura rápida</h4>
+              <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+                <h4 className="mb-3 font-bold text-cyan-950">Factura rápida</h4>
                 <label className="mb-3 block">
-                  <span className="mb-2 block text-sm font-semibold text-emerald-900">Buscar cliente guardado</span>
-                  <select value={saleForm.customerId} onChange={e => selectClient(e.target.value)} className="w-full rounded-2xl border border-emerald-100 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200">
+                  <span className="mb-2 block text-sm font-semibold text-cyan-950">Buscar cliente guardado</span>
+                  <select value={saleForm.customerId} onChange={e => selectClient(e.target.value)} className="w-full rounded-2xl border border-cyan-100 bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200">
                     <option value="">Persona no registrada / llenar manual</option>
                     {clients.map(client => <option key={client.id} value={client.id}>{client.name} {client.wantsInvoice ? '· cliente frecuente' : ''}</option>)}
                   </select>
                 </label>
 
-                <label className="mb-3 flex items-center gap-3 rounded-2xl bg-white p-4 text-sm font-semibold text-emerald-800">
+                <label className="mb-3 flex items-center gap-3 rounded-2xl bg-white p-4 text-sm font-semibold text-cyan-900">
                   <input type="checkbox" checked={saleForm.invoiceEnabled} onChange={e => setSaleForm({ ...saleForm, invoiceEnabled: e.target.checked })} className="h-4 w-4" />
                   Crear factura para esta venta
                 </label>
 
                 {saleForm.invoiceEnabled && (
                   <div>
-                    <h4 className="mb-3 font-bold text-emerald-900">Datos de facturación</h4>
+                    <h4 className="mb-3 font-bold text-cyan-950">Datos de facturación</h4>
                     <div className="space-y-3">
                       <Field label="Nombre / Razón social" value={saleForm.invoiceName} onChange={v => setSaleForm({ ...saleForm, invoiceName: v, customer: v })} placeholder="Nombre para la factura" />
                       <Field label="Cédula / RUC" value={saleForm.invoiceIdentification} onChange={v => setSaleForm({ ...saleForm, invoiceIdentification: v })} placeholder="Ej: 1000000001" />
@@ -404,7 +404,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                     ...(paymentMethod === 'Mixto' ? {} : { cashAmount: '', cardAmount: '', transferAmount: '' }),
                   });
                 }}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
               >
                 <option>Efectivo</option>
                 <option>Transferencia</option>
@@ -415,13 +415,13 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
             </label>
 
             {splitPaymentEnabled && saleForm.paymentMethod === 'Mixto' && (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h4 className="font-bold text-emerald-900">Pago mixto</h4>
-                    <p className="text-xs font-semibold text-emerald-700">Divide el total entre efectivo, tarjeta o transferencia.</p>
+                    <h4 className="font-bold text-cyan-950">Pago mixto</h4>
+                    <p className="text-xs font-semibold text-cyan-800">Divide el total entre efectivo, tarjeta o transferencia.</p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${Math.abs(splitPaymentDifference) <= 0.01 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${Math.abs(splitPaymentDifference) <= 0.01 ? 'bg-cyan-100 text-cyan-800' : 'bg-red-100 text-red-700'}`}>
                     Suma: ${splitPaymentTotal.toFixed(2)}
                   </span>
                 </div>
@@ -442,19 +442,19 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
 
             {error && <div className="rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
 
-            <div className="rounded-2xl bg-emerald-50 p-4">
-              <div className="space-y-2 text-sm text-emerald-800">
+            <div className="iq-total-highlight">
+              <div className="space-y-2 text-sm text-cyan-900">
                 <div className="flex justify-between"><span>Subtotal</span><strong>${subtotal.toFixed(2)}</strong></div>
                 <div className="flex justify-between"><span>Descuento ({discountPercent.toFixed(2)}%)</span><strong>-${discount.toFixed(2)}</strong></div>
                 <div className="flex justify-between"><span>Utilidad estimada</span><strong>${profit.toFixed(2)}</strong></div>
               </div>
-              <div className="mt-3 border-t border-emerald-100 pt-3">
-                <p className="text-sm text-emerald-700">Total a cobrar</p>
-                <p className="text-3xl font-extrabold text-emerald-900">${total.toFixed(2)}</p>
+              <div className="mt-3 border-t border-cyan-100 pt-3">
+                <p className="text-sm text-cyan-800">Total a cobrar</p>
+                <p className="text-3xl font-extrabold text-cyan-950">${total.toFixed(2)}</p>
               </div>
             </div>
 
-            <button type="submit" className="w-full rounded-2xl bg-emerald-600 px-4 py-3 font-semibold text-white hover:bg-emerald-700">Registrar venta</button>
+            <button type="submit" className="iq-primary-button w-full">Registrar venta</button>
           </div>
         </form>
       </section>

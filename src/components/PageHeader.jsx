@@ -1,31 +1,45 @@
-import { Plus } from 'lucide-react';
+import { MapPin, Plus, Store } from 'lucide-react';
 
 export default function PageHeader({ pageInfo, currentUser, onAddProduct }) {
   const HeaderIcon = pageInfo.icon;
+  const storeName = currentUser?.store || 'Mi negocio';
+  const cityName = currentUser?.city && currentUser.city !== 'Sin ciudad registrada'
+    ? currentUser.city
+    : 'Ubicación pendiente';
 
   return (
-    <header className="mb-5 flex flex-col gap-4 rounded-[1.5rem] bg-white/70 p-3 shadow-sm backdrop-blur sm:mb-8 sm:bg-transparent sm:p-0 sm:shadow-none lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-center gap-4">
-        <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
-          <HeaderIcon className="h-8 w-8" />
+    <header className="iq-page-header">
+      <div className="iq-page-header-main">
+        <div className="iq-page-header-icon">
+          <HeaderIcon className="h-6 w-6 sm:h-7 sm:w-7" />
         </div>
 
-        <div>
-          <h2 className="text-2xl font-extrabold sm:text-3xl lg:text-4xl">{pageInfo.title}</h2>
-          <p className="text-sm text-slate-500 sm:text-base">{pageInfo.subtitle}</p>
-          <p className="mt-1 text-sm font-semibold text-emerald-700">
-            {currentUser.store} · {currentUser.city}
-          </p>
+        <div className="min-w-0">
+          <p className="iq-page-header-kicker">Panel de gestión</p>
+          <h2 className="iq-page-header-title">{pageInfo.title}</h2>
+          <p className="iq-page-header-subtitle">{pageInfo.subtitle}</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="iq-page-header-side">
+        <div className="iq-page-context">
+          <span className="iq-page-context-item" title={storeName}>
+            <Store className="h-4 w-4" />
+            <span className="truncate">{storeName}</span>
+          </span>
+          <span className="iq-page-context-item iq-page-context-muted" title={cityName}>
+            <MapPin className="h-4 w-4" />
+            <span className="truncate">{cityName}</span>
+          </span>
+        </div>
+
         <button
+          type="button"
           onClick={onAddProduct}
-          className="hidden rounded-2xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 sm:inline-flex sm:items-center"
+          className="iq-page-primary-action"
         >
-          <Plus className="mr-2 h-5 w-5" />
-          {pageInfo.actionLabel || 'Agregar producto'}
+          <Plus className="h-5 w-5" />
+          <span>{pageInfo.actionLabel || 'Agregar producto'}</span>
         </button>
       </div>
     </header>

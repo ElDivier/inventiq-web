@@ -91,7 +91,7 @@ function getStockBadge(product, statusText) {
 
   return {
     label: product.status || 'Activo',
-    className: 'bg-emerald-50 text-emerald-700',
+    className: 'bg-cyan-50 text-cyan-800',
   };
 }
 
@@ -413,11 +413,11 @@ export default function ProductTable({
   }
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-start lg:justify-between">
+    <section className="iq-catalog-panel">
+      <div className="iq-catalog-header">
         <div>
           <h3 className="flex items-center gap-2 text-xl font-extrabold text-slate-900">
-            <Package className="h-5 w-5 text-emerald-600" /> {tableTitle}
+            <Package className="h-5 w-5 text-cyan-700" /> {tableTitle}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             Mostrando {totalProducts === 0 ? 0 : startIndex + 1}-{Math.min(startIndex + PRODUCTS_PER_PAGE, totalProducts)} de {totalProducts} {itemWordPlural}.
@@ -433,7 +433,7 @@ export default function ProductTable({
                 value={tableSearch}
                 onChange={event => handleTableSearchChange(event.target.value)}
                 onFocus={event => event.target.select()}
-                className="w-full rounded-2xl border border-slate-200 bg-white py-2 pl-9 pr-16 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+                className="iq-input py-2 pl-9 pr-16 text-sm font-semibold"
                 placeholder="Nombre, SKU o código..."
               />
               {tableSearch && (
@@ -453,7 +453,7 @@ export default function ProductTable({
             <select
               value={labelColumns}
               onChange={event => setLabelColumns(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+              className="iq-input px-3 py-2 text-sm font-semibold"
             >
               <option value="1">1 columna</option>
               <option value="2">2 columnas</option>
@@ -468,7 +468,7 @@ export default function ProductTable({
               min="1"
               value={labelCopies}
               onChange={event => setLabelCopies(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+              className="iq-input px-3 py-2 text-sm font-semibold"
             />
           </label>
 
@@ -476,7 +476,7 @@ export default function ProductTable({
             type="button"
             onClick={printSelectedLabels}
             disabled={selectedProducts.length === 0}
-            className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="iq-primary-button disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Printer className="mr-2 inline h-4 w-4" />
             Imprimir {selectedProducts.length || ''}
@@ -485,7 +485,7 @@ export default function ProductTable({
       </div>
 
       <div className="grid grid-cols-1 gap-0 xl:grid-cols-[280px_1fr]">
-        <aside className="border-b border-slate-100 p-5 xl:border-b-0 xl:border-r">
+        <aside className="iq-catalog-sidebar">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h4 className="text-sm font-extrabold uppercase tracking-wide text-slate-500">Categorías</h4>
@@ -496,7 +496,7 @@ export default function ProductTable({
             <button
               type="button"
               onClick={startCreateCategory}
-              className="rounded-xl bg-emerald-600 p-2 text-white hover:bg-emerald-700"
+              className="rounded-xl bg-cyan-700 p-2 text-white hover:bg-cyan-800"
               title="Crear categoría"
             >
               <Plus className="h-4 w-4" />
@@ -507,18 +507,18 @@ export default function ProductTable({
             value={categorySearch}
             onChange={event => setCategorySearch(event.target.value)}
             placeholder="Buscar categoría..."
-            className="mb-3 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+            className="iq-input mb-3 px-3 py-2 text-sm"
           />
 
           {categoryNotice && (
-            <div className={`mb-3 rounded-2xl p-3 text-xs font-semibold ${categoryNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mb-3 rounded-2xl p-3 text-xs font-semibold ${categoryNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
               {categoryNotice.message}
             </div>
           )}
 
           {creatingCategory && (
-            <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-              <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800">
+            <div className="mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-3">
+              <label className="block text-xs font-bold uppercase tracking-wide text-cyan-900">
                 Nueva categoría
               </label>
               <input
@@ -528,7 +528,7 @@ export default function ProductTable({
                   if (event.key === 'Enter') saveNewCategory();
                   if (event.key === 'Escape') cancelCreateCategory();
                 }}
-                className="mt-2 w-full rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200"
+                className="mt-2 w-full rounded-xl border border-cyan-100 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                 placeholder={categoryExample}
                 autoFocus
               />
@@ -536,14 +536,14 @@ export default function ProductTable({
                 <button
                   type="button"
                   onClick={saveNewCategory}
-                  className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                  className="iq-action-primary flex-1"
                 >
                   Guardar
                 </button>
                 <button
                   type="button"
                   onClick={cancelCreateCategory}
-                  className="flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                  className="iq-action-secondary flex-1"
                 >
                   Cancelar
                 </button>
@@ -565,7 +565,7 @@ export default function ProductTable({
 
               if (isEditing) {
                 return (
-                  <div key={categoryName} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                  <div key={categoryName} className="rounded-2xl border border-cyan-100 bg-cyan-50 p-3">
                     <input
                       value={editingCategoryName}
                       onChange={event => setEditingCategoryName(event.target.value)}
@@ -573,21 +573,21 @@ export default function ProductTable({
                         if (event.key === 'Enter') saveRenameCategory();
                         if (event.key === 'Escape') cancelRenameCategory();
                       }}
-                      className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-200"
+                      className="w-full rounded-xl border border-cyan-100 bg-white px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-cyan-200"
                       autoFocus
                     />
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={saveRenameCategory}
-                        className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                        className="iq-action-primary"
                       >
                         Guardar
                       </button>
                       <button
                         type="button"
                         onClick={cancelRenameCategory}
-                        className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                        className="iq-action-secondary"
                       >
                         Cancelar
                       </button>
@@ -608,7 +608,7 @@ export default function ProductTable({
                     <button
                       type="button"
                       onClick={() => startRenameCategory(categoryName)}
-                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 hover:text-cyan-700"
                       title="Renombrar categoría"
                     >
                       <Edit className="h-3.5 w-3.5" />
@@ -660,14 +660,14 @@ export default function ProductTable({
           )}
         </aside>
 
-        <div className="min-w-0 p-5">
+        <div className="iq-catalog-content">
           <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
               <input
                 type="checkbox"
                 checked={allPageProductsSelected}
                 onChange={togglePageSelection}
-                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                className="h-4 w-4 rounded border-slate-300 text-cyan-700 focus:ring-cyan-500"
               />
               Seleccionar {itemWordPlural} de esta página
             </label>
@@ -692,8 +692,8 @@ export default function ProductTable({
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-3xl border border-slate-100">
-              <div className="hidden bg-slate-50 px-4 py-3 text-xs font-extrabold uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:gap-3">
+            <div className="iq-table-shell">
+              <div className="iq-table-head hidden lg:grid lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:gap-3">
                 <span />
                 <span>{productColumnLabel}</span>
                 <span>Categoría</span>
@@ -712,13 +712,13 @@ export default function ProductTable({
                   const isSelected = selectedLabelIds.includes(product.id);
 
                   return (
-                    <div key={product.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:items-center">
+                    <div key={product.id} className="iq-table-row grid gap-3 lg:grid-cols-[36px_1.5fr_1fr_0.7fr_0.7fr_0.7fr_140px] lg:items-center">
                       <div className="flex items-center lg:block">
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSelectedLabel(product.id)}
-                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-700 focus:ring-cyan-500"
                         />
                       </div>
 
@@ -731,7 +731,7 @@ export default function ProductTable({
                               className="h-12 w-12 rounded-2xl object-cover ring-1 ring-slate-100"
                             />
                           ) : (
-                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100">
                               <Package className="h-5 w-5" />
                             </div>
                           )}
@@ -779,14 +779,14 @@ export default function ProductTable({
                             <button
                               type="button"
                               onClick={() => deleteProduct(product.id)}
-                              className="rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+                              className="iq-action-danger iq-action-danger-solid"
                             >
                               Sí
                             </button>
                             <button
                               type="button"
                               onClick={() => setPendingDeleteId(null)}
-                              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                              className="iq-action-neutral"
                             >
                               No
                             </button>
@@ -796,7 +796,7 @@ export default function ProductTable({
                             <button
                               type="button"
                               onClick={() => printOneLabel(product)}
-                              className="rounded-xl border border-emerald-100 p-2 text-emerald-600 hover:bg-emerald-50"
+                              className="iq-action-icon"
                               title="Imprimir etiqueta"
                             >
                               <Printer className="h-4 w-4" />
@@ -804,7 +804,7 @@ export default function ProductTable({
                             <button
                               type="button"
                               onClick={() => editProduct(product)}
-                              className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-emerald-600"
+                              className="iq-action-icon"
                               title="Editar producto"
                             >
                               <Edit className="h-4 w-4" />
@@ -812,7 +812,7 @@ export default function ProductTable({
                             <button
                               type="button"
                               onClick={() => setPendingDeleteId(product.id)}
-                              className="rounded-xl border border-red-100 p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                              className="iq-action-icon iq-action-icon-danger"
                               title="Eliminar producto"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -868,7 +868,7 @@ function CategoryButton({ categoryName, count, active, onSelect }) {
       onClick={onSelect}
       className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold transition ${
         active
-          ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100'
+          ? 'bg-cyan-700 text-white shadow-sm shadow-cyan-100'
           : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
       }`}
     >

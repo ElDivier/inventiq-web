@@ -1,31 +1,94 @@
 import React from 'react';
-import { getBusinessConfig } from '../config/businessTypes';
-import DashboardKpi from '../components/DashboardKpi';
-import DashboardMiniStat from '../components/DashboardMiniStat';
-import QuickAction from '../components/QuickAction';
-import SummaryBox from '../components/SummaryBox';
-import DashboardListCard from '../components/DashboardListCard';
-import EmptyDashboardMessage from '../components/EmptyDashboardMessage';
 import {
   Activity,
-  DollarSign,
-  TrendingUp,
-  Package,
   AlertTriangle,
-  Boxes,
-  ShoppingCart,
-  ClipboardList,
-  Plus,
   BarChart3,
+  Boxes,
+  CalendarDays,
+  ClipboardList,
+  DollarSign,
+  Package,
+  Plus,
+  ReceiptText,
+  ShoppingCart,
+  Sparkles,
+  Store,
+  TrendingUp,
 } from 'lucide-react';
+import { getBusinessConfig } from '../config/businessTypes';
+import { parseInventiqDate, startOfDay } from '../utils/dates';
+import DashboardKpi from '../components/DashboardKpi';
+import QuickAction from '../components/QuickAction';
+import DashboardListCard from '../components/DashboardListCard';
+import DashboardSalesChart from '../components/DashboardSalesChart';
+import DashboardHealthCard from '../components/DashboardHealthCard';
+import EmptyDashboardMessage from '../components/EmptyDashboardMessage';
+
+const currency = value => `$${Number(value || 0).toFixed(2)}`;
+
+function buildWeeklySales(sales = []) {
+  const today = startOfDay(new Date());
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (6 - index));
+    return {
+      date,
+      key: date.toISOString().slice(0, 10),
+      label: date.toLocaleDateString('es-EC', { weekday: 'short' }).replace('.', '').slice(0, 3),
+      fullLabel: date.toLocaleDateString('es-EC', { weekday: 'long', day: '2-digit', month: 'short' }),
+      value: 0,
+    };
+  });
+
+  const dayMap = Object.fromEntries(days.map(day => [day.key, day]));
+
+  sales.forEach(sale => {
+    if (sale.status === 'Anulada') return;
+    const parsed = parseInventiqDate(sale.date);
+    if (!parsed) return;
+    const key = startOfDay(parsed).toISOString().slice(0, 10);
+    if (dayMap[key]) dayMap[key].value += Number(sale.total || 0);
+  });
+
+  return days;
+}
+
+function RecentSaleRow({ sale }) {
+  const itemCount = sale.items?.length || Number(sale.quantity || 0) || 1;
+
+  return (
+    <div className="dashboard-list-row">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+          <ReceiptText className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-extrabold text-slate-900">{sale.code || 'Venta registrada'}</p>
+          <p className="truncate text-sm text-slate-500">
+            {sale.product || sale.items?.[0]?.product || `${itemCount} producto${itemCount === 1 ? '' : 's'}`} · {sale.date || 'Sin fecha'}
+          </p>
+        </div>
+      </div>
+      <p className="shrink-0 text-base font-black text-cyan-700">{currency(sale.total)}</p>
+    </div>
+  );
+}
 
 function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit, setActive, expirationText }) {
   const businessConfig = getBusinessConfig(currentUser?.businessType);
   const completedSales = sales.filter(sale => sale.status !== 'Anulada');
-  const recentSales = completedSales.slice(0, 5);
+  const recentSales = [...completedSales]
+    .sort((a, b) => {
+      const dateA = parseInventiqDate(a.date)?.getTime() || 0;
+      const dateB = parseInventiqDate(b.date)?.getTime() || 0;
+      return dateB - dateA;
+    })
+    .slice(0, 5);
+
   const lowStockProducts = products
     .filter(product => Number(product.stock || 0) > 0 && Number(product.stock || 0) <= Number(product.minStock || 0))
     .slice(0, 5);
+
   const expiringProducts = businessConfig.usesExpiration
     ? products
       .filter(product => {
@@ -54,98 +117,193 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
 
   const topSoldProducts = Object.values(soldMap).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
   const alertCount = lowStock + noStock + expiringProducts.length;
-  const stockOk = products.filter(product => Number(product.stock || 0) > Number(product.minStock || 0)).length;
-  const inventoryHealth = totalProducts > 0 ? Math.round((stockOk / totalProducts) * 100) : 0;
+  const healthyStock = products.filter(product => Number(product.stock || 0) > Number(product.minStock || 0)).length;
+  const inventoryHealth = totalProducts > 0 ? Math.round((healthyStock / totalProducts) * 100) : 0;
+  const weeklySales = buildWeeklySales(completedSales);
+  const weeklyTotal = weeklySales.reduce((sum, day) => sum + day.value, 0);
+  const todayLabel = new Date().toLocaleDateString('es-EC', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+  const todayKey = startOfDay(new Date()).toISOString().slice(0, 10);
+  const todaySales = completedSales.reduce((sum, sale) => {
+    const parsed = parseInventiqDate(sale.date);
+    if (!parsed) return sum;
+    const saleKey = startOfDay(parsed).toISOString().slice(0, 10);
+    return saleKey === todayKey ? sum + Number(sale.total || 0) : sum;
+  }, 0);
+  const todayTransactions = completedSales.filter(sale => {
+    const parsed = parseInventiqDate(sale.date);
+    if (!parsed) return false;
+    return startOfDay(parsed).toISOString().slice(0, 10) === todayKey;
+  }).length;
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-500 p-6 text-white shadow-xl shadow-emerald-100 sm:p-7">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-50 backdrop-blur">
-              <Activity className="h-4 w-4" /> Dashboard principal
+    <div className="space-y-5 sm:space-y-6">
+      <section className="dashboard-welcome-banner">
+        <div className="dashboard-welcome-grid" />
+        <div className="dashboard-welcome-layout">
+          <div className="dashboard-welcome-copy">
+            <div className="dashboard-welcome-topline">
+              <span className="dashboard-glass-badge">
+                <Sparkles className="h-4 w-4" />
+                Resumen general
+              </span>
+              <span className="dashboard-glass-badge dashboard-glass-badge-muted">
+                <CalendarDays className="h-4 w-4" />
+                <span className="capitalize">{todayLabel}</span>
+              </span>
             </div>
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Bienvenido, {currentUser?.name || 'Usuario'}</h2>
-            <p className="mt-2 text-sm leading-6 text-emerald-50 sm:text-base">
-              Resumen inteligente de {currentUser?.store || 'tu tienda'}: ventas, inventario, alertas y productos clave en un solo lugar.
+
+            <p className="dashboard-welcome-eyebrow">
+              Bienvenido a InventIQ
             </p>
+            <h1 className="dashboard-welcome-title">Tu negocio, en orden.</h1>
+            <p className="dashboard-welcome-description">
+              Consulta ventas, inventario y alertas de <strong>{currentUser?.store || 'tu negocio'}</strong> desde una vista clara y lista para tomar decisiones.
+            </p>
+
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[560px]">
-            <DashboardMiniStat icon={DollarSign} label="Ventas" value={`$${totalSales.toFixed(2)}`} />
-            <DashboardMiniStat icon={TrendingUp} label="Utilidad" value={`$${totalProfit.toFixed(2)}`} />
-            <DashboardMiniStat icon={Package} label="Productos" value={totalProducts} />
-            <DashboardMiniStat icon={AlertTriangle} label="Alertas" value={alertCount} />
+          <div className="dashboard-hero-overview">
+            <div className="dashboard-hero-overview-header">
+              <div>
+                <p className="dashboard-hero-overview-kicker">Resumen de hoy</p>
+                <h2>Información clave</h2>
+              </div>
+              <span className="dashboard-live-status">
+                <span />
+                Actualizado
+              </span>
+            </div>
+
+            <div className="dashboard-hero-overview-grid">
+              <div className="dashboard-hero-metric dashboard-hero-metric-cyan">
+                <div className="dashboard-hero-metric-icon">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="dashboard-hero-metric-label">Ventas hoy</p>
+                  <p className="dashboard-hero-metric-value">{currency(todaySales)}</p>
+                  <p className="dashboard-hero-metric-helper">{todayTransactions} movimiento{todayTransactions === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+
+              <div className="dashboard-hero-metric dashboard-hero-metric-blue">
+                <div className="dashboard-hero-metric-icon">
+                  <Store className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="dashboard-hero-metric-label">Tipo de negocio</p>
+                  <p className="dashboard-hero-metric-value dashboard-hero-metric-value-text">{businessConfig.label}</p>
+                  <p className="dashboard-hero-metric-helper">Perfil activo</p>
+                </div>
+              </div>
+
+              <div className="dashboard-hero-metric dashboard-hero-metric-teal">
+                <div className="dashboard-hero-metric-icon">
+                  <Boxes className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="dashboard-hero-metric-label">Valor del inventario</p>
+                  <p className="dashboard-hero-metric-value">{currency(inventoryValue)}</p>
+                  <p className="dashboard-hero-metric-helper">{totalProducts} producto{totalProducts === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+
+              <div className={`dashboard-hero-metric ${alertCount > 0 ? 'dashboard-hero-metric-amber' : 'dashboard-hero-metric-cyan'}`}>
+                <div className="dashboard-hero-metric-icon">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="dashboard-hero-metric-label">Alertas pendientes</p>
+                  <p className="dashboard-hero-metric-value">{alertCount}</p>
+                  <p className="dashboard-hero-metric-helper">{alertCount > 0 ? 'Requieren revisión' : 'Todo está en orden'}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <DashboardKpi icon={DollarSign} title="Ventas acumuladas" value={`$${totalSales.toFixed(2)}`} subtitle="registradas" tone="emerald" />
-        <DashboardKpi icon={TrendingUp} title="Utilidad registrada" value={`$${totalProfit.toFixed(2)}`} subtitle="estimada" tone="blue" />
-        <DashboardKpi icon={Boxes} title="Stock bajo" value={lowStock} subtitle="por revisar" tone="amber" />
-        <DashboardKpi icon={ShoppingCart} title="Sin stock" value={noStock} subtitle="requiere compra" tone="red" />
+        <DashboardKpi icon={DollarSign} title="Ventas acumuladas" value={currency(totalSales)} subtitle="Total registrado" tone="cyan" detail="Ventas" />
+        <DashboardKpi icon={TrendingUp} title="Utilidad estimada" value={currency(totalProfit)} subtitle="Según costos registrados" tone="blue" detail="Rendimiento" />
+        <DashboardKpi icon={Package} title="Productos activos" value={totalProducts} subtitle="En tu catálogo" tone="blue" detail="Catálogo" />
+        <DashboardKpi icon={AlertTriangle} title="Atención requerida" value={alertCount} subtitle="Stock y caducidades" tone={alertCount > 0 ? 'amber' : 'cyan'} detail="Alertas" />
       </section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QuickAction icon={ShoppingCart} label="Nueva venta" onClick={() => setActive('Ventas')} tone="emerald" />
-        <QuickAction icon={ClipboardList} label="Registrar compra" onClick={() => setActive('Compras')} tone="teal" />
-        <QuickAction icon={Plus} label="Agregar producto" onClick={() => setActive('Productos')} tone="blue" />
-        <QuickAction icon={BarChart3} label="Ver reportes" onClick={() => setActive('Reportes')} tone="slate" />
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="rounded-[2rem] border border-emerald-100 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-2xl font-extrabold text-slate-900">Resumen de tienda</h3>
-              <p className="text-sm text-slate-500">Control general de inventario y rendimiento.</p>
+      <section className="dashboard-actions-panel">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="dashboard-section-kicker">
+              <Activity className="h-4 w-4" />
+              Acciones rápidas
             </div>
-            <span className="rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">Salud del inventario: {inventoryHealth}%</span>
+            <h2 className="mt-2 text-xl font-black tracking-tight text-[#10233f]">¿Qué deseas hacer?</h2>
           </div>
-
-          <div className="rounded-[1.75rem] bg-gradient-to-br from-emerald-600 to-teal-600 p-6 text-white">
-            <p className="text-sm font-semibold text-emerald-100">Inventario valorizado</p>
-            <h4 className="mt-2 text-4xl font-extrabold">${inventoryValue.toFixed(2)}</h4>
-            <p className="mt-3 text-sm leading-6 text-emerald-50">
-              Producto estrella: <strong>{topSoldProducts[0]?.name || bestSeller || 'Sin ventas'}</strong>. Mantén atención sobre stock bajo, sin stock{businessConfig.usesExpiration ? ' y caducidades próximas' : ''}.
-            </p>
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <SummaryBox label="Ventas" value={`$${totalSales.toFixed(2)}`} />
-              <SummaryBox label="Productos" value={totalProducts} />
-              <SummaryBox label="Alertas" value={alertCount} />
-            </div>
-          </div>
+          
         </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <QuickAction icon={ShoppingCart} label="Nueva venta" helper="Registrar una operación" onClick={() => setActive('Ventas')} tone="cyan" />
+          <QuickAction icon={ClipboardList} label="Registrar compra" helper="Actualizar costos y stock" onClick={() => setActive('Compras')} tone="blue" />
+          <QuickAction icon={Plus} label="Agregar producto" helper="Ampliar el catálogo" onClick={() => setActive('Productos')} tone="blue" />
+          <QuickAction icon={BarChart3} label="Ver reportes" helper="Analizar resultados" onClick={() => setActive('Reportes')} tone="slate" />
+        </div>
+      </section>
 
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.55fr_0.85fr]">
+        <DashboardSalesChart data={weeklySales} total={weeklyTotal} onOpenReports={() => setActive('Reportes')} />
+        <DashboardHealthCard
+          percentage={inventoryHealth}
+          healthy={healthyStock}
+          lowStock={lowStock}
+          noStock={noStock}
+          onOpenInventory={() => setActive('Inventario')}
+        />
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <article className="dashboard-panel">
+          <div className="mb-5 flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-xl font-extrabold text-slate-900">Ventas recientes</h3>
-              <p className="text-sm text-slate-500">Últimos movimientos registrados.</p>
-            </div>
-            <button onClick={() => setActive('Ventas')} className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">Ver todas</button>
-          </div>
-          <div className="space-y-3">
-            {recentSales.length === 0 && <EmptyDashboardMessage text="Todavía no hay ventas registradas." />}
-            {recentSales.map(sale => (
-              <div key={sale.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-4">
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900">{sale.code}</p>
-                  <p className="truncate text-sm text-slate-500">{sale.product} · {sale.date}</p>
-                </div>
-                <p className="shrink-0 font-extrabold text-emerald-700">${Number(sale.total || 0).toFixed(2)}</p>
+              <div className="dashboard-section-kicker">
+                <ReceiptText className="h-4 w-4" />
+                Actividad reciente
               </div>
-            ))}
+              <h3 className="mt-3 text-xl font-black tracking-tight text-[#10233f]">Últimas ventas</h3>
+              <p className="mt-1 text-sm text-slate-500">Movimientos registrados recientemente.</p>
+            </div>
+            <button type="button" onClick={() => setActive('Ventas')} className="dashboard-text-button">Ver todas</button>
           </div>
-        </div>
+          <div className="space-y-2.5">
+            {recentSales.length === 0 && <EmptyDashboardMessage text="Todavía no hay ventas registradas." />}
+            {recentSales.map(sale => <RecentSaleRow key={sale.id || sale.code} sale={sale} />)}
+          </div>
+        </article>
+
+        <DashboardListCard
+          title="Productos más vendidos"
+          subtitle={`Producto destacado: ${topSoldProducts[0]?.name || bestSeller || 'Sin ventas registradas'}`}
+          empty="Todavía no hay ventas suficientes para generar el ranking."
+          onViewAll={() => setActive('Reportes')}
+          items={topSoldProducts.map(product => ({
+            title: product.name,
+            subtitle: `${product.quantity} unidades vendidas`,
+            badge: currency(product.total),
+            tone: 'cyan',
+          }))}
+        />
       </section>
 
-      <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-3' : 'xl:grid-cols-2'}`}>
+      <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-2' : ''}`}>
         <DashboardListCard
           title="Productos con stock bajo"
           subtitle="Requieren revisión o reposición"
           empty="No hay productos con stock bajo."
+          onViewAll={() => setActive('Inventario')}
           items={lowStockProducts.map(product => ({
             title: product.name,
             subtitle: `Stock actual: ${product.stock} · mínimo: ${product.minStock}`,
@@ -153,31 +311,24 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
             tone: 'amber',
           }))}
         />
-        {businessConfig.usesExpiration && <DashboardListCard
-          title="Próximos a caducar"
-          subtitle="Productos que vencen pronto"
-          empty="No hay productos próximos a caducar."
-          items={expiringProducts.map(product => {
-            const exp = expirationText(product);
-            return {
-              title: product.name,
-              subtitle: `Caduca: ${product.expirationDate || 'Sin fecha'} · ${exp.label}`,
-              badge: exp.days !== null ? `${exp.days} días` : 'Revisar',
-              tone: 'red',
-            };
-          })}
-        />}
-        <DashboardListCard
-          title="Productos más vendidos"
-          subtitle="Ranking por unidades vendidas"
-          empty="Todavía no hay ventas suficientes."
-          items={topSoldProducts.map(product => ({
-            title: product.name,
-            subtitle: `${product.quantity} unidades vendidas`,
-            badge: `$${product.total.toFixed(2)}`,
-            tone: 'emerald',
-          }))}
-        />
+
+        {businessConfig.usesExpiration && (
+          <DashboardListCard
+            title="Próximos a caducar"
+            subtitle="Productos que requieren seguimiento"
+            empty="No hay productos próximos a caducar."
+            onViewAll={() => setActive('Inventario')}
+            items={expiringProducts.map(product => {
+              const exp = expirationText(product);
+              return {
+                title: product.name,
+                subtitle: `Caduca: ${product.expirationDate || 'Sin fecha'} · ${exp.label}`,
+                badge: exp.days !== null ? `${exp.days} días` : 'Revisar',
+                tone: 'red',
+              };
+            })}
+          />
+        )}
       </section>
     </div>
   );

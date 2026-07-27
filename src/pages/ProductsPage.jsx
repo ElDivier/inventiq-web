@@ -76,19 +76,19 @@ export default function ProductsPage({
         <Metric icon={DollarSign} label="Valor total inventario" value={`$${inventoryValue.toFixed(2)}`} note="valor aproximado" color="blue" />
       </section>
 
-      {productsLoading && <div className="mb-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">Cargando productos desde Supabase...</div>}
+      {productsLoading && <div className="mb-5 rounded-2xl bg-cyan-50 p-4 text-sm font-semibold text-cyan-800">Cargando productos desde Supabase...</div>}
 
-      <section className="mb-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
+      <section className="mb-5 rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold text-emerald-900"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
-            <p className="mt-1 text-sm text-emerald-800">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, InventiQ importa por bloques de 200 productos para evitar fallos.</p>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold text-cyan-950"><Upload className="h-5 w-5" /> Importar productos desde Excel</h3>
+            <p className="mt-1 text-sm text-cyan-900">Carga un archivo .xlsx o .csv con columnas como producto, categoría, precio, stock, marca, talla, color, SKU y código de barras. El costo es opcional. Para inventarios grandes, INVENTIQ importa por bloques de 200 productos para evitar fallos.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-emerald-200 bg-white px-5 py-3 text-center text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+            <button type="button" onClick={() => downloadProductExcelTemplate(businessType)} className="rounded-2xl border border-cyan-200 bg-white px-5 py-3 text-center text-sm font-bold text-cyan-800 hover:bg-cyan-50">
               <Download className="mr-2 inline h-4 w-4" />Descargar formato
             </button>
-            <label className="cursor-pointer rounded-2xl bg-emerald-600 px-5 py-3 text-center text-sm font-bold text-white hover:bg-emerald-700">
+            <label className="cursor-pointer rounded-2xl bg-cyan-700 px-5 py-3 text-center text-sm font-bold text-white hover:bg-cyan-800">
               Seleccionar Excel
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) importProductsFromExcel(file); e.target.value = ''; }} />
             </label>
@@ -235,8 +235,8 @@ export default function ProductsPage({
         <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
-      <section className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
-        <h3 className="mb-4 text-lg font-bold text-emerald-900">¿Por qué usar InventiQ?</h3>
+      <section className="mt-5 rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
+        <h3 className="mb-4 text-lg font-bold text-cyan-950">¿Por qué usar INVENTIQ?</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Benefit icon={Package} title="Controla tu inventario" text="en tiempo real" />
           <Benefit icon={AlertTriangle} title="Evita pérdidas" text="por falta de stock" />

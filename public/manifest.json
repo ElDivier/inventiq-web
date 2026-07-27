@@ -1,11 +1,11 @@
 {
-  "name": "InventiQ",
-  "short_name": "InventiQ",
-  "description": "Gestión inteligente de inventarios para tiendas",
+  "name": "INVENTIQ",
+  "short_name": "INVENTIQ",
+  "description": "Gestión inteligente para distintos tipos de negocio",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#059669",
+  "background_color": "#f6f9fd",
+  "theme_color": "#071a33",
   "icons": [
     {
       "src": "/inventiq-icon.png",

@@ -89,18 +89,18 @@ export default function CashPage({ sales = [], purchases = [] }) {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+      <section className="iq-module-hero iq-module-hero-finance">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h3 className="text-xl font-extrabold text-slate-900">Cierres y cortes por periodo</h3>
             <p className="text-sm text-slate-500">Controla ventas, compras, descuentos, utilidad y métodos de pago por periodo.</p>
-            <p className="mt-2 text-sm font-bold text-emerald-700">Periodo seleccionado: {closeLabel}</p>
+            <p className="mt-2 text-sm font-bold text-cyan-800">Periodo seleccionado: {closeLabel}</p>
           </div>
 
           <button
             type="button"
             onClick={exportCashCut}
-            className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+            className="iq-action-primary"
           >
             <Download className="mr-2 inline h-4 w-4" />
             Exportar cierre
@@ -115,7 +115,7 @@ export default function CashPage({ sales = [], purchases = [] }) {
               onClick={() => setClosePeriod(value)}
               className={`rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 closePeriod === value
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-cyan-700 text-white'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -140,7 +140,7 @@ export default function CashPage({ sales = [], purchases = [] }) {
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="iq-operation-card p-6">
           <p className="text-sm font-bold text-slate-700">Cierre de efectivo</p>
           <p className="mt-2 text-sm text-slate-500">Compara el efectivo esperado contra el efectivo contado físicamente.</p>
 
@@ -164,7 +164,7 @@ export default function CashPage({ sales = [], purchases = [] }) {
           {cashCounted !== '' && (
             <p className={`mt-3 rounded-2xl p-4 text-sm font-bold ${
               cashDifference === 0
-                ? 'bg-emerald-50 text-emerald-700'
+                ? 'bg-cyan-50 text-cyan-800'
                 : cashDifference > 0
                   ? 'bg-blue-50 text-blue-700'
                   : 'bg-red-50 text-red-700'
@@ -178,21 +178,21 @@ export default function CashPage({ sales = [], purchases = [] }) {
             <textarea
               value={cashNote}
               onChange={e => setCashNote(e.target.value)}
-              className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-200"
+              className="min-h-20 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-200"
               placeholder="Ej: faltante por cambio, sobrante, retiro de efectivo..."
             />
           </label>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="iq-operation-card p-6">
           <p className="text-sm font-bold text-slate-700">Balance ventas - compras</p>
-          <p className={`mt-2 text-4xl font-extrabold ${periodBalance >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+          <p className={`mt-2 text-4xl font-extrabold ${periodBalance >= 0 ? 'text-cyan-800' : 'text-red-600'}`}>
             ${periodBalance.toFixed(2)}
           </p>
           <p className="mt-2 text-sm text-slate-500">Unidades vendidas: {periodUnits}</p>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="iq-operation-card p-6">
           <p className="mb-4 text-sm font-bold text-slate-700">Métodos de pago</p>
 
           {Object.keys(paymentSummary).length === 0 && (
@@ -209,7 +209,7 @@ export default function CashPage({ sales = [], purchases = [] }) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="iq-operation-card p-6">
           <p className="mb-4 text-sm font-bold text-slate-700">Resumen del periodo</p>
 
           <div className="space-y-3">

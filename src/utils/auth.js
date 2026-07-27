@@ -26,11 +26,11 @@ export function getAccountAccessBlockReason(profile, email) {
   const status = String(profile.subscription_status || '').trim().toLowerCase();
 
   if (profile.is_suspended || status === 'suspendido') {
-    return 'Tu cuenta de InventiQ está suspendida. Comunícate con InventiQ para reactivar tu acceso.';
+    return 'Tu cuenta de INVENTIQ está suspendida. Comunícate con INVENTIQ para reactivar tu acceso.';
   }
 
   if (status === 'vencido') {
-    return 'Tu plan de InventiQ está vencido. Comunícate con InventiQ para renovar tu acceso.';
+    return 'Tu plan de INVENTIQ está vencido. Comunícate con INVENTIQ para renovar tu acceso.';
   }
 
   if (profile.subscription_end) {
@@ -41,7 +41,7 @@ export function getAccountAccessBlockReason(profile, email) {
     endDate.setHours(23, 59, 59, 999);
 
     if (!Number.isNaN(endDate.getTime()) && endDate < today) {
-      return 'Tu plan de InventiQ ha vencido. Comunícate con InventiQ para renovar tu acceso.';
+      return 'Tu plan de INVENTIQ ha vencido. Comunícate con INVENTIQ para renovar tu acceso.';
     }
   }
 

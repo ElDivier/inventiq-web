@@ -67,7 +67,7 @@ const TABLE_STATUS_OPTIONS = [
   { value: 'ocupada', label: 'Ocupada', detail: 'Mesa con orden abierta', className: 'border-amber-200 bg-amber-50 text-amber-700' },
   { value: 'preparacion', label: 'En preparación', detail: 'Pedido enviado a cocina', className: 'border-orange-200 bg-orange-50 text-orange-700' },
   { value: 'servida', label: 'Servida', detail: 'Pedido entregado en mesa', className: 'border-sky-200 bg-sky-50 text-sky-700' },
-  { value: 'cobrar', label: 'Por cobrar', detail: 'Lista para cerrar cuenta', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+  { value: 'cobrar', label: 'Por cobrar', detail: 'Lista para cerrar cuenta', className: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
 ];
 
 function getTableStatusMeta(status) {
@@ -517,12 +517,12 @@ export default function FoodSalesPage({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] border border-amber-100 bg-gradient-to-br from-amber-50 via-white to-emerald-50 p-6 shadow-sm">
+      <section className="iq-module-hero iq-module-hero-food">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-black uppercase tracking-[0.25em] text-amber-600">{copy.eyebrow}</p>
             <h3 className="mt-2 flex items-center gap-3 text-3xl font-black text-slate-900">
-              <Coffee className="h-8 w-8 text-emerald-600" /> {copy.title}
+              <Coffee className="h-8 w-8 text-cyan-700" /> {copy.title}
             </h3>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
               {copy.description}
@@ -549,10 +549,10 @@ export default function FoodSalesPage({
 
       {isRestaurant && (
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_0.75fr]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="iq-operation-card p-5">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-600">Mesas y comandas</p>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Mesas y comandas</p>
                 <h4 className="mt-1 text-xl font-black text-slate-900">Mapa rápido del restaurante</h4>
                 <p className="text-sm text-slate-500">Selecciona una mesa y controla el estado de la orden antes de cobrarla.</p>
               </div>
@@ -576,7 +576,7 @@ export default function FoodSalesPage({
                     key={table.id}
                     type="button"
                     onClick={() => selectRestaurantTable(table.name)}
-                    className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100' : status.className}`}
+                    className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-cyan-300 bg-cyan-50 ring-2 ring-cyan-100' : status.className}`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-black text-slate-900">{table.name}</p>
@@ -591,12 +591,12 @@ export default function FoodSalesPage({
             </div>
 
             {selectedRestaurantTable && (
-              <div className="mt-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+              <div className="mt-4 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Mesa seleccionada</p>
+                    <p className="text-xs font-black uppercase tracking-wide text-cyan-800">Mesa seleccionada</p>
                     <p className="text-lg font-black text-slate-900">{selectedRestaurantTable.name}</p>
-                    <p className="text-sm text-emerald-700/80">Estado actual: {getTableStatusMeta(selectedRestaurantTable.status).label}</p>
+                    <p className="text-sm text-cyan-800/80">Estado actual: {getTableStatusMeta(selectedRestaurantTable.status).label}</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -605,7 +605,7 @@ export default function FoodSalesPage({
                         key={status.value}
                         type="button"
                         onClick={() => markSelectedTable(status.value)}
-                        className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-emerald-100 hover:bg-emerald-100"
+                        className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-cyan-100 hover:bg-cyan-100"
                       >
                         {status.label}
                       </button>
@@ -623,7 +623,7 @@ export default function FoodSalesPage({
             )}
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="iq-operation-card p-5">
             <div className="mb-4">
               <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-600">Cocina</p>
               <h4 className="mt-1 text-xl font-black text-slate-900">Comandas activas</h4>
@@ -651,7 +651,7 @@ export default function FoodSalesPage({
                         </span>
                       </div>
                       <p className="mt-2 text-xs text-slate-500">{order.product || 'Orden del restaurante'}</p>
-                      <p className="mt-2 text-sm font-black text-emerald-700">{formatMoney(order.total)}</p>
+                      <p className="mt-2 text-sm font-black text-cyan-800">{formatMoney(order.total)}</p>
                     </div>
                   );
                 })}
@@ -662,14 +662,14 @@ export default function FoodSalesPage({
       )}
 
       {saleNotice && (
-        <div className={`rounded-3xl p-4 text-sm font-bold ${saleNotice.type === 'success' ? 'border border-emerald-100 bg-emerald-50 text-emerald-700' : 'border border-red-100 bg-red-50 text-red-700'}`}>
+        <div className={`rounded-3xl p-4 text-sm font-bold ${saleNotice.type === 'success' ? 'border border-cyan-100 bg-cyan-50 text-cyan-800' : 'border border-red-100 bg-red-50 text-red-700'}`}>
           {saleNotice.message}
         </div>
       )}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
         <div className="space-y-5">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="iq-operation-card p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h4 className="text-xl font-black text-slate-900">{copy.menuTitle}</h4>
@@ -682,7 +682,7 @@ export default function FoodSalesPage({
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   placeholder={copy.menuSearchPlaceholder}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
             </div>
@@ -695,7 +695,7 @@ export default function FoodSalesPage({
                   onClick={() => setSelectedCategory(category)}
                   className={`shrink-0 rounded-2xl px-4 py-2 text-sm font-black transition ${
                     selectedCategory === category
-                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100'
+                      ? 'bg-cyan-700 text-white shadow-sm shadow-cyan-100'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -721,7 +721,7 @@ export default function FoodSalesPage({
                     type="button"
                     onClick={() => addProductToOrder(product)}
                     disabled={disabled}
-                    className="group rounded-3xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-slate-200 disabled:hover:shadow-sm"
+                    className="group iq-menu-product-card p-4 text-left disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
                   >
                     <div className="flex items-start gap-3">
                       {product.imageUrl ? (
@@ -744,7 +744,7 @@ export default function FoodSalesPage({
 
                     <div className="mt-4 flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xl font-black text-emerald-700">{formatMoney(product.price)}</p>
+                        <p className="text-xl font-black text-cyan-800">{formatMoney(product.price)}</p>
                         <p className="text-xs text-slate-400">{getRestaurantStockLabel(product)}</p>
                         {hasActiveRecipe(product) && (
                           <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">
@@ -752,7 +752,7 @@ export default function FoodSalesPage({
                           </span>
                         )}
                       </div>
-                      <span className="rounded-2xl bg-emerald-600 p-3 text-white transition group-hover:bg-emerald-700">
+                      <span className="rounded-2xl bg-cyan-700 p-3 text-white transition group-hover:bg-cyan-800">
                         <Plus className="h-5 w-5" />
                       </span>
                     </div>
@@ -764,11 +764,11 @@ export default function FoodSalesPage({
         </div>
 
         <aside className="space-y-5">
-          <form onSubmit={registerSale} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <form onSubmit={registerSale} className="iq-operation-card iq-operation-card-accent iq-sticky-workspace p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h4 className="flex items-center gap-2 text-xl font-black text-slate-900">
-                  <ShoppingCart className="h-5 w-5 text-emerald-600" /> {copy.orderTitle}
+                  <ShoppingCart className="h-5 w-5 text-cyan-700" /> {copy.orderTitle}
                 </h4>
                 <p className="text-sm text-slate-500">{copy.orderSubtitle}</p>
               </div>
@@ -796,7 +796,7 @@ export default function FoodSalesPage({
                       key={option.value}
                       type="button"
                       onClick={() => updateSaleField('orderType', option.value)}
-                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${active ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
+                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${active ? 'bg-cyan-700 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
                     >
                       {option.label}
                     </button>
@@ -812,7 +812,7 @@ export default function FoodSalesPage({
                   <input
                     value={saleForm.orderReference || ''}
                     onChange={event => updateSaleField('orderReference', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                     placeholder={copy.getReferencePlaceholder(activeOrderType)}
                   />
 
@@ -823,7 +823,7 @@ export default function FoodSalesPage({
                           key={table.name}
                           type="button"
                           onClick={() => selectRestaurantTable(table.name)}
-                          className={`rounded-xl px-2 py-1 text-[11px] font-black transition ${saleForm.orderReference === table.name ? 'bg-emerald-600 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
+                          className={`rounded-xl px-2 py-1 text-[11px] font-black transition ${saleForm.orderReference === table.name ? 'bg-cyan-700 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
                         >
                           {table.name}
                         </button>
@@ -837,18 +837,18 @@ export default function FoodSalesPage({
                   <input
                     value={saleForm.orderNotes || ''}
                     onChange={event => updateSaleField('orderNotes', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                     placeholder={copy.notesPlaceholder}
                   />
                 </label>
               </div>
             </div>
 
-            <div className="mb-4 rounded-3xl border border-emerald-100 bg-emerald-50 p-3">
+            <div className="mb-4 rounded-3xl border border-cyan-100 bg-cyan-50 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-black uppercase tracking-wide text-emerald-700">{copy.modifiersTitle}</p>
-                  <p className="truncate text-xs text-emerald-700/80">
+                  <p className="text-xs font-black uppercase tracking-wide text-cyan-800">{copy.modifiersTitle}</p>
+                  <p className="truncate text-xs text-cyan-800/80">
                     {modifiersLoading ? 'Cargando extras...' : `${modifiers.length} extra(s) creados`}
                   </p>
                 </div>
@@ -856,7 +856,7 @@ export default function FoodSalesPage({
                 <button
                   type="button"
                   onClick={() => setExtrasManagerOpen(open => !open)}
-                  className="shrink-0 rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700"
+                  className="shrink-0 rounded-2xl bg-cyan-700 px-3 py-2 text-xs font-black text-white hover:bg-cyan-800"
                 >
                   {extrasManagerOpen ? 'Cerrar' : '+ Extra'}
                 </button>
@@ -865,7 +865,7 @@ export default function FoodSalesPage({
               {extrasManagerOpen && (
                 <div className="mt-3 rounded-2xl bg-white p-3">
                   {modifierNotice && (
-                    <div className={`mb-3 rounded-2xl p-3 text-xs font-bold ${modifierNotice.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    <div className={`mb-3 rounded-2xl p-3 text-xs font-bold ${modifierNotice.type === 'success' ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
                       {modifierNotice.message}
                     </div>
                   )}
@@ -874,7 +874,7 @@ export default function FoodSalesPage({
                     <input
                       value={modifierForm.name}
                       onChange={event => setModifierForm(prev => ({ ...prev, name: event.target.value }))}
-                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                       placeholder={copy.modifierPlaceholder}
                     />
                     <input
@@ -883,13 +883,13 @@ export default function FoodSalesPage({
                       step="0.01"
                       value={modifierForm.price}
                       onChange={event => setModifierForm(prev => ({ ...prev, price: event.target.value }))}
-                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                      className="min-w-0 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                       placeholder="0.00"
                     />
                     <button
                       type="button"
                       onClick={saveModifier}
-                      className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-black text-white hover:bg-emerald-700"
+                      className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-700 text-lg font-black text-white hover:bg-cyan-800"
                       title="Guardar extra"
                     >
                       +
@@ -929,7 +929,7 @@ export default function FoodSalesPage({
                         <p className="truncate text-sm font-black text-slate-900">{item.product}</p>
                         <p className="text-xs text-slate-500">{item.quantity} x {formatMoney(item.price)}</p>
                       </div>
-                      <p className="text-sm font-black text-emerald-700">{formatMoney(item.subtotal)}</p>
+                      <p className="text-sm font-black text-cyan-800">{formatMoney(item.subtotal)}</p>
                     </div>
 
                     <div className="mt-3 flex items-center justify-between gap-2">
@@ -971,7 +971,7 @@ export default function FoodSalesPage({
                             key={modifier.id}
                             type="button"
                             onClick={() => addModifierToItem(item, modifier)}
-                            className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 hover:bg-emerald-100"
+                            className="rounded-xl border border-cyan-100 bg-cyan-50 px-2 py-1 text-[11px] font-black text-cyan-800 hover:bg-cyan-100"
                           >
                             + {modifier.name} {modifier.price > 0 ? formatMoney(modifier.price) : ''}
                           </button>
@@ -1007,7 +1007,7 @@ export default function FoodSalesPage({
                 <select
                   value={saleForm.paymentMethod || 'Efectivo'}
                   onChange={event => updateSaleField('paymentMethod', event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                 >
                   <option value="Efectivo">Efectivo</option>
                   <option value="Transferencia">Transferencia</option>
@@ -1024,7 +1024,7 @@ export default function FoodSalesPage({
                     min="0"
                     value={saleForm.discount || ''}
                     onChange={event => updateSaleField('discount', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                     placeholder="0"
                   />
                 </label>
@@ -1034,7 +1034,7 @@ export default function FoodSalesPage({
                   <select
                     value={saleForm.discountType || 'percent'}
                     onChange={event => updateSaleField('discountType', event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                   >
                     <option value="percent">%</option>
                     <option value="fixed">$</option>
@@ -1043,7 +1043,7 @@ export default function FoodSalesPage({
               </div>
             </div>
 
-            <div className="mt-5 rounded-3xl bg-slate-900 p-5 text-white">
+            <div className="mt-5 iq-total-highlight iq-total-highlight-dark">
               <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Subtotal</span>
                 <span>{formatMoney(salePreview.subtotal)}</span>
@@ -1054,7 +1054,7 @@ export default function FoodSalesPage({
               </div>
               <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
                 <span className="text-lg font-black">Total</span>
-                <span className="text-3xl font-black text-emerald-300">{formatMoney(salePreview.total)}</span>
+                <span className="text-3xl font-black text-cyan-300">{formatMoney(salePreview.total)}</span>
               </div>
               <p className="mt-2 text-xs text-slate-400">{copy.totalSummaryLabel}: {copy.orderTypeLabels[activeOrderType] || getOrderTypeLabel(activeOrderType)} · Pago: {getPaymentLabel(saleForm.paymentMethod)}</p>
             </div>
@@ -1063,25 +1063,25 @@ export default function FoodSalesPage({
               <button
                 type="button"
                 onClick={resetSaleForm}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600 hover:bg-slate-50"
+                className="iq-secondary-button"
               >
                 Reiniciar
               </button>
               <button
                 type="submit"
                 disabled={saleCart.length === 0 || salesLoading}
-                className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="iq-primary-button disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {copy.submitLabel}
               </button>
             </div>
           </form>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="iq-operation-card p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h4 className="flex items-center gap-2 text-lg font-black text-slate-900">
-                  <ReceiptText className="h-5 w-5 text-emerald-600" /> {copy.recentTitle}
+                  <ReceiptText className="h-5 w-5 text-cyan-700" /> {copy.recentTitle}
                 </h4>
                 <p className="text-sm text-slate-500">{copy.recentSubtitle}</p>
               </div>
@@ -1100,21 +1100,21 @@ export default function FoodSalesPage({
                         <p className="truncate text-sm font-black text-slate-900">{sale.code || 'Venta'}</p>
                         <p className="text-xs text-slate-500">{sale.customer || sale.product || 'Pedido'} · {sale.paymentMethod}</p>
                       </div>
-                      <p className="text-sm font-black text-emerald-700">{formatMoney(sale.total)}</p>
+                      <p className="text-sm font-black text-cyan-800">{formatMoney(sale.total)}</p>
                     </div>
 
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => setReceiptSale(sale)}
-                        className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                        className="iq-action-secondary"
                       >
                         Recibo
                       </button>
                       <button
                         type="button"
                         onClick={() => cancelSale(sale.id)}
-                        className="rounded-xl border border-red-100 bg-white px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50"
+                        className="iq-action-danger"
                       >
                         Anular
                       </button>
@@ -1133,8 +1133,8 @@ export default function FoodSalesPage({
 
 function RestaurantOrderCard({ title, value, detail }) {
   return (
-    <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-sm">
-      <p className="text-xs font-black uppercase tracking-wide text-emerald-600">{title}</p>
+    <div className="rounded-3xl border border-cyan-100 bg-white p-4 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-wide text-cyan-700">{title}</p>
       <p className="mt-1 text-2xl font-black text-slate-900">{value}</p>
       <p className="mt-1 text-xs font-bold text-slate-400">{detail}</p>
     </div>
