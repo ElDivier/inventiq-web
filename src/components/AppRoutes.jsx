@@ -1,6 +1,7 @@
 import React from 'react';
 import HomePage from '../pages/HomePage';
 import FoodSalesPage from '../pages/FoodSalesPage';
+import RestaurantTablesPage from '../pages/RestaurantTablesPage';
 import SalesPage from '../pages/SalesPage';
 import CashPage from '../pages/CashPage';
 import DailyCashPage from '../pages/DailyCashPage';
@@ -10,6 +11,11 @@ import PurchasesPage from '../pages/PurchasesPage';
 import FoodProductsPage from '../pages/FoodProductsPage';
 import ProductsPage from '../pages/ProductsPage';
 import InventoryPage from '../pages/InventoryPage';
+import BakeryRecipesPage from '../pages/BakeryRecipesPage';
+import RestaurantRecipesPage from '../pages/RestaurantRecipesPage';
+import BakeryProductionPage from '../pages/BakeryProductionPage';
+import BakeryWastePage from '../pages/BakeryWastePage';
+import BakeryOrdersPage from '../pages/BakeryOrdersPage';
 import ClientsPage from '../pages/ClientsPage';
 import ProvidersPage from '../pages/ProvidersPage';
 import ReportsPage from '../pages/ReportsPage';
@@ -187,6 +193,7 @@ export default function AppRoutes({
             salePreview={salePreview}
             salesLoading={salesLoading}
             setReceiptSale={setReceiptSale}
+            setActive={setActive}
           />
         ) : (
           <SalesPage
@@ -214,6 +221,15 @@ export default function AppRoutes({
             setReceiptSale={setReceiptSale}
           />
         )
+      )}
+
+      {active === 'Mesas' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantTablesPage
+          currentUser={currentUser}
+          setActive={setActive}
+          setSaleForm={setSaleForm}
+          clearSaleCart={clearSaleCart}
+        />
       )}
 
       {active === 'Caja' && (
@@ -307,6 +323,7 @@ export default function AppRoutes({
             confirmExcelImport={confirmExcelImport}
             cancelExcelImport={cancelExcelImport}
             excelImportProgress={excelImportProgress}
+            setActive={setActive}
           />
         ) : (
           <ProductsPage
@@ -349,6 +366,47 @@ export default function AppRoutes({
         )
       )}
 
+      {active === 'Recetas' && currentUser?.businessType === 'panaderia' && (
+        <BakeryRecipesPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Recetas' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantRecipesPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Producción' && currentUser?.businessType === 'panaderia' && (
+        <BakeryProductionPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Mermas' && currentUser?.businessType === 'panaderia' && (
+        <BakeryWastePage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Encargos' && currentUser?.businessType === 'panaderia' && (
+        <BakeryOrdersPage
+          currentUser={currentUser}
+          products={storeProducts}
+          clients={storeClients}
+          setActive={setActive}
+        />
+      )}
+
       {active === 'Inventario' && (
         <InventoryPage
           currentUser={currentUser}
@@ -362,6 +420,7 @@ export default function AppRoutes({
           statusText={statusText}
           expirationText={expirationText}
           adjustProductStock={adjustProductStock}
+          setActive={setActive}
         />
       )}
 

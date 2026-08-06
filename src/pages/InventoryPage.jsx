@@ -29,7 +29,7 @@ import {
   getPaginatedData,
 } from '../utils/inventoryPage';
 
-export default function InventoryPage({ currentUser, products, sales, purchases, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText, adjustProductStock }) {
+export default function InventoryPage({ currentUser, products, sales, purchases, lowStock, noStock, inventoryValue, potentialProfit, statusText, expirationText, adjustProductStock, setActive }) {
   const [inventoryView, setInventoryView] = useState('Alertas');
   const [adjustForm, setAdjustForm] = useState({ productId: '', stock: '', reason: 'Conteo físico' });
   const [adjustNotice, setAdjustNotice] = useState(null);
@@ -42,6 +42,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
   const [summaryExpirationPage, setSummaryExpirationPage] = useState(1);
 
   const businessConfig = getBusinessConfig(currentUser?.businessType);
+  const isBakery = currentUser?.businessType === 'panaderia';
   const {
     alerts,
     criticalProducts,
@@ -197,7 +198,15 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
     );
   }
 
-  const views = ['Alertas', 'Movimientos', 'Ajuste de stock', 'Resumen'];
+  const views = isBakery
+    ? ['Alertas', 'Movimientos', 'Resumen']
+    : ['Alertas', 'Movimientos', 'Ajuste de stock', 'Resumen'];
+
+  useEffect(() => {
+    if (isBakery && inventoryView === 'Ajuste de stock') {
+      setInventoryView('Alertas');
+    }
+  }, [isBakery, inventoryView]);
 
   return (
     <div className="space-y-5">
@@ -214,9 +223,20 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
             <h3 className="text-lg font-bold text-cyan-950">Control de inventario</h3>
             <p className="text-sm text-cyan-900">{alerts.length} productos con alerta, {criticalProducts.length} sin stock{businessConfig.usesExpiration ? `, ${expiringProducts.length} próximos a caducar y ${expiredProducts.length} vencidos` : '. Este tipo de negocio no usa caducidad.'}</p>
           </div>
-          <button onClick={exportInventory} className="rounded-2xl bg-cyan-700 px-5 py-3 font-bold text-white hover:bg-cyan-800">
-            <Download className="mr-2 inline h-5 w-5" />Exportar inventario
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {isBakery && (
+              <button
+                type="button"
+                onClick={() => setActive?.('Mermas')}
+                className="rounded-2xl border border-cyan-200 bg-white px-5 py-3 font-bold text-cyan-800 hover:bg-cyan-100"
+              >
+                Mermas y conteos
+              </button>
+            )}
+            <button onClick={exportInventory} className="rounded-2xl bg-cyan-700 px-5 py-3 font-bold text-white hover:bg-cyan-800">
+              <Download className="mr-2 inline h-5 w-5" />Exportar inventario
+            </button>
+          </div>
         </div>
       </section>
 
@@ -291,8 +311,12 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h3 className="text-xl font-bold">Movimientos de inventario</h3>
-              <p className="text-sm text-slate-500">Entradas por compras, salidas por ventas y devoluciones por anulaciones.</p>
+              <h3 className="text-xl font-bold">{isBakery ? 'Movimientos comerciales de inventario' : 'Movimientos de inventario'}</h3>
+              <p className="text-sm text-slate-500">
+                {isBakery
+                  ? 'Entradas por compras y salidas por ventas. La producción y las mermas conservan su historial en sus módulos específicos.'
+                  : 'Entradas por compras, salidas por ventas y devoluciones por anulaciones.'}
+              </p>
             </div>
             {inventoryMovements.length > 0 && <span className="text-xs font-bold text-slate-500">{inventoryMovements.length} movimiento(s)</span>}
           </div>
@@ -315,7 +339,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
         </section>
       )}
 
-      {inventoryView === 'Ajuste de stock' && (
+      {!isBakery && inventoryView === 'Ajuste de stock' && (
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
           <form onSubmit={submitStockAdjustment} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="mb-2 text-xl font-bold">Ajuste manual de stock</h3>

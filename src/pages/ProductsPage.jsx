@@ -6,7 +6,6 @@ import Metric from '../components/Metric';
 import ProductTable from '../components/ProductTable';
 import ProductForm from '../components/ProductForm';
 import ExcelImportPreviewModal from '../components/ExcelImportPreviewModal';
-import Benefit from '../components/Benefit';
 import {
   Package,
   Boxes,
@@ -15,9 +14,6 @@ import {
   DollarSign,
   Upload,
   Download,
-  AlertTriangle,
-  CheckCircle2,
-  BarChart3,
 } from 'lucide-react';
 
 export default function ProductsPage({
@@ -235,15 +231,6 @@ export default function ProductsPage({
         <ProductForm businessConfig={businessConfig} form={form} setForm={setForm} saveProduct={saveProduct} resetForm={resetForm} editingId={editingId} notice={notice} productCategories={productCategories} handleProductImage={handleProductImage} />
       </section>
 
-      <section className="mt-5 rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
-        <h3 className="mb-4 text-lg font-bold text-cyan-950">¿Por qué usar INVENTIQ?</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <Benefit icon={Package} title="Controla tu inventario" text="en tiempo real" />
-          <Benefit icon={AlertTriangle} title="Evita pérdidas" text="por falta de stock" />
-          <Benefit icon={CheckCircle2} title="Ahorra tiempo" text="en tus procesos" />
-          <Benefit icon={BarChart3} title="Toma mejores decisiones" text="con datos claros" />
-        </div>
-      </section>
     </>
   );
 }

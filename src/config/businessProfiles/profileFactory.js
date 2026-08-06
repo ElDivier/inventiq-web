@@ -42,6 +42,9 @@ export function createBusinessProfile({
       dailyCash: Boolean(baseConfig.usesDailyCash),
       foodSales: baseConfig.salesMode === 'food',
       tables: Boolean(baseConfig.usesTables),
+      production: Boolean(baseConfig.usesProduction),
+      productionBatches: Boolean(baseConfig.usesBatchProduction),
+      wasteControl: Boolean(baseConfig.usesWasteControl),
       clothingVariants: businessType === 'ropa',
       ...modules,
     },
@@ -57,6 +60,8 @@ export function createBusinessProfile({
       description: true,
       recipe: Boolean(baseConfig.usesRecipes),
       ingredients: baseConfig.productMode === 'menu-inventory',
+      productType: Boolean(baseConfig.usesProduction),
+      stockUnit: Boolean(baseConfig.usesProduction),
       ...productFields,
     },
 

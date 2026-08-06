@@ -20,6 +20,12 @@ export function mapProductFromDb(product) {
     entryDate: product.entry_date || '',
     expirationDate: product.expiration_date || '',
     imageUrl: product.image_url || '',
+    productType: product.product_type || 'sale_product',
+    stockUnit: product.stock_unit || '',
+    productionEnabled: Boolean(product.production_enabled),
+    tracksLots: Boolean(product.tracks_lots),
+    tracksExpiration: Boolean(product.tracks_expiration),
+    productMetadata: product.product_metadata || {},
   };
 }
 
@@ -43,6 +49,12 @@ export function mapProductToDb(product, userId) {
     entry_date: product.entryDate || null,
     expiration_date: product.expirationDate || null,
     image_url: product.imageUrl || '',
+    ...(product.productType !== undefined ? { product_type: product.productType } : {}),
+    ...(product.stockUnit !== undefined ? { stock_unit: product.stockUnit || null } : {}),
+    ...(product.productionEnabled !== undefined ? { production_enabled: Boolean(product.productionEnabled) } : {}),
+    ...(product.tracksLots !== undefined ? { tracks_lots: Boolean(product.tracksLots) } : {}),
+    ...(product.tracksExpiration !== undefined ? { tracks_expiration: Boolean(product.tracksExpiration) } : {}),
+    ...(product.productMetadata !== undefined ? { product_metadata: product.productMetadata || {} } : {}),
   };
 }
 
@@ -67,6 +79,10 @@ export function mapSaleFromDb(sale) {
     total: Number(sale.total || 0),
     profit: Number(sale.profit || 0),
     status: sale.status || 'Completada',
+    sourceType: sale.source_type || 'pos',
+    sourceId: sale.source_id || null,
+    cashAlreadyRecorded: Boolean(sale.cash_already_recorded),
+    createdAt: sale.created_at || null,
     date: sale.created_at ? new Date(sale.created_at).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin fecha',
   };
 }
@@ -91,6 +107,9 @@ export function mapSaleToDb(sale, userId) {
     total: sale.total,
     profit: sale.profit,
     status: sale.status,
+    ...(sale.sourceType !== undefined ? { source_type: sale.sourceType || 'pos' } : {}),
+    ...(sale.sourceId !== undefined ? { source_id: sale.sourceId || null } : {}),
+    ...(sale.cashAlreadyRecorded !== undefined ? { cash_already_recorded: Boolean(sale.cashAlreadyRecorded) } : {}),
   };
 }
 

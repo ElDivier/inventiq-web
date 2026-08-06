@@ -1,3 +1,5 @@
+import { inferProductTypeFromCategory, isInternalStockCategory } from '../config/productTypes';
+
 export function getFinalProductCategory(form) {
   return form.category === '__new__'
     ? form.customCategory.trim()
@@ -5,13 +7,7 @@ export function getFinalProductCategory(form) {
 }
 
 export function isFoodIngredientCategory(category, businessType) {
-  const categoryText = String(category || '').toLowerCase();
-  const foodBusinessTypes = ['cafeteria', 'restaurante'];
-
-  return (
-    foodBusinessTypes.includes(businessType) &&
-    (categoryText.startsWith('insumos -') || categoryText.includes('insumos'))
-  );
+  return isInternalStockCategory(category, businessType);
 }
 
 export function getProductNumericValues(form, isFoodIngredient = false) {
@@ -80,6 +76,7 @@ export function buildProductData({
   stock,
   minStock,
   uploadedImageUrl,
+  businessType = 'general',
 }) {
   return {
     storeId: storeKey,
@@ -101,5 +98,18 @@ export function buildProductData({
     entryDate: form.entryDate || '',
     expirationDate: form.expirationDate || '',
     imageUrl: uploadedImageUrl,
+    productType: inferProductTypeFromCategory(finalCategory, businessType),
+    stockUnit: ['panaderia', 'restaurante'].includes(businessType)
+      ? (form.stockUnit || form.size || '').trim()
+      : (form.stockUnit || '').trim(),
+    tracksLots: ['panaderia', 'restaurante'].includes(businessType)
+      ? Boolean(form.batchNumber || form.entryDate)
+      : undefined,
+    tracksExpiration: ['panaderia', 'restaurante'].includes(businessType)
+      ? Boolean(form.expirationDate)
+      : undefined,
+    productMetadata: form.productMetadata && typeof form.productMetadata === 'object'
+      ? form.productMetadata
+      : {},
   };
 }

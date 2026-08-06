@@ -39,6 +39,7 @@ import {
   excelText,
   excelNumber,
   excelDate,
+  excelList,
 } from './utils/excel';
 import {
   fileToDataUrl,
@@ -49,6 +50,8 @@ import {
   expirationText,
 } from './utils/inventory';
 import { convertRecipeQuantityToStockUnit } from './utils/recipeUnits';
+import { inferProductTypeFromCategory } from './config/productTypes';
+import { normalizeRestaurantProductMetadata } from './utils/restaurantMenu';
 import {
   toMoneyNumber,
   isSplitPaymentAvailable,
@@ -127,7 +130,7 @@ function getPublicRoute(pathname = '') {
 function App() {
   const [publicRoute, setPublicRoute] = useState(() => getPublicRoute(typeof window !== 'undefined' ? window.location.pathname : '/'));
   const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.users, initialUsers));
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(() => loadFromStorage(STORAGE_KEYS.currentUser, null));
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
@@ -186,6 +189,9 @@ function App() {
   const [adminCreateUserForm, setAdminCreateUserForm] = useState(emptyAdminCreateUserForm);
   const [adminNotice, setAdminNotice] = useState(null);
 
+  const currentUserRef = useRef(currentUser);
+  const profileLoadTokenRef = useRef(0);
+
   const loadedDataRef = useRef({
     products: false,
     sales: false,
@@ -225,74 +231,68 @@ function App() {
   }, [showSplash]);
 
   useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    let mounted = true;
+
     async function initSupabaseSession() {
       try {
         const { data } = await supabase.auth.getSession();
         const sessionUser = data?.session?.user;
 
         if (sessionUser) {
-          setCurrentUser({
-            id: sessionUser.id,
-            email: sessionUser.email,
-            username: sessionUser.email,
-            name: sessionUser.email,
-            store: 'Mi Tienda',
-            city: 'Sin ciudad registrada',
-            businessId: '',
-            address: '',
-            phone: '',
-            commercialEmail: '',
-            receiptFooter: 'Gracias por su compra.',
-            logoUrl: '',
-            businessType: 'general',
-            splitPaymentEnabled: false,
-          });
-          loadUserProfile(sessionUser);
+          await loadUserProfile(sessionUser);
+        } else if (mounted) {
+          profileLoadTokenRef.current += 1;
+          setCurrentUser(null);
         }
       } catch (error) {
         console.error('Error iniciando sesión de Supabase:', error);
-        setCurrentUser(null);
+        if (mounted) setCurrentUser(null);
       } finally {
-        setAuthLoading(false);
+        if (mounted) setAuthLoading(false);
       }
     }
 
     initSupabaseSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         if (_event === 'PASSWORD_RECOVERY') {
           setAuthMode('update-password');
           setAuthNotice({ type: 'success', message: 'Enlace validado. Ingresa tu nueva contraseña.' });
+          return;
         }
 
-        if (session?.user && _event !== 'PASSWORD_RECOVERY') {
-          setCurrentUser({
-            id: session.user.id,
-            email: session.user.email,
-            username: session.user.email,
-            name: session.user.email,
-            store: 'Mi Tienda',
-            city: 'Sin ciudad registrada',
-            businessId: '',
-            address: '',
-            phone: '',
-            commercialEmail: '',
-            receiptFooter: 'Gracias por su compra.',
-            logoUrl: '',
-            splitPaymentEnabled: false,
+        // La sesión inicial ya se hidrata con getSession() para evitar dos cargas
+        // simultáneas del perfil y cualquier salto visual durante el arranque.
+        if (_event === 'INITIAL_SESSION') return;
+
+        if (session?.user) {
+          // Nunca reemplazar temporalmente el perfil por uno "general". Supabase puede
+          // volver a emitir SIGNED_IN/TOKEN_REFRESHED al regresar a la pestaña y ese
+          // reemplazo provocaba el cambio visible de interfaz antes de cargar el negocio.
+          // La consulta se inicia fuera del ciclo síncrono del listener de autenticación.
+          void loadUserProfile(session.user).catch((error) => {
+            console.error('Error actualizando perfil de sesión:', error);
           });
-          loadUserProfile(session.user);
         } else {
+          profileLoadTokenRef.current += 1;
           setCurrentUser(null);
         }
       } catch (error) {
         console.error('Error escuchando sesión de Supabase:', error);
-        setCurrentUser(null);
+        // Si ya existe un perfil válido en pantalla, se conserva ante un fallo transitorio.
+        if (!currentUserRef.current) setCurrentUser(null);
       }
     });
 
-    return () => listener?.subscription?.unsubscribe();
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -536,6 +536,14 @@ function App() {
   }, [currentUser]);
 
   async function loadUserProfile(sessionUser) {
+    if (currentUserRef.current?.id && currentUserRef.current.id !== sessionUser.id) {
+      profileLoadTokenRef.current += 1;
+    }
+    const requestToken = profileLoadTokenRef.current;
+    const cachedUser = currentUserRef.current?.id === sessionUser.id
+      ? currentUserRef.current
+      : loadFromStorage(STORAGE_KEYS.currentUser, null);
+
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
@@ -545,6 +553,9 @@ function App() {
     if (error) {
       console.error('Error cargando perfil:', error);
     }
+
+    // Evita que una consulta anterior sobrescriba una sesión más reciente.
+    if (requestToken !== profileLoadTokenRef.current) return null;
 
     const accessBlockReason = getAccountAccessBlockReason(profile, sessionUser.email);
 
@@ -558,32 +569,42 @@ function App() {
         type: 'error',
         message: accessBlockReason,
       });
-      return;
+      return null;
     }
 
-    setCurrentUser({
+    const resolvedUser = {
       id: sessionUser.id,
       email: sessionUser.email,
       username: sessionUser.email,
-      name: profile?.owner_name || sessionUser.email,
-      store: profile?.store_name || 'Mi Tienda',
-      city: profile?.city || 'Sin ciudad registrada',
-      businessId: profile?.business_id || '',
-      address: profile?.address || '',
-      phone: profile?.phone || '',
-      commercialEmail: profile?.commercial_email || '',
-      receiptFooter: profile?.receipt_footer || 'Gracias por su compra.',
-      logoUrl: profile?.logo_url || '',
-      businessType: profile?.business_type || 'general',
-      plan: profile?.plan || 'anual',
-      subscriptionStatus: profile?.subscription_status || 'activo',
-      subscriptionStart: profile?.subscription_start || '',
-      subscriptionEnd: profile?.subscription_end || '',
-      isSuspended: Boolean(profile?.is_suspended),
-      maxProducts: profile?.max_products || 2000,
-      splitPaymentEnabled: Boolean(profile?.split_payment_enabled),
-      customerAccountsEnabled: Boolean(profile?.customer_accounts_enabled),
-    });
+      name: profile?.owner_name || cachedUser?.name || sessionUser.email,
+      store: profile?.store_name || cachedUser?.store || 'Mi Tienda',
+      city: profile?.city || cachedUser?.city || 'Sin ciudad registrada',
+      businessId: profile?.business_id || cachedUser?.businessId || '',
+      address: profile?.address || cachedUser?.address || '',
+      phone: profile?.phone || cachedUser?.phone || '',
+      commercialEmail: profile?.commercial_email || cachedUser?.commercialEmail || '',
+      receiptFooter: profile?.receipt_footer || cachedUser?.receiptFooter || 'Gracias por su compra.',
+      logoUrl: profile?.logo_url || cachedUser?.logoUrl || '',
+      businessType: profile?.business_type || cachedUser?.businessType || 'general',
+      plan: profile?.plan || cachedUser?.plan || 'anual',
+      subscriptionStatus: profile?.subscription_status || cachedUser?.subscriptionStatus || 'activo',
+      subscriptionStart: profile?.subscription_start || cachedUser?.subscriptionStart || '',
+      subscriptionEnd: profile?.subscription_end || cachedUser?.subscriptionEnd || '',
+      isSuspended: profile?.is_suspended === undefined
+        ? Boolean(cachedUser?.isSuspended)
+        : Boolean(profile.is_suspended),
+      maxProducts: profile?.max_products || cachedUser?.maxProducts || 2000,
+      splitPaymentEnabled: profile?.split_payment_enabled === undefined
+        ? Boolean(cachedUser?.splitPaymentEnabled)
+        : Boolean(profile.split_payment_enabled),
+      customerAccountsEnabled: profile?.customer_accounts_enabled === undefined
+        ? Boolean(cachedUser?.customerAccountsEnabled)
+        : Boolean(profile.customer_accounts_enabled),
+    };
+
+    currentUserRef.current = resolvedUser;
+    setCurrentUser(resolvedUser);
+    return resolvedUser;
   }
 
   async function login(e) {
@@ -761,6 +782,8 @@ function App() {
   }
 
   async function logout() {
+    profileLoadTokenRef.current += 1;
+    currentUserRef.current = null;
     await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_KEYS.currentUser);
     setCurrentUser(null);
@@ -1065,6 +1088,7 @@ function App() {
       stock,
       minStock,
       uploadedImageUrl,
+      businessType: currentUser?.businessType || 'general',
     });
 
     const productPayload = mapProductToDb(productData, currentUser.id);
@@ -1151,6 +1175,20 @@ function App() {
         const generatedCode = skuRaw || barcodeRaw || generateInternalBarcode(businessType);
         const sku = skuRaw || generatedCode;
         const barcode = barcodeRaw || generatedCode;
+        const productType = inferProductTypeFromCategory(category, businessType);
+        const stockUnit = excelText(getExcelValue(row, ['unidad de stock', 'stock unit', 'unidad', 'medida', 'presentacion', 'presentación']));
+        const restaurantMetadata = businessType === 'restaurante' && productType === 'sale_product'
+          ? normalizeRestaurantProductMetadata({
+              menuStatus: excelText(getExcelValue(row, ['estado menu', 'estado menú', 'disponibilidad'], 'available')).toLowerCase(),
+              kitchenStation: excelText(getExcelValue(row, ['estacion cocina', 'estación cocina', 'estacion', 'estación'], 'cocina')).toLowerCase().replace(/\s+/g, '_'),
+              preparationMinutes: excelNumber(getExcelValue(row, ['tiempo preparacion min', 'tiempo preparación min', 'tiempo preparacion', 'tiempo preparación']), 0),
+              servicePeriods: excelList(getExcelValue(row, ['horarios de servicio', 'horarios', 'periodos'])).map(value => value.toLowerCase().replace(/\s+/g, '_')),
+              orderChannels: excelList(getExcelValue(row, ['canales de venta', 'canales', 'tipo de servicio'])).map(value => value.toLowerCase().replace(/\s+/g, '_')),
+              dietaryTags: excelList(getExcelValue(row, ['etiquetas', 'tags'])).map(value => value.toLowerCase().replace(/\s+/g, '_')),
+              allergens: excelText(getExcelValue(row, ['alergenos', 'alérgenos', 'advertencias'])),
+              preparationNotes: excelText(getExcelValue(row, ['nota preparacion', 'nota preparación', 'indicaciones de cocina'])),
+            })
+          : {};
 
         if (!name) {
           skippedRows.push(`Fila ${index + 2}: sin nombre de producto`);
@@ -1194,6 +1232,11 @@ function App() {
           entryDate: excelDate(getExcelValue(row, ['fecha de ingreso', 'fecha ingreso', 'ingreso'])),
           expirationDate: businessConfig.usesExpiration ? excelDate(getExcelValue(row, ['fecha de caducidad', 'fecha caducidad', 'caducidad', 'vencimiento'])) : '',
           imageUrl: excelText(getExcelValue(row, ['foto producto', 'foto', 'imagen', 'image_url', 'url imagen'])),
+          productType,
+          stockUnit: stockUnit || excelText(getExcelValue(row, ['talla', 'medida', 'presentacion', 'presentación', 'size'])),
+          tracksLots: Boolean(excelText(getExcelValue(row, ['lote', 'batch', 'batch number']))),
+          tracksExpiration: Boolean(businessConfig.usesExpiration && excelDate(getExcelValue(row, ['fecha de caducidad', 'fecha caducidad', 'caducidad', 'vencimiento']))),
+          productMetadata: restaurantMetadata,
         });
       });
 
@@ -1287,6 +1330,8 @@ function App() {
       expirationDate: product.expirationDate || '',
       imageUrl: product.imageUrl || '',
       imageFile: null,
+      stockUnit: product.stockUnit || product.size || '',
+      productMetadata: product.productMetadata || {},
     });
   }
 
@@ -1797,7 +1842,7 @@ function App() {
   }
 
   async function buildRecipeIngredientAdjustments(cartItems, sourceProducts, direction = 'subtract') {
-    const isCafeteria = ['cafeteria', 'restaurante'].includes(currentUser?.businessType);
+    const isCafeteria = currentUser?.businessType === 'cafeteria';
 
     if (!isCafeteria || !Array.isArray(cartItems) || cartItems.length === 0) {
       return { updates: [], errorMessage: '' };
@@ -1932,8 +1977,8 @@ function App() {
   }
 
   function isRecipeControlledProduct(product) {
-    const isFoodBusiness = ['cafeteria', 'restaurante'].includes(currentUser?.businessType);
-    return isFoodBusiness && Boolean(product?.recipeEnabled || product?.recipe_enabled);
+    const usesLegacySaleRecipes = currentUser?.businessType === 'cafeteria';
+    return usesLegacySaleRecipes && Boolean(product?.recipeEnabled || product?.recipe_enabled);
   }
 
   async function registerSale(e) {
@@ -2110,6 +2155,31 @@ function App() {
   async function cancelSale(id) {
     const sale = storeSales.find(s => s.id === id);
     if (!sale || !currentUser?.id) return;
+
+    if (sale.sourceType === 'bakery_order') {
+      const confirmed = window.confirm(
+        `La venta ${sale.code} proviene de un pedido especial. Al anularla, InventIQ devolverá el stock y el pedido regresará a “Listo para entregar”. Los abonos permanecerán en el historial de caja. ¿Continuar?`
+      );
+      if (!confirmed) return;
+
+      const { data, error } = await supabase.rpc('cancel_bakery_custom_order_sale', {
+        p_sale_id: id,
+      });
+
+      if (error) {
+        console.error('Error anulando venta de pedido especial:', error);
+        setSaleNotice({ type: 'error', message: `No se pudo anular la venta del pedido: ${error.message}` });
+        return;
+      }
+
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      setSaleNotice({
+        type: 'success',
+        message: `Venta ${data?.sale_code || sale.code} anulada. El stock fue devuelto y el pedido quedó listo para corregirse o entregarse nuevamente.`,
+      });
+      return;
+    }
 
     const items = sale.items?.length > 0
       ? sale.items
@@ -3065,12 +3135,11 @@ function App() {
           logout={logout}
         />
 
-        <main className="relative min-w-0 p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:ml-[280px] lg:p-8 lg:pb-8 lg:pt-8">
+        <main className="relative min-w-0 p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:ml-[250px] lg:px-10 lg:pb-10 lg:pt-10 2xl:px-12">
           {active !== 'Inicio' && (
             <PageHeader
               pageInfo={pageInfo}
               currentUser={currentUser}
-              onAddProduct={() => setActive('Productos')}
             />
           )}
 

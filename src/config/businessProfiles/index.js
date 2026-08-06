@@ -1,5 +1,6 @@
 import { createBusinessProfile } from './profileFactory';
 import { restauranteProfile } from './restaurante';
+import { panaderiaProfile } from './panaderia';
 
 export const businessProfiles = {
   general: createBusinessProfile({
@@ -45,6 +46,8 @@ export const businessProfiles = {
   }),
 
   restaurante: restauranteProfile,
+
+  panaderia: panaderiaProfile,
 
   ferreteria: createBusinessProfile({
     id: 'ferreteria',

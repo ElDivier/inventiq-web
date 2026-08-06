@@ -7,7 +7,9 @@ import {
   CalendarDays,
   ClipboardList,
   DollarSign,
+  Grid2X2,
   Package,
+  PackageCheck,
   Plus,
   ReceiptText,
   ShoppingCart,
@@ -17,7 +19,6 @@ import {
 } from 'lucide-react';
 import { getBusinessConfig } from '../config/businessTypes';
 import { parseInventiqDate, startOfDay } from '../utils/dates';
-import DashboardKpi from '../components/DashboardKpi';
 import QuickAction from '../components/QuickAction';
 import DashboardListCard from '../components/DashboardListCard';
 import DashboardSalesChart from '../components/DashboardSalesChart';
@@ -74,8 +75,25 @@ function RecentSaleRow({ sale }) {
   );
 }
 
+function SummaryMetric({ icon: Icon, label, value, helper, tone = 'cyan' }) {
+  return (
+    <article className={`dashboard-summary-card dashboard-summary-${tone}`}>
+      <div className="dashboard-summary-icon">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="dashboard-summary-label">{label}</p>
+        <p className="dashboard-summary-value">{value}</p>
+        <p className="dashboard-summary-helper">{helper}</p>
+      </div>
+    </article>
+  );
+}
+
 function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, inventoryValue, sales, products, bestSeller, totalProfit, setActive, expirationText }) {
   const businessConfig = getBusinessConfig(currentUser?.businessType);
+  const isBakery = currentUser?.businessType === 'panaderia';
+  const isRestaurant = currentUser?.businessType === 'restaurante';
   const completedSales = sales.filter(sale => sale.status !== 'Anulada');
   const recentSales = [...completedSales]
     .sort((a, b) => {
@@ -141,9 +159,9 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
   }).length;
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="dashboard-redesign space-y-7 lg:space-y-8">
       <section className="dashboard-welcome-banner">
-        <div className="dashboard-welcome-grid" />
+        <div className="dashboard-welcome-grid" aria-hidden="true" />
         <div className="dashboard-welcome-layout">
           <div className="dashboard-welcome-copy">
             <div className="dashboard-welcome-topline">
@@ -157,41 +175,40 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
               </span>
             </div>
 
-            <p className="dashboard-welcome-eyebrow">
-              Bienvenido a InventIQ
-            </p>
+            <p className="dashboard-welcome-eyebrow">Bienvenido a InventIQ</p>
             <h1 className="dashboard-welcome-title">Tu negocio, en orden.</h1>
             <p className="dashboard-welcome-description">
               Consulta ventas, inventario y alertas de <strong>{currentUser?.store || 'tu negocio'}</strong> desde una vista clara y lista para tomar decisiones.
             </p>
-
           </div>
 
-          <div className="dashboard-hero-overview">
+          <aside className="dashboard-hero-overview" aria-label="Información clave del negocio">
             <div className="dashboard-hero-overview-header">
               <div>
                 <p className="dashboard-hero-overview-kicker">Resumen de hoy</p>
                 <h2>Información clave</h2>
               </div>
               <span className="dashboard-live-status">
-                <span />
+                <span aria-hidden="true" />
                 Actualizado
               </span>
             </div>
 
             <div className="dashboard-hero-overview-grid">
-              <div className="dashboard-hero-metric dashboard-hero-metric-cyan">
+              <article className="dashboard-hero-metric">
                 <div className="dashboard-hero-metric-icon">
                   <DollarSign className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="dashboard-hero-metric-label">Ventas hoy</p>
                   <p className="dashboard-hero-metric-value">{currency(todaySales)}</p>
-                  <p className="dashboard-hero-metric-helper">{todayTransactions} movimiento{todayTransactions === 1 ? '' : 's'}</p>
+                  <p className="dashboard-hero-metric-helper">
+                    {todayTransactions} movimiento{todayTransactions === 1 ? '' : 's'}
+                  </p>
                 </div>
-              </div>
+              </article>
 
-              <div className="dashboard-hero-metric dashboard-hero-metric-blue">
+              <article className="dashboard-hero-metric dashboard-hero-metric-blue">
                 <div className="dashboard-hero-metric-icon">
                   <Store className="h-5 w-5" />
                 </div>
@@ -200,62 +217,82 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
                   <p className="dashboard-hero-metric-value dashboard-hero-metric-value-text">{businessConfig.label}</p>
                   <p className="dashboard-hero-metric-helper">Perfil activo</p>
                 </div>
-              </div>
+              </article>
 
-              <div className="dashboard-hero-metric dashboard-hero-metric-teal">
+              <article className="dashboard-hero-metric dashboard-hero-metric-teal">
                 <div className="dashboard-hero-metric-icon">
                   <Boxes className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="dashboard-hero-metric-label">Valor del inventario</p>
                   <p className="dashboard-hero-metric-value">{currency(inventoryValue)}</p>
-                  <p className="dashboard-hero-metric-helper">{totalProducts} producto{totalProducts === 1 ? '' : 's'}</p>
+                  <p className="dashboard-hero-metric-helper">
+                    {totalProducts} producto{totalProducts === 1 ? '' : 's'}
+                  </p>
                 </div>
-              </div>
+              </article>
 
-              <div className={`dashboard-hero-metric ${alertCount > 0 ? 'dashboard-hero-metric-amber' : 'dashboard-hero-metric-cyan'}`}>
+              <article className="dashboard-hero-metric dashboard-hero-metric-amber">
                 <div className="dashboard-hero-metric-icon">
                   <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
                   <p className="dashboard-hero-metric-label">Alertas pendientes</p>
                   <p className="dashboard-hero-metric-value">{alertCount}</p>
-                  <p className="dashboard-hero-metric-helper">{alertCount > 0 ? 'Requieren revisión' : 'Todo está en orden'}</p>
+                  <p className="dashboard-hero-metric-helper">
+                    {alertCount === 0 ? 'Sin novedades' : 'Requieren revisión'}
+                  </p>
                 </div>
+              </article>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="dashboard-summary-grid">
+        <SummaryMetric icon={DollarSign} label="Ventas acumuladas" value={currency(totalSales)} helper="Total registrado" tone="cyan" />
+        <SummaryMetric icon={TrendingUp} label="Utilidad estimada" value={currency(totalProfit)} helper="Según costos registrados" tone="blue" />
+        <SummaryMetric icon={Package} label="Productos activos" value={totalProducts} helper="En tu catálogo" tone="indigo" />
+        <SummaryMetric icon={AlertTriangle} label="Atención requerida" value={alertCount} helper="Stock y caducidades" tone={alertCount > 0 ? 'amber' : 'cyan'} />
+      </section>
+
+      <section className="dashboard-primary-grid">
+        <article className="dashboard-panel dashboard-actions-redesign">
+          <div className="dashboard-section-heading">
+            <div>
+              <div className="dashboard-section-kicker">
+                <Activity className="h-4 w-4" />
+                Acciones rápidas
               </div>
+              <h2>¿Qué deseas hacer?</h2>
+              <p>Accede a las tareas principales sin llenar la pantalla de botones.</p>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <DashboardKpi icon={DollarSign} title="Ventas acumuladas" value={currency(totalSales)} subtitle="Total registrado" tone="cyan" detail="Ventas" />
-        <DashboardKpi icon={TrendingUp} title="Utilidad estimada" value={currency(totalProfit)} subtitle="Según costos registrados" tone="blue" detail="Rendimiento" />
-        <DashboardKpi icon={Package} title="Productos activos" value={totalProducts} subtitle="En tu catálogo" tone="blue" detail="Catálogo" />
-        <DashboardKpi icon={AlertTriangle} title="Atención requerida" value={alertCount} subtitle="Stock y caducidades" tone={alertCount > 0 ? 'amber' : 'cyan'} detail="Alertas" />
-      </section>
-
-      <section className="dashboard-actions-panel">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="dashboard-section-kicker">
-              <Activity className="h-4 w-4" />
-              Acciones rápidas
-            </div>
-            <h2 className="mt-2 text-xl font-black tracking-tight text-[#10233f]">¿Qué deseas hacer?</h2>
+          <div className="dashboard-actions-grid">
+            <QuickAction icon={ShoppingCart} label="Nueva venta" helper="Registrar una operación" onClick={() => setActive('Ventas')} tone="cyan" />
+            {isBakery ? (
+              <>
+                <QuickAction icon={PackageCheck} label="Registrar producción" helper="Crear un nuevo lote" onClick={() => setActive('Producción')} tone="blue" />
+                <QuickAction icon={CalendarDays} label="Nuevo pedido" helper="Programar un encargo" onClick={() => setActive('Encargos')} tone="blue" />
+                <QuickAction icon={ClipboardList} label="Registrar compra" helper="Reponer materias primas" onClick={() => setActive('Compras')} tone="slate" />
+              </>
+            ) : isRestaurant ? (
+              <>
+                <QuickAction icon={Grid2X2} label="Mesas y salón" helper="Controlar ocupación y servicio" onClick={() => setActive('Mesas')} tone="blue" />
+                <QuickAction icon={Package} label="Gestionar menú" helper="Platos, preparaciones e insumos" onClick={() => setActive('Productos')} tone="blue" />
+                <QuickAction icon={ClipboardList} label="Registrar compra" helper="Reponer inventario de cocina" onClick={() => setActive('Compras')} tone="slate" />
+              </>
+            ) : (
+              <>
+                <QuickAction icon={ClipboardList} label="Registrar compra" helper="Actualizar costos y stock" onClick={() => setActive('Compras')} tone="blue" />
+                <QuickAction icon={Plus} label="Agregar producto" helper="Ampliar el catálogo" onClick={() => setActive('Productos')} tone="blue" />
+                <QuickAction icon={BarChart3} label="Ver reportes" helper="Analizar resultados" onClick={() => setActive('Reportes')} tone="slate" />
+              </>
+            )}
           </div>
-          
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickAction icon={ShoppingCart} label="Nueva venta" helper="Registrar una operación" onClick={() => setActive('Ventas')} tone="cyan" />
-          <QuickAction icon={ClipboardList} label="Registrar compra" helper="Actualizar costos y stock" onClick={() => setActive('Compras')} tone="blue" />
-          <QuickAction icon={Plus} label="Agregar producto" helper="Ampliar el catálogo" onClick={() => setActive('Productos')} tone="blue" />
-          <QuickAction icon={BarChart3} label="Ver reportes" helper="Analizar resultados" onClick={() => setActive('Reportes')} tone="slate" />
-        </div>
-      </section>
+        </article>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.55fr_0.85fr]">
-        <DashboardSalesChart data={weeklySales} total={weeklyTotal} onOpenReports={() => setActive('Reportes')} />
         <DashboardHealthCard
           percentage={inventoryHealth}
           healthy={healthyStock}
@@ -265,7 +302,11 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <section>
+        <DashboardSalesChart data={weeklySales} total={weeklyTotal} onOpenReports={() => setActive('Reportes')} />
+      </section>
+
+      <section className="dashboard-secondary-grid">
         <article className="dashboard-panel">
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
@@ -298,10 +339,10 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
         />
       </section>
 
-      <section className={`grid grid-cols-1 gap-5 ${businessConfig.usesExpiration ? 'xl:grid-cols-2' : ''}`}>
+      <section className={`dashboard-alert-grid ${businessConfig.usesExpiration ? 'dashboard-alert-grid-two' : ''}`}>
         <DashboardListCard
-          title="Productos con stock bajo"
-          subtitle="Requieren revisión o reposición"
+          title={isBakery ? 'Existencias con stock bajo' : 'Productos con stock bajo'}
+          subtitle={isBakery ? 'Requieren producción o reposición' : 'Requieren revisión o reposición'}
           empty="No hay productos con stock bajo."
           onViewAll={() => setActive('Inventario')}
           items={lowStockProducts.map(product => ({

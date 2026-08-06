@@ -3,6 +3,7 @@ export const businessTypes = [
   { value: 'ropa', label: 'Tienda de ropa' },
   { value: 'cafeteria', label: 'Cafetería' },
   { value: 'restaurante', label: 'Restaurante' },
+  { value: 'panaderia', label: 'Panadería' },
   { value: 'ferreteria', label: 'Ferretería / repuestos' },
   { value: 'taller', label: 'Taller / servicios' },
   { value: 'otro', label: 'Otro negocio' },
@@ -16,6 +17,9 @@ const standardFeatures = {
   usesModifiers: false,
   usesTables: false,
   usesDailyCash: false,
+  usesProduction: false,
+  usesBatchProduction: false,
+  usesWasteControl: false,
 };
 
 export function getBusinessConfig(type = 'general') {
@@ -189,19 +193,101 @@ export function getBusinessConfig(type = 'general') {
         'Menú - Platos fuertes',
         'Menú - Almuerzos',
         'Menú - Desayunos',
-        'Menú - Bebidas',
         'Menú - Entradas',
+        'Menú - Sopas',
+        'Menú - Ensaladas',
+        'Menú - Guarniciones',
+        'Menú - Bebidas',
         'Menú - Postres',
+        'Menú - Infantil',
         'Menú - Combos',
+        'Menú - Temporada',
+        'Preparaciones - Salsas',
+        'Preparaciones - Fondos y caldos',
+        'Preparaciones - Guarniciones',
+        'Preparaciones - Aderezos',
+        'Preparaciones - Bases y marinados',
         'Insumos - Carnes',
         'Insumos - Pollo',
         'Insumos - Mariscos',
         'Insumos - Verduras',
         'Insumos - Frutas',
+        'Insumos - Lácteos',
         'Insumos - Granos y secos',
         'Insumos - Salsas y condimentos',
         'Insumos - Bebidas',
-        'Insumos - Desechables',
+        'Empaques - Para llevar',
+        'Empaques - Delivery',
+        'Insumos - Limpieza',
+      ],
+    },
+
+
+    panaderia: {
+      label: 'Panadería',
+      salesMode: 'standard',
+      productMode: 'menu-inventory',
+      cashMode: 'daily-cash',
+      usesRecipes: true,
+      usesModifiers: false,
+      usesTables: false,
+      usesDailyCash: true,
+      usesProduction: true,
+      usesBatchProduction: true,
+      usesWasteControl: true,
+      usesExpiration: true,
+      productExtraFields: true,
+
+      productNamePlaceholder: 'Ej: Pan de sal, torta de chocolate, harina 50 kg',
+      categoryPlaceholder: 'Ej: Producto terminado - Panes, Materia prima - Harinas',
+
+      productSectionTitle: 'Productos y materias primas',
+      inventorySectionTitle: 'Inventario de panadería',
+      salesSectionTitle: 'Ventas de panadería',
+
+      foodLabels: {
+        menuTitle: 'Productos terminados',
+        ingredientsTitle: 'Materias primas e insumos',
+        quickSaleTitle: 'Caja de panadería',
+        orderTitle: 'Venta',
+        recipeTitle: 'Fórmula de producción',
+        modifiersTitle: 'Presentaciones y variantes',
+      },
+
+      extraLabels: {
+        brand: {
+          label: 'Línea / proveedor',
+          placeholder: 'Ej: Producción propia, proveedor local',
+        },
+        size: {
+          label: 'Presentación / unidad',
+          placeholder: 'Ej: unidad, paquete x6, kg, funda',
+        },
+        color: {
+          label: 'Variante / uso',
+          placeholder: 'Ej: integral, chocolate, masa, empaque',
+        },
+      },
+
+      defaultCategories: [
+        'Producto terminado - Panes',
+        'Producto terminado - Pasteles y tortas',
+        'Producto terminado - Galletas',
+        'Producto terminado - Bocaditos',
+        'Producto terminado - Postres',
+        'Producto terminado - Combos',
+        'Materia prima - Harinas',
+        'Materia prima - Azúcares y endulzantes',
+        'Materia prima - Grasas y aceites',
+        'Materia prima - Lácteos',
+        'Materia prima - Huevos',
+        'Materia prima - Levaduras y mejoradores',
+        'Materia prima - Rellenos y coberturas',
+        'Producto intermedio - Masas',
+        'Producto intermedio - Cremas y rellenos',
+        'Empaque - Fundas',
+        'Empaque - Cajas',
+        'Empaque - Etiquetas',
         'Insumos - Limpieza',
       ],
     },
@@ -295,5 +381,7 @@ export function getBusinessConfig(type = 'general') {
     },
   };
 
-  return configs[type] || configs.general;
+  const resolvedType = configs[type] ? type : 'general';
+  return { ...configs[resolvedType], businessType: resolvedType };
 }
+

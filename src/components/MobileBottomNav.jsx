@@ -6,6 +6,19 @@ export default function MobileBottomNav({ menu, active, setActive, mobileMoreOpe
   const moreMenu = menu.filter(item => !primaryLabels.includes(item.label));
   const isMoreActive = moreMenu.some(item => item.label === active);
 
+  const moreGroups = moreMenu.reduce((groups, item) => {
+    const groupName = item.group || 'Más opciones';
+    const existing = groups.find(group => group.name === groupName);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.push({ name: groupName, items: [item] });
+    }
+    return groups;
+  }, []);
+
+  const showGroupTitles = moreGroups.length > 1 || moreGroups.some(group => group.name !== 'Más opciones');
+
   function goTo(label) {
     setActive(label);
     setMobileMoreOpen(false);
@@ -29,7 +42,7 @@ export default function MobileBottomNav({ menu, active, setActive, mobileMoreOpe
             aria-label="Más opciones de navegación"
             className="fixed inset-x-3 bottom-[calc(5.8rem+env(safe-area-inset-bottom))] z-40 max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-[1.75rem] border border-cyan-100 bg-white p-4 shadow-[0_24px_60px_rgba(7,26,51,0.24)] lg:hidden"
           >
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-cyan-700">Navegación</p>
                 <h3 className="truncate font-black text-[#10233f]">Más opciones</h3>
@@ -44,35 +57,47 @@ export default function MobileBottomNav({ menu, active, setActive, mobileMoreOpe
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {moreMenu.map(item => {
-                const Icon = item.icon;
-                const selected = active === item.label;
+            <div className="space-y-5">
+              {moreGroups.map(group => (
+                <div key={group.name}>
+                  {showGroupTitles && (
+                    <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                      {group.name}
+                    </p>
+                  )}
 
-                return (
-                  <button
-                    type="button"
-                    key={item.label}
-                    onClick={() => goTo(item.label)}
-                    aria-current={selected ? 'page' : undefined}
-                    className={`flex min-h-[4.25rem] min-w-0 items-center gap-3 rounded-2xl border px-3 py-3 text-left text-sm font-extrabold transition ${
-                      selected
-                        ? 'border-cyan-200 bg-cyan-50 text-cyan-800 shadow-sm'
-                        : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-cyan-100 hover:bg-cyan-50/60'
-                    }`}
-                  >
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${selected ? 'bg-white text-cyan-700' : 'bg-white text-slate-500'}`}>
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 break-words leading-tight">{item.displayLabel || item.label}</span>
-                  </button>
-                );
-              })}
+                  <div className="grid grid-cols-2 gap-3">
+                    {group.items.map(item => {
+                      const Icon = item.icon;
+                      const selected = active === item.label;
+
+                      return (
+                        <button
+                          type="button"
+                          key={item.label}
+                          onClick={() => goTo(item.label)}
+                          aria-current={selected ? 'page' : undefined}
+                          className={`flex min-h-[4.25rem] min-w-0 items-center gap-3 rounded-2xl border px-3 py-3 text-left text-sm font-extrabold transition ${
+                            selected
+                              ? 'border-cyan-200 bg-cyan-50 text-cyan-800 shadow-sm'
+                              : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-cyan-100 hover:bg-cyan-50/60'
+                          }`}
+                        >
+                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${selected ? 'bg-white text-cyan-700' : 'bg-white text-slate-500'}`}>
+                            <Icon className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0 break-words leading-tight">{item.displayLabel || item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
               <button
                 type="button"
                 onClick={logout}
-                className="col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-extrabold text-red-600 transition hover:bg-red-100"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-extrabold text-red-600 transition hover:bg-red-100"
               >
                 <LogOut className="h-5 w-5" />
                 Cerrar sesión

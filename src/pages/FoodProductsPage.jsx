@@ -3,14 +3,19 @@ import {
   AlertTriangle,
   BookOpen,
   CalendarDays,
+  ChefHat,
+  Clock3,
   Coffee,
   Download,
   Edit,
+  Layers3,
   Package,
   Printer,
   Search,
   Trash2,
   Upload,
+  UtensilsCrossed,
+  Wheat,
 } from 'lucide-react';
 import ProductForm from '../components/ProductForm';
 import FoodRecipeModal from '../components/FoodRecipeModal';
@@ -19,9 +24,15 @@ import { downloadProductExcelTemplate } from '../utils/excel';
 import { getBusinessConfig } from '../config/businessTypes';
 import { getProductVariantText } from '../utils/products';
 import { printProductBarcodeLabel } from '../utils/barcode';
-
-const DEFAULT_LABEL_WIDTH = 51;
-const DEFAULT_LABEL_HEIGHT = 25;
+import { cleanOperationalCategoryLabel, isInternalStockCategory } from '../config/productTypes';
+import {
+  getRestaurantChannelLabels,
+  getRestaurantProductRole,
+  getRestaurantServiceLabels,
+  getRestaurantStationLabel,
+  getRestaurantStatusMeta,
+  normalizeRestaurantProductMetadata,
+} from '../utils/restaurantMenu';
 
 const FOOD_EMPTY_FORM = {
   name: '',
@@ -42,6 +53,8 @@ const FOOD_EMPTY_FORM = {
   expirationDate: '',
   imageUrl: '',
   imageFile: null,
+  stockUnit: '',
+  productMetadata: {},
 };
 
 function formatMoney(value) {
@@ -49,18 +62,25 @@ function formatMoney(value) {
 }
 
 function cleanCategoryLabel(category) {
-  return String(category || 'Sin categoría')
-    .replace(/^Menú -\s*/i, '')
-    .replace(/^Insumos -\s*/i, '');
+  return cleanOperationalCategoryLabel(category);
 }
 
-function isIngredientProduct(product) {
-  const category = String(product.category || '').trim().toLowerCase();
-  return category.startsWith('insumos -') || category.includes('insumos');
+function isIngredientProduct(product, businessType) {
+  if (businessType === 'restaurante') {
+    return getRestaurantProductRole(product) === 'supply';
+  }
+  return isInternalStockCategory(product?.category, businessType);
 }
 
-function isMenuProduct(product) {
-  return !isIngredientProduct(product);
+function isPreparationProduct(product, businessType) {
+  return businessType === 'restaurante' && getRestaurantProductRole(product) === 'preparation';
+}
+
+function isMenuProduct(product, businessType) {
+  if (businessType === 'restaurante') {
+    return getRestaurantProductRole(product) === 'menu';
+  }
+  return !isIngredientProduct(product, businessType);
 }
 
 function getExpirationLabel(product, expirationText) {
@@ -77,13 +97,7 @@ export default function FoodProductsPage({
   setNotice,
   products,
   setProducts,
-  filtered,
-  categories,
   productCategories,
-  customProductCategories,
-  setCustomProductCategories,
-  category,
-  setCategory,
   form,
   setForm,
   saveProduct,
@@ -94,12 +108,8 @@ export default function FoodProductsPage({
   deleteProduct,
   pendingDeleteId,
   setPendingDeleteId,
-  statusText,
   expirationText,
-  totalProducts,
   lowStock,
-  noStock,
-  inventoryValue,
   handleProductImage,
   productsLoading,
   importProductsFromExcel,
@@ -107,6 +117,7 @@ export default function FoodProductsPage({
   confirmExcelImport,
   cancelExcelImport,
   excelImportProgress,
+  setActive,
 }) {
   const [view, setView] = useState('menu');
   const [search, setSearch] = useState('');
@@ -118,26 +129,36 @@ export default function FoodProductsPage({
   const businessType = currentUser?.businessType || 'cafeteria';
   const businessConfig = getBusinessConfig(businessType);
   const pageText = getFoodProductsPageTexts(businessType, businessConfig);
+  const isRestaurant = businessType === 'restaurante';
 
   const menuProducts = useMemo(
-    () => products.filter(isMenuProduct),
-    [products]
+    () => products.filter(product => isMenuProduct(product, businessType)),
+    [products, businessType]
+  );
+
+  const preparationProducts = useMemo(
+    () => products.filter(product => isPreparationProduct(product, businessType)),
+    [products, businessType]
   );
 
   const ingredientProducts = useMemo(
-    () => products.filter(isIngredientProduct),
-    [products]
+    () => products.filter(product => isIngredientProduct(product, businessType)),
+    [products, businessType]
   );
 
-  const activeProducts = view === 'insumos' ? ingredientProducts : menuProducts;
+  const recipeInputs = useMemo(
+    () => isRestaurant ? [...preparationProducts, ...ingredientProducts] : ingredientProducts,
+    [ingredientProducts, isRestaurant, preparationProducts]
+  );
+
+  const activeProducts = view === 'preparaciones'
+    ? preparationProducts
+    : view === 'insumos'
+      ? ingredientProducts
+      : menuProducts;
 
   const activeCategories = useMemo(() => {
-    const unique = Array.from(new Set(
-      activeProducts
-        .map(product => product.category)
-        .filter(Boolean)
-    ));
-
+    const unique = Array.from(new Set(activeProducts.map(product => product.category).filter(Boolean)));
     return ['Todas', ...unique];
   }, [activeProducts]);
 
@@ -146,6 +167,7 @@ export default function FoodProductsPage({
 
     return activeProducts.filter(product => {
       const matchCategory = foodCategory === 'Todas' || product.category === foodCategory;
+      const metadata = product.productMetadata || {};
       const matchSearch = !text || [
         product.name,
         product.category,
@@ -155,6 +177,9 @@ export default function FoodProductsPage({
         product.size,
         product.color,
         product.description,
+        metadata.kitchenStation,
+        metadata.menuStatus,
+        metadata.allergens,
       ].some(value => String(value || '').toLowerCase().includes(text));
 
       return matchCategory && matchSearch;
@@ -169,6 +194,11 @@ export default function FoodProductsPage({
     });
   }, [businessConfig.usesExpiration, products, expirationText]);
 
+  const pausedMenuProducts = useMemo(() => {
+    if (!isRestaurant) return [];
+    return menuProducts.filter(product => getRestaurantStatusMeta(product).value === 'paused');
+  }, [isRestaurant, menuProducts]);
+
   function selectView(nextView) {
     setView(nextView);
     setFoodCategory('Todas');
@@ -176,76 +206,102 @@ export default function FoodProductsPage({
   }
 
   function focusProductForm() {
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }
+
+  function getProductFormMode(product) {
+    if (isPreparationProduct(product, businessType)) return 'preparacion';
+    if (isIngredientProduct(product, businessType)) return 'insumo';
+    return 'menu';
   }
 
   function handleEditProduct(product) {
-    setFoodFormMode(isIngredientProduct(product) ? 'insumo' : 'menu');
+    const mode = getProductFormMode(product);
+    setFoodFormMode(mode);
+    setView(mode === 'preparacion' ? 'preparaciones' : mode === 'insumo' ? 'insumos' : 'menu');
     editProduct(product);
     focusProductForm();
   }
 
-  function prepareMenuForm() {
+  function prepareForm(mode) {
     setEditingId(null);
     setNotice(null);
     setPendingDeleteId(null);
-    setFoodFormMode('menu');
-    setView('menu');
-    setForm({
-      ...FOOD_EMPTY_FORM,
-      category: pageText.defaultMenuCategory,
-      minStock: '0',
-    });
-    focusProductForm();
-  }
+    setFoodFormMode(mode);
+    setView(mode === 'preparacion' ? 'preparaciones' : mode === 'insumo' ? 'insumos' : 'menu');
 
-  function prepareIngredientForm() {
-    setEditingId(null);
-    setNotice(null);
-    setPendingDeleteId(null);
-    setFoodFormMode('insumo');
-    setView('insumos');
-    setForm({
-      ...FOOD_EMPTY_FORM,
-      category: pageText.defaultIngredientCategory,
-      minStock: '3',
-    });
+    const defaults = mode === 'preparacion'
+      ? { category: pageText.defaultPreparationCategory, minStock: '0', stockUnit: 'porción' }
+      : mode === 'insumo'
+        ? { category: pageText.defaultIngredientCategory, minStock: '3', stockUnit: 'kg' }
+        : {
+            category: pageText.defaultMenuCategory,
+            minStock: '0',
+            productMetadata: isRestaurant
+              ? normalizeRestaurantProductMetadata({})
+              : {},
+          };
+
+    setForm({ ...FOOD_EMPTY_FORM, ...defaults });
     focusProductForm();
   }
 
   function printLabel(product) {
-    printProductBarcodeLabel(product, {
-      labelWidth: DEFAULT_LABEL_WIDTH,
-      labelHeight: DEFAULT_LABEL_HEIGHT,
-    });
-  }
-
-  function openRecipe(product) {
-    setRecipeProduct(product);
+    printProductBarcodeLabel(product);
   }
 
   function handleRecipeChange(productId, recipeEnabled) {
     if (typeof setProducts !== 'function') return;
-
-    setProducts(prevProducts =>
-      prevProducts.map(product =>
-        product.id === productId
-          ? { ...product, recipeEnabled, recipe_enabled: recipeEnabled }
-          : product
-      )
-    );
+    setProducts(prevProducts => prevProducts.map(product => (
+      product.id === productId
+        ? { ...product, recipeEnabled, recipe_enabled: recipeEnabled }
+        : product
+    )));
   }
+
+  function openProductRecipe(product) {
+    if (isRestaurant) {
+      sessionStorage.setItem('inventiq_restaurant_recipe_product_id', String(product.id));
+      setActive?.('Recetas');
+      return;
+    }
+    setRecipeProduct(product);
+  }
+
+  const MainProductIcon = businessType === 'panaderia'
+    ? Wheat
+    : isRestaurant
+      ? UtensilsCrossed
+      : Coffee;
+
+  const viewButtons = isRestaurant
+    ? [
+        { id: 'menu', title: pageText.menuTabTitle, detail: `${menuProducts.length} ${pageText.menuTabDetail}` },
+        { id: 'preparaciones', title: pageText.preparationTabTitle, detail: `${preparationProducts.length} ${pageText.preparationTabDetail}` },
+        { id: 'insumos', title: pageText.ingredientTabTitle, detail: `${ingredientProducts.length} ${pageText.ingredientTabDetail}` },
+      ]
+    : [
+        { id: 'menu', title: pageText.menuTabTitle, detail: `${menuProducts.length} ${pageText.menuTabDetail}` },
+        { id: 'insumos', title: pageText.ingredientTabTitle, detail: `${ingredientProducts.length} ${pageText.ingredientTabDetail}` },
+      ];
 
   return (
     <div className="space-y-6">
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${isRestaurant ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
         <FoodMetric icon={Package} title="Total ítems" value={products.length} detail={pageText.totalDetail} tone="cyan" />
-        <FoodMetric icon={Coffee} title={pageText.menuMetricTitle} value={menuProducts.length} detail={pageText.menuMetricDetail} tone="amber" />
-        <FoodMetric icon={Package} title="Insumos" value={ingredientProducts.length} detail={pageText.ingredientMetricDetail} tone="blue" />
+        <FoodMetric icon={MainProductIcon} title={pageText.menuMetricTitle} value={menuProducts.length} detail={pageText.menuMetricDetail} tone="amber" />
+        {isRestaurant && (
+          <FoodMetric icon={Layers3} title="Preparaciones" value={preparationProducts.length} detail="bases internas" tone="violet" />
+        )}
+        <FoodMetric icon={Package} title={pageText.ingredientMetricTitle} value={ingredientProducts.length} detail={pageText.ingredientMetricDetail} tone="blue" />
         <FoodMetric icon={AlertTriangle} title="Stock bajo" value={lowStock} detail={pageText.lowStockDetail} tone="red" />
-        <FoodMetric icon={CalendarDays} title="Por vencer" value={expiringProducts.length} detail="perecibles" tone="amber" />
+        <FoodMetric
+          icon={isRestaurant ? Clock3 : CalendarDays}
+          title={isRestaurant ? 'Menú pausado' : 'Por vencer'}
+          value={isRestaurant ? pausedMenuProducts.length : expiringProducts.length}
+          detail={isRestaurant ? 'no visibles en ventas' : 'perecibles'}
+          tone="slate"
+        />
       </section>
 
       {productsLoading && (
@@ -259,27 +315,32 @@ export default function FoodProductsPage({
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-amber-600">{pageText.kicker}</p>
             <h3 className="mt-1 text-2xl font-black text-slate-900">{pageText.title}</h3>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              {pageText.description}
-            </p>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">{pageText.description}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 rounded-3xl border border-white/80 bg-white/80 p-2 shadow-sm">
-            <FoodViewButton
-              title={pageText.menuTabTitle}
-              detail={`${menuProducts.length} ${pageText.menuTabDetail}`}
-              active={view === 'menu'}
-              onClick={() => selectView('menu')}
-            />
-            <FoodViewButton
-              title="Insumos"
-              detail={`${ingredientProducts.length} ${pageText.ingredientTabDetail}`}
-              active={view === 'insumos'}
-              onClick={() => selectView('insumos')}
-            />
+          <div className={`grid gap-2 rounded-3xl border border-white/80 bg-white/80 p-2 shadow-sm ${isRestaurant ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+            {viewButtons.map(button => (
+              <FoodViewButton
+                key={button.id}
+                title={button.title}
+                detail={button.detail}
+                active={view === button.id}
+                onClick={() => selectView(button.id)}
+              />
+            ))}
           </div>
         </div>
       </section>
+
+      {isRestaurant && (
+        <section className="rounded-3xl border border-slate-200 bg-white p-5">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <WorkflowStep number="01" title="Menú" text="Platos y bebidas que el cliente puede ordenar." />
+            <WorkflowStep number="02" title="Preparaciones" text="Salsas, fondos y bases elaboradas antes del servicio." />
+            <WorkflowStep number="03" title="Insumos y empaques" text="Materias primas y materiales que sostienen la operación." />
+          </div>
+        </section>
+      )}
 
       <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -287,9 +348,7 @@ export default function FoodProductsPage({
             <h3 className="flex items-center gap-2 text-lg font-extrabold text-cyan-950">
               <Upload className="h-5 w-5" /> {pageText.importTitle}
             </h3>
-            <p className="mt-1 text-sm text-cyan-900">
-              {pageText.importDescription}
-            </p>
+            <p className="mt-1 text-sm text-cyan-900">{pageText.importDescription}</p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <button
@@ -330,30 +389,21 @@ export default function FoodProductsPage({
           <div className="iq-operation-card p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <h3 className="text-xl font-black text-slate-900">
-                  {view === 'menu' ? pageText.menuListTitle : pageText.ingredientsListTitle}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  {view === 'menu'
-                    ? pageText.menuListDescription
-                    : pageText.ingredientsListDescription}
-                </p>
+                <h3 className="text-xl font-black text-slate-900">{getViewTitle(view, pageText)}</h3>
+                <p className="text-sm text-slate-500">{getViewDescription(view, pageText)}</p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={prepareMenuForm}
-                  className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-800 hover:bg-cyan-100"
-                >
+              <div className={`grid gap-2 ${isRestaurant ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                <button type="button" onClick={() => prepareForm('menu')} className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-800 hover:bg-cyan-100">
                   {pageText.addMenuButton}
                 </button>
-                <button
-                  type="button"
-                  onClick={prepareIngredientForm}
-                  className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-black text-amber-700 hover:bg-amber-100"
-                >
-                  Agregar insumo
+                {isRestaurant && (
+                  <button type="button" onClick={() => prepareForm('preparacion')} className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-black text-violet-700 hover:bg-violet-100">
+                    Agregar preparación
+                  </button>
+                )}
+                <button type="button" onClick={() => prepareForm('insumo')} className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-black text-amber-700 hover:bg-amber-100">
+                  {pageText.addIngredientButton}
                 </button>
               </div>
             </div>
@@ -364,7 +414,7 @@ export default function FoodProductsPage({
                 <input
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder={view === 'menu' ? pageText.searchMenuPlaceholder : pageText.searchIngredientPlaceholder}
+                  placeholder={getSearchPlaceholder(view, pageText)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-cyan-300 focus:bg-white focus:ring-2 focus:ring-cyan-100"
                 />
               </div>
@@ -390,18 +440,24 @@ export default function FoodProductsPage({
               editProduct={handleEditProduct}
               deleteProduct={deleteProduct}
               printLabel={printLabel}
-              openRecipe={openRecipe}
+              openRecipe={openProductRecipe}
+              showRecipeButton={pageText.showRecipeButton}
+              productIcon={MainProductIcon}
+              isRestaurant={isRestaurant}
             />
           ) : (
-            <IngredientsList
+            <InternalItemsList
               products={visibleProducts}
               pageText={pageText}
+              view={view}
               pendingDeleteId={pendingDeleteId}
               setPendingDeleteId={setPendingDeleteId}
               editProduct={handleEditProduct}
               deleteProduct={deleteProduct}
               printLabel={printLabel}
               expirationText={expirationText}
+              openRecipe={openProductRecipe}
+              showRecipeButton={isRestaurant && view === 'preparaciones'}
             />
           )}
         </div>
@@ -422,11 +478,11 @@ export default function FoodProductsPage({
         </div>
       </section>
 
-      {recipeProduct && (
+      {recipeProduct && !isRestaurant && (
         <FoodRecipeModal
           currentUser={currentUser}
           menuProduct={recipeProduct}
-          ingredients={ingredientProducts}
+          ingredients={recipeInputs}
           onClose={() => setRecipeProduct(null)}
           onRecipeChange={handleRecipeChange}
         />
@@ -435,20 +491,20 @@ export default function FoodProductsPage({
   );
 }
 
-function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe }) {
+function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe, showRecipeButton = true, productIcon: ProductIcon = Coffee, isRestaurant = false }) {
   if (products.length === 0) {
-    return (
-      <EmptyFoodState
-        title={pageText.emptyMenuTitle}
-        text={pageText.emptyMenuText}
-      />
-    );
+    return <EmptyFoodState title={pageText.emptyMenuTitle} text={pageText.emptyMenuText} />;
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {products.map(product => {
         const isPendingDelete = pendingDeleteId === product.id;
+        const metadata = isRestaurant ? normalizeRestaurantProductMetadata(product.productMetadata) : null;
+        const statusMeta = isRestaurant ? getRestaurantStatusMeta(product) : null;
+        const station = metadata ? getRestaurantStationLabel(metadata.kitchenStation) : '';
+        const serviceLabels = metadata ? getRestaurantServiceLabels(metadata.servicePeriods) : [];
+        const channelLabels = metadata ? getRestaurantChannelLabels(metadata.orderChannels) : [];
 
         return (
           <div key={product.id} className="iq-menu-product-card p-4">
@@ -457,26 +513,47 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
                 <img src={product.imageUrl} alt={product.name} className="h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-100" />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
-                  <Coffee className="h-7 w-7" />
+                  <ProductIcon className="h-7 w-7" />
                 </div>
               )}
 
               <div className="min-w-0 flex-1">
                 <p className="line-clamp-2 text-sm font-black text-slate-900">{product.name}</p>
                 <p className="mt-1 text-xs font-bold text-slate-400">{cleanCategoryLabel(product.category)}</p>
-                {getProductVariantText(product) && (
-                  <p className="mt-1 text-xs text-slate-400">{getProductVariantText(product)}</p>
-                )}
+                {getProductVariantText(product) && <p className="mt-1 text-xs text-slate-400">{getProductVariantText(product)}</p>}
               </div>
             </div>
+
+            {isRestaurant && (
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600">
+                  <span className="block font-black text-slate-800">{station}</span>
+                  <span>{metadata.preparationMinutes > 0 ? `${metadata.preparationMinutes} min` : 'Sin tiempo definido'}</span>
+                </div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600">
+                  <span className="block font-black text-slate-800">{serviceLabels.join(', ') || 'Todo el día'}</span>
+                  <span className="line-clamp-1">{channelLabels.join(', ') || 'Todos los canales'}</span>
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <p className="text-2xl font-black text-cyan-800">{formatMoney(product.price)}</p>
                 <p className="text-xs text-slate-400">Existencia: {product.stock}</p>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-black ${Number(product.stock || 0) > 0 ? 'bg-cyan-50 text-cyan-800' : 'bg-red-50 text-red-700'}`}>
-                {Number(product.stock || 0) > 0 ? 'Disponible' : 'Sin stock'}
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                isRestaurant
+                  ? statusMeta.value === 'available'
+                    ? 'bg-cyan-50 text-cyan-800'
+                    : statusMeta.value === 'paused'
+                      ? 'bg-red-50 text-red-700'
+                      : 'bg-amber-50 text-amber-700'
+                  : Number(product.stock || 0) > 0
+                    ? 'bg-cyan-50 text-cyan-800'
+                    : 'bg-red-50 text-red-700'
+              }`}>
+                {isRestaurant ? statusMeta.label : Number(product.stock || 0) > 0 ? 'Disponible' : 'Sin stock'}
               </span>
             </div>
 
@@ -488,7 +565,7 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
               deleteProduct={deleteProduct}
               printLabel={printLabel}
               openRecipe={openRecipe}
-              showRecipeButton
+              showRecipeButton={showRecipeButton}
             />
           </div>
         );
@@ -497,12 +574,12 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
   );
 }
 
-function IngredientsList({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, expirationText }) {
+function InternalItemsList({ products, pageText, view, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, expirationText, openRecipe = null, showRecipeButton = false }) {
   if (products.length === 0) {
     return (
       <EmptyFoodState
-        title={pageText.emptyIngredientTitle}
-        text={pageText.emptyIngredientText}
+        title={view === 'preparaciones' ? pageText.emptyPreparationTitle : pageText.emptyIngredientTitle}
+        text={view === 'preparaciones' ? pageText.emptyPreparationText : pageText.emptyIngredientText}
       />
     );
   }
@@ -510,7 +587,7 @@ function IngredientsList({ products, pageText, pendingDeleteId, setPendingDelete
   return (
     <div className="iq-operation-card overflow-hidden">
       <div className="hidden bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500 lg:grid lg:grid-cols-[1.3fr_0.9fr_0.7fr_0.7fr_0.8fr_140px] lg:gap-3">
-        <span>Insumo</span>
+        <span>{view === 'preparaciones' ? 'Preparación' : pageText.ingredientColumnTitle}</span>
         <span>Categoría</span>
         <span>Costo</span>
         <span>Existencia</span>
@@ -521,33 +598,23 @@ function IngredientsList({ products, pageText, pendingDeleteId, setPendingDelete
       <div className="divide-y divide-slate-100">
         {products.map(product => {
           const isPendingDelete = pendingDeleteId === product.id;
-          const expirationLabel = getExpirationLabel(product, expirationText) || 'Sin caducidad';
+          const expirationLabel = getExpirationLabel(product, expirationText) || 'Sin fecha';
 
           return (
-            <div key={product.id} className="grid gap-3 px-4 py-4 lg:grid-cols-[1.3fr_0.9fr_0.7fr_0.7fr_0.8fr_140px] lg:items-center lg:gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black text-slate-900">{product.name}</p>
-                <p className="mt-1 text-xs text-slate-400">{product.sku || 'Sin SKU'} {product.barcode ? `· ${product.barcode}` : ''}</p>
-                {getProductVariantText(product) && (
-                  <p className="mt-1 text-xs text-slate-400">{getProductVariantText(product)}</p>
-                )}
+            <div key={product.id} className="grid grid-cols-1 gap-3 px-4 py-4 lg:grid-cols-[1.3fr_0.9fr_0.7fr_0.7fr_0.8fr_140px] lg:items-center">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${view === 'preparaciones' ? 'bg-violet-50 text-violet-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {view === 'preparaciones' ? <ChefHat className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{product.name}</p>
+                  <p className="truncate text-xs text-slate-400">{product.stockUnit || product.size || 'Sin unidad'} · {product.sku || 'Sin SKU'}</p>
+                </div>
               </div>
-
-              <div>
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
-                  {cleanCategoryLabel(product.category)}
-                </span>
-              </div>
-
-              <div className="text-sm font-bold text-slate-700">{formatMoney(product.cost)}</div>
-
-              <div className="text-sm text-slate-600">
-                <span className="font-black text-slate-900">{product.stock}</span>
-                <span className="text-slate-400"> / mín. {product.minStock}</span>
-              </div>
-
-              <div className="text-sm font-bold text-slate-500">{expirationLabel}</div>
-
+              <div className="text-sm font-bold text-slate-600">{cleanCategoryLabel(product.category)}</div>
+              <div className="text-sm font-black text-slate-800">{formatMoney(product.cost)}</div>
+              <div className="text-sm text-slate-600">{product.stock} {product.stockUnit || product.size || ''}</div>
+              <div className="text-sm text-slate-500">{expirationLabel}</div>
               <FoodCardActions
                 product={product}
                 isPendingDelete={isPendingDelete}
@@ -555,6 +622,8 @@ function IngredientsList({ products, pageText, pendingDeleteId, setPendingDelete
                 editProduct={editProduct}
                 deleteProduct={deleteProduct}
                 printLabel={printLabel}
+                openRecipe={openRecipe}
+                showRecipeButton={showRecipeButton}
               />
             </div>
           );
@@ -564,60 +633,28 @@ function IngredientsList({ products, pageText, pendingDeleteId, setPendingDelete
   );
 }
 
-function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe, showRecipeButton = false }) {
+function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe = null, showRecipeButton = false }) {
   return (
     <div className="mt-4 flex items-center justify-end gap-2 lg:mt-0">
       {isPendingDelete ? (
         <>
-          <button
-            type="button"
-            onClick={() => deleteProduct(product.id)}
-            className="iq-action-danger iq-action-danger-solid"
-          >
-            Sí
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingDeleteId(null)}
-            className="iq-action-neutral"
-          >
-            No
-          </button>
+          <button type="button" onClick={() => deleteProduct(product.id)} className="iq-action-danger iq-action-danger-solid">Sí</button>
+          <button type="button" onClick={() => setPendingDeleteId(null)} className="iq-action-neutral">No</button>
         </>
       ) : (
         <>
           {showRecipeButton && (
-            <button
-              type="button"
-              onClick={() => openRecipe?.(product)}
-              className="iq-action-icon"
-              title="Configurar receta"
-            >
+            <button type="button" onClick={() => openRecipe?.(product)} className="iq-action-icon" title="Configurar receta">
               <BookOpen className="h-4 w-4" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => printLabel(product)}
-            className="iq-action-icon"
-            title="Imprimir etiqueta"
-          >
+          <button type="button" onClick={() => printLabel(product)} className="iq-action-icon" title="Imprimir etiqueta">
             <Printer className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => editProduct(product)}
-            className="iq-action-icon"
-            title="Editar"
-          >
+          <button type="button" onClick={() => editProduct(product)} className="iq-action-icon" title="Editar">
             <Edit className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => setPendingDeleteId(product.id)}
-            className="iq-action-icon iq-action-icon-danger"
-            title="Eliminar"
-          >
+          <button type="button" onClick={() => setPendingDeleteId(product.id)} className="iq-action-icon iq-action-icon-danger" title="Eliminar">
             <Trash2 className="h-4 w-4" />
           </button>
         </>
@@ -626,71 +663,103 @@ function FoodCardActions({ product, isPendingDelete, setPendingDeleteId, editPro
   );
 }
 
-
 function getFoodProductsPageTexts(businessType, businessConfig = {}) {
+  const isBakery = businessType === 'panaderia' || businessConfig?.label === 'Panadería';
   const isRestaurant = businessType === 'restaurante' || businessConfig?.label === 'Restaurante';
+
+  if (isBakery) {
+    return {
+      kicker: 'Panadería', title: 'Productos terminados y materias primas',
+      description: 'Organiza por separado lo que produces y vendes, las materias primas, los productos intermedios y los empaques que sostienen la operación diaria.',
+      totalDetail: 'productos e insumos', menuMetricTitle: 'Terminados', menuMetricDetail: 'listos para vender',
+      ingredientMetricTitle: 'Materias primas', ingredientMetricDetail: 'insumos y empaques', lowStockDetail: 'ítems críticos',
+      loadingText: 'Cargando productos y materias primas desde Supabase...',
+      menuTabTitle: 'Productos terminados', menuTabDetail: 'productos', ingredientTabTitle: 'Materias primas e insumos', ingredientTabDetail: 'ítems internos',
+      preparationTabTitle: '', preparationTabDetail: '',
+      importTitle: 'Importar productos y materias primas desde Excel',
+      importDescription: 'Usa categorías como Producto terminado - Panes, Materia prima - Harinas, Producto intermedio - Masas o Empaque - Cajas.',
+      menuListTitle: 'Productos terminados', ingredientsListTitle: 'Materias primas, intermedios y empaques', preparationListTitle: '',
+      menuListDescription: 'Panes, tortas, galletas, bocaditos y demás productos listos para la venta.',
+      ingredientsListDescription: 'Ingredientes, masas, rellenos, fundas, cajas y otros elementos usados en producción.', preparationListDescription: '',
+      addMenuButton: 'Agregar producto terminado', addIngredientButton: 'Agregar materia prima o insumo', ingredientColumnTitle: 'Materia prima / insumo',
+      defaultMenuCategory: 'Producto terminado - Panes', defaultPreparationCategory: '', defaultIngredientCategory: 'Materia prima - Harinas',
+      searchMenuPlaceholder: 'Buscar pan, torta, galleta o producto terminado...', searchPreparationPlaceholder: '', searchIngredientPlaceholder: 'Buscar materia prima, intermedio o empaque...',
+      emptyMenuTitle: 'No hay productos terminados', emptyMenuText: 'Agrega panes, tortas, galletas, postres o bocaditos listos para vender.',
+      emptyPreparationTitle: '', emptyPreparationText: '', emptyIngredientTitle: 'No hay materias primas ni insumos',
+      emptyIngredientText: 'Agrega harina, azúcar, levadura, huevos, grasas, rellenos, fundas o cajas.', showRecipeButton: false,
+    };
+  }
 
   if (isRestaurant) {
     return {
-      kicker: 'Restaurante',
-      title: 'Menú del restaurante e insumos de cocina',
-      description: 'Administra platos, bebidas, combos e insumos de cocina por separado para controlar costos y stock.',
-      totalDetail: 'platos e insumos',
-      menuMetricTitle: 'Platos',
-      menuMetricDetail: 'productos de venta',
-      ingredientMetricDetail: 'cocina y operación',
-      lowStockDetail: 'ítems críticos',
-      loadingText: 'Cargando menú del restaurante e insumos desde Supabase...',
-      menuTabTitle: 'Menú',
-      menuTabDetail: 'platos',
-      ingredientTabDetail: 'insumos',
-      importTitle: 'Importar menú e insumos del restaurante desde Excel',
-      importDescription: 'Usa categorías como Menú - Platos fuertes, Menú - Bebidas, Insumos - Carnes o Insumos - Verduras.',
-      menuListTitle: 'Platos y bebidas del menú',
-      ingredientsListTitle: 'Insumos de cocina',
-      menuListDescription: 'Productos que se venden al cliente en mesa, para llevar o delivery.',
-      ingredientsListDescription: 'Materias primas, bebidas, empaques y productos internos de operación.',
-      addMenuButton: 'Agregar plato',
-      defaultMenuCategory: 'Menú - Platos fuertes',
-      defaultIngredientCategory: 'Insumos - Carnes',
-      searchMenuPlaceholder: 'Buscar plato, bebida o combo...',
-      searchIngredientPlaceholder: 'Buscar insumo de cocina...',
-      emptyMenuTitle: 'No hay platos en el menú',
-      emptyMenuText: 'Agrega platos, bebidas, entradas, postres o combos para vender en el restaurante.',
-      emptyIngredientTitle: 'No hay insumos de cocina',
-      emptyIngredientText: 'Agrega insumos como arroz, pollo, carne, tomate, aceite, bebidas, empaques o servilletas.',
+      kicker: 'Restaurante', title: 'Menú, preparaciones e inventario de cocina',
+      description: 'Estructura el catálogo gastronómico por función: lo que vendes, lo que preparas previamente y los insumos que sostienen cada servicio.',
+      totalDetail: 'catálogo gastronómico', menuMetricTitle: 'Menú', menuMetricDetail: 'platos y bebidas',
+      ingredientMetricTitle: 'Insumos', ingredientMetricDetail: 'materias primas y empaques', lowStockDetail: 'ítems críticos',
+      loadingText: 'Cargando menú, preparaciones e inventario desde Supabase...',
+      menuTabTitle: 'Menú', menuTabDetail: 'platos', preparationTabTitle: 'Preparaciones', preparationTabDetail: 'bases', ingredientTabTitle: 'Insumos y empaques', ingredientTabDetail: 'ítems',
+      importTitle: 'Importar catálogo gastronómico desde Excel',
+      importDescription: 'Clasifica cada fila como Menú, Preparaciones, Insumos o Empaques para evitar que los artículos internos aparezcan en ventas.',
+      menuListTitle: 'Platos y bebidas del menú', preparationListTitle: 'Preparaciones intermedias', ingredientsListTitle: 'Insumos y empaques',
+      menuListDescription: 'Productos que el cliente puede pedir en local, para llevar o delivery.',
+      preparationListDescription: 'Salsas, fondos, guarniciones, aderezos y bases que se elaboran antes del servicio.',
+      ingredientsListDescription: 'Materias primas, bebidas internas y empaques que no se venden directamente.',
+      addMenuButton: 'Agregar al menú', addIngredientButton: 'Agregar insumo o empaque', ingredientColumnTitle: 'Insumo / empaque',
+      defaultMenuCategory: 'Menú - Platos fuertes', defaultPreparationCategory: 'Preparaciones - Salsas', defaultIngredientCategory: 'Insumos - Carnes',
+      searchMenuPlaceholder: 'Buscar plato, bebida o combo...', searchPreparationPlaceholder: 'Buscar salsa, fondo, guarnición o base...', searchIngredientPlaceholder: 'Buscar materia prima o empaque...',
+      emptyMenuTitle: 'No hay platos en el menú', emptyMenuText: 'Agrega platos, bebidas, entradas, postres o combos para vender.',
+      emptyPreparationTitle: 'No hay preparaciones intermedias', emptyPreparationText: 'Agrega salsas, fondos, aderezos, guarniciones o bases que se elaboran antes del servicio.',
+      emptyIngredientTitle: 'No hay insumos ni empaques', emptyIngredientText: 'Agrega carnes, vegetales, bebidas internas, envases, fundas o servilletas.',
+      showRecipeButton: true,
     };
   }
 
   return {
-    kicker: 'Cafetería',
-    title: 'Menú e insumos',
+    kicker: 'Cafetería', title: 'Menú e insumos',
     description: 'Administra por separado los productos que vendes al cliente y los insumos que usas en cocina.',
-    totalDetail: 'menú e insumos',
-    menuMetricTitle: 'Menú',
-    menuMetricDetail: 'productos de venta',
-    ingredientMetricDetail: 'uso interno',
-    lowStockDetail: 'ítems',
+    totalDetail: 'menú e insumos', menuMetricTitle: 'Menú', menuMetricDetail: 'productos de venta', ingredientMetricTitle: 'Insumos', ingredientMetricDetail: 'uso interno', lowStockDetail: 'ítems',
     loadingText: 'Cargando menú e insumos desde Supabase...',
-    menuTabTitle: 'Menú',
-    menuTabDetail: 'productos',
-    ingredientTabDetail: 'insumos',
-    importTitle: 'Importar menú e insumos desde Excel',
-    importDescription: 'Usa categorías como Menú - Café caliente, Menú - Postres, Insumos - Lácteos o Insumos - Desechables.',
-    menuListTitle: 'Productos del menú',
-    ingredientsListTitle: 'Insumos de cocina',
-    menuListDescription: 'Productos que se venden al cliente en la caja rápida.',
-    ingredientsListDescription: 'Materias primas, materiales y productos internos.',
-    addMenuButton: 'Agregar al menú',
-    defaultMenuCategory: 'Menú - Café caliente',
-    defaultIngredientCategory: 'Insumos - Café',
-    searchMenuPlaceholder: 'Buscar producto del menú...',
-    searchIngredientPlaceholder: 'Buscar insumo...',
-    emptyMenuTitle: 'No hay productos del menú',
-    emptyMenuText: 'Agrega productos como capuchino, latte, postres, sanduches o combos.',
-    emptyIngredientTitle: 'No hay insumos registrados',
-    emptyIngredientText: 'Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas.',
+    menuTabTitle: 'Menú', menuTabDetail: 'productos', ingredientTabTitle: 'Insumos', ingredientTabDetail: 'insumos', preparationTabTitle: '', preparationTabDetail: '',
+    importTitle: 'Importar menú e insumos desde Excel', importDescription: 'Usa categorías como Menú - Café caliente, Menú - Postres, Insumos - Lácteos o Insumos - Desechables.',
+    menuListTitle: 'Productos del menú', ingredientsListTitle: 'Insumos de cocina', preparationListTitle: '',
+    menuListDescription: 'Productos que se venden al cliente en la caja rápida.', ingredientsListDescription: 'Materias primas, materiales y productos internos.', preparationListDescription: '',
+    addMenuButton: 'Agregar al menú', addIngredientButton: 'Agregar insumo', ingredientColumnTitle: 'Insumo',
+    defaultMenuCategory: 'Menú - Café caliente', defaultPreparationCategory: '', defaultIngredientCategory: 'Insumos - Café',
+    searchMenuPlaceholder: 'Buscar producto del menú...', searchPreparationPlaceholder: '', searchIngredientPlaceholder: 'Buscar insumo...',
+    emptyMenuTitle: 'No hay productos del menú', emptyMenuText: 'Agrega productos como capuchino, latte, postres, sanduches o combos.',
+    emptyPreparationTitle: '', emptyPreparationText: '', emptyIngredientTitle: 'No hay insumos registrados', emptyIngredientText: 'Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas.',
+    showRecipeButton: true,
   };
+}
+
+function getViewTitle(view, pageText) {
+  if (view === 'preparaciones') return pageText.preparationListTitle;
+  if (view === 'insumos') return pageText.ingredientsListTitle;
+  return pageText.menuListTitle;
+}
+
+function getViewDescription(view, pageText) {
+  if (view === 'preparaciones') return pageText.preparationListDescription;
+  if (view === 'insumos') return pageText.ingredientsListDescription;
+  return pageText.menuListDescription;
+}
+
+function getSearchPlaceholder(view, pageText) {
+  if (view === 'preparaciones') return pageText.searchPreparationPlaceholder;
+  if (view === 'insumos') return pageText.searchIngredientPlaceholder;
+  return pageText.searchMenuPlaceholder;
+}
+
+function WorkflowStep({ number, title, text }) {
+  return (
+    <div className="flex gap-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xs font-black text-white">{number}</span>
+      <div>
+        <p className="font-black text-slate-900">{title}</p>
+        <p className="mt-1 text-sm text-slate-500">{text}</p>
+      </div>
+    </div>
+  );
 }
 
 function FoodViewButton({ title, detail, active, onClick }) {
@@ -708,11 +777,12 @@ function FoodViewButton({ title, detail, active, onClick }) {
 
 function FoodMetric({ icon: Icon, title, value, detail, tone }) {
   const tones = {
-    emerald: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    violet: 'bg-violet-50 text-violet-700 border-violet-100',
     red: 'bg-red-50 text-red-600 border-red-100',
+    slate: 'bg-slate-100 text-slate-600 border-slate-200',
   };
 
   return (
@@ -723,7 +793,7 @@ function FoodMetric({ icon: Icon, title, value, detail, tone }) {
           <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
           <p className="mt-1 text-xs text-slate-400">{detail}</p>
         </div>
-        <div className={`rounded-2xl border p-3 ${tones[tone] || tones.emerald}`}>
+        <div className={`rounded-2xl border p-3 ${tones[tone] || tones.cyan}`}>
           <Icon className="h-5 w-5" />
         </div>
       </div>

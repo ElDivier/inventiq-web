@@ -17,6 +17,8 @@ export const emptyForm = {
   expirationDate: '',
   imageUrl: '',
   imageFile: null,
+  stockUnit: '',
+  productMetadata: {},
 };
 
 export const initialProducts = [

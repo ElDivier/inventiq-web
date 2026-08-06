@@ -3,6 +3,8 @@ export function getBarcodePrefix(businessType = 'general') {
     ropa: 'ROP',
     general: 'INV',
     cafeteria: 'CAF',
+    restaurante: 'RES',
+    panaderia: 'PAN',
     ferreteria: 'FER',
     taller: 'TAL',
     otro: 'INV',

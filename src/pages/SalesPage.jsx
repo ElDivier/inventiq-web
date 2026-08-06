@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { PRODUCT_SEARCH_LIMIT } from '../config/constants';
 import {
   getProductDisplayName,
-  getProductVariantText,
 } from '../utils/products';
 import Metric from '../components/Metric';
 import EmptyState from '../components/EmptyState';
 import Field from '../components/Field';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { filterProductsForBarcodeSearch, productMatchesExactCode } from '../utils/productSearch';
+import { isInternalStockCategory } from '../config/productTypes';
 import {
   toMoneyNumber,
   isSplitPaymentAvailable,
@@ -18,6 +18,7 @@ import {
 import {
   Boxes,
   Camera,
+  ClipboardCheck,
   DollarSign,
   Percent,
   ReceiptText,
@@ -37,9 +38,15 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
   const splitPaymentEnabled = isSplitPaymentAvailable(currentUser);
   const splitPaymentTotal = getSplitPaymentTotal(saleForm);
   const splitPaymentDifference = toMoneyNumber(splitPaymentTotal - toMoneyNumber(total));
+  const saleableProducts = useMemo(
+    () => currentUser?.businessType === 'panaderia'
+      ? products.filter(item => !isInternalStockCategory(item?.category, 'panaderia'))
+      : products,
+    [products, currentUser?.businessType]
+  );
   const filteredProducts = useMemo(
-    () => filterProductsForBarcodeSearch(products, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
-    [products, productSearch]
+    () => filterProductsForBarcodeSearch(saleableProducts, productSearch, { limit: PRODUCT_SEARCH_LIMIT, onlyWithStock: true }),
+    [saleableProducts, productSearch]
   );
   const salesPerPage = 20;
   const completedHistorySales = sales.filter(sale => sale.status !== 'Anulada');
@@ -65,7 +72,7 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
     const normalized = cleanValue.toLowerCase();
     if (!normalized) return;
 
-    const exactProduct = products.find(product =>
+    const exactProduct = saleableProducts.find(product =>
       Number(product.stock || 0) > 0 && productMatchesExactCode(product, normalized)
     );
 
@@ -177,7 +184,17 @@ export default function SalesPage({ currentUser, sales, products, clients, saleF
                   <div className="flex items-center gap-3">
                     <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700"><ShoppingCart className="h-5 w-5" /></div>
                     <div>
-                      <p className="font-bold">{sale.code}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold">{sale.code}</p>
+                        {sale.sourceType === 'bakery_order' && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-black text-violet-700">
+                            <ClipboardCheck className="h-3.5 w-3.5" /> Pedido especial
+                          </span>
+                        )}
+                        {sale.sourceType === 'bakery_order_cancelled' && (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500">Pedido especial anulado</span>
+                        )}
+                      </div>
                       <p className="text-sm text-slate-500">{sale.product} · {sale.quantity} unidades · {sale.date}</p>
                       <p className="text-xs text-slate-400">Cliente: {sale.customer || 'Consumidor final'} · Pago: {getPaymentDisplay(sale)} {sale.invoiceEnabled ? '· Factura' : ''}</p>
                     </div>

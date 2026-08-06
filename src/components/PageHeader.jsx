@@ -1,6 +1,6 @@
-import { MapPin, Plus, Store } from 'lucide-react';
+import { MapPin, Store } from 'lucide-react';
 
-export default function PageHeader({ pageInfo, currentUser, onAddProduct }) {
+export default function PageHeader({ pageInfo, currentUser }) {
   const HeaderIcon = pageInfo.icon;
   const storeName = currentUser?.store || 'Mi negocio';
   const cityName = currentUser?.city && currentUser.city !== 'Sin ciudad registrada'
@@ -32,15 +32,6 @@ export default function PageHeader({ pageInfo, currentUser, onAddProduct }) {
             <span className="truncate">{cityName}</span>
           </span>
         </div>
-
-        <button
-          type="button"
-          onClick={onAddProduct}
-          className="iq-page-primary-action"
-        >
-          <Plus className="h-5 w-5" />
-          <span>{pageInfo.actionLabel || 'Agregar producto'}</span>
-        </button>
       </div>
     </header>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle,
+  Banknote,
+  ClipboardCheck,
   CreditCard,
   DollarSign,
   Loader2,
@@ -37,6 +38,7 @@ function parseRecordDate(value) {
 
 function getRecordDate(record) {
   return parseRecordDate(
+    record?.paid_at ||
     record?.createdAt ||
     record?.created_at ||
     record?.date ||
@@ -59,6 +61,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [expenses, setExpenses] = useState([]);
+  const [orderPayments, setOrderPayments] = useState([]);
   const [openingAmount, setOpeningAmount] = useState('0');
   const [closingAmount, setClosingAmount] = useState('');
   const [closingNotes, setClosingNotes] = useState('');
@@ -72,6 +75,26 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
     loadCashData();
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser?.id || currentUser?.businessType !== 'panaderia') return undefined;
+
+    const channel = supabase
+      .channel(`bakery-cash-payments-${currentUser.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'bakery_custom_order_payments',
+        filter: `user_id=eq.${currentUser.id}`,
+      }, () => loadOrderPayments(activeSession).catch(error => {
+        console.error('Error actualizando cobros de pedidos:', error);
+      }))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, currentUser?.businessType, activeSession?.id]);
+
   const sessionStartDate = useMemo(() => {
     return activeSession?.opened_at ? new Date(activeSession.opened_at) : null;
   }, [activeSession?.opened_at]);
@@ -82,13 +105,43 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
       .filter(sale => isAfterStart(sale, sessionStartDate));
   }, [sales, sessionStartDate]);
 
-  const paymentTotals = useMemo(() => {
-    return sessionSales.reduce((acc, sale) => {
-      const method = paymentKey(sale.paymentMethod || sale.payment_method || 'Efectivo');
-      acc[method] = (acc[method] || 0) + Number(sale.total || 0);
+  const directSalePaymentTotals = useMemo(() => {
+    return sessionSales
+      .filter(sale => !sale.cashAlreadyRecorded)
+      .reduce((acc, sale) => {
+        const method = paymentKey(sale.paymentMethod || sale.payment_method || 'Efectivo');
+
+        if (method === 'mixto') {
+          acc.efectivo = (acc.efectivo || 0) + Number(sale.cashAmount || sale.cash_amount || 0);
+          acc.tarjeta = (acc.tarjeta || 0) + Number(sale.cardAmount || sale.card_amount || 0);
+          acc.transferencia = (acc.transferencia || 0) + Number(sale.transferAmount || sale.transfer_amount || 0);
+          return acc;
+        }
+
+        acc[method] = (acc[method] || 0) + Number(sale.total || 0);
+        return acc;
+      }, {});
+  }, [sessionSales]);
+
+  const sessionOrderPayments = useMemo(() => {
+    return (orderPayments || []).filter(payment => isAfterStart(payment, sessionStartDate));
+  }, [orderPayments, sessionStartDate]);
+
+  const orderPaymentTotals = useMemo(() => {
+    return sessionOrderPayments.reduce((acc, payment) => {
+      const method = paymentKey(payment.payment_method || 'Otro');
+      acc[method] = (acc[method] || 0) + Number(payment.amount || 0);
       return acc;
     }, {});
-  }, [sessionSales]);
+  }, [sessionOrderPayments]);
+
+  const paymentTotals = useMemo(() => {
+    const methods = new Set([...Object.keys(directSalePaymentTotals), ...Object.keys(orderPaymentTotals)]);
+    return [...methods].reduce((acc, method) => {
+      acc[method] = Number(directSalePaymentTotals[method] || 0) + Number(orderPaymentTotals[method] || 0);
+      return acc;
+    }, {});
+  }, [directSalePaymentTotals, orderPaymentTotals]);
 
   const cashExpenses = useMemo(() => {
     return expenses
@@ -103,6 +156,10 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
   const salesTotal = useMemo(() => {
     return sessionSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   }, [sessionSales]);
+
+  const orderPaymentsTotal = useMemo(() => {
+    return sessionOrderPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  }, [sessionOrderPayments]);
 
   const expectedCash = useMemo(() => {
     return Number(activeSession?.opening_amount || 0) + Number(paymentTotals.efectivo || 0) - cashExpenses;
@@ -136,9 +193,13 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
       setClosingNotes('');
 
       if (openSession) {
-        await loadExpenses(openSession.id);
+        await Promise.all([
+          loadExpenses(openSession.id),
+          loadOrderPayments(openSession),
+        ]);
       } else {
         setExpenses([]);
+        setOrderPayments([]);
       }
     } catch (error) {
       console.error('Error cargando caja diaria:', error);
@@ -146,6 +207,24 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadOrderPayments(session = activeSession) {
+    if (!currentUser?.id || currentUser?.businessType !== 'panaderia' || !session?.opened_at) {
+      setOrderPayments([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('bakery_custom_order_payments')
+      .select('*, order:bakery_custom_orders(order_code, customer_name, status, sale_id)')
+      .eq('user_id', currentUser.id)
+      .gte('paid_at', session.opened_at)
+      .order('paid_at', { ascending: false })
+      .limit(200);
+
+    if (error) throw error;
+    setOrderPayments(data || []);
   }
 
   async function loadExpenses(sessionId) {
@@ -189,6 +268,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
       setSessions(prev => [data, ...prev]);
       setOpeningAmount('0');
       setExpenses([]);
+      setOrderPayments([]);
       setNotice({ type: 'success', message: 'Caja abierta correctamente.' });
     } catch (error) {
       console.error('Error abriendo caja:', error);
@@ -285,6 +365,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
       setSessions(prev => prev.map(session => session.id === data.id ? data : session));
       setActiveSession(null);
       setExpenses([]);
+      setOrderPayments([]);
       setClosingAmount('');
       setClosingNotes('');
       setNotice({ type: 'success', message: 'Caja cerrada correctamente.' });
@@ -310,7 +391,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
               <DollarSign className="h-8 w-8 text-cyan-700" /> Caja diaria
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Controla apertura, ventas por método de pago, gastos y cierre del turno.
+              Controla apertura, ventas, cobros de pedidos especiales, gastos y cierre del turno sin duplicar ingresos.
             </p>
           </div>
 
@@ -370,11 +451,12 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
         </section>
       ) : (
         <>
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <CashMetric icon={Unlock} title="Caja abierta" value={money(activeSession.opening_amount)} detail={openedText} tone="cyan" />
-            <CashMetric icon={TrendingUp} title="Ventas del turno" value={money(salesTotal)} detail={`${sessionSales.length} venta(s)`} tone="blue" />
+            <CashMetric icon={TrendingUp} title="Ventas registradas" value={money(salesTotal)} detail={`${sessionSales.length} venta(s)`} tone="blue" />
+            <CashMetric icon={ClipboardCheck} title="Cobros de encargos" value={money(orderPaymentsTotal)} detail={`${sessionOrderPayments.length} abono(s)`} tone="emerald" />
             <CashMetric icon={ReceiptText} title="Gastos" value={money(expenseTotal)} detail={`${expenses.length} movimiento(s)`} tone="amber" />
-            <CashMetric icon={DollarSign} title="Efectivo esperado" value={money(expectedCash)} detail="Inicial + efectivo - gastos" tone="slate" />
+            <CashMetric icon={DollarSign} title="Efectivo esperado" value={money(expectedCash)} detail="Inicial + cobros - gastos" tone="slate" />
           </section>
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
@@ -385,9 +467,33 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
                   <PaymentBox label="Efectivo" value={paymentTotals.efectivo || 0} />
                   <PaymentBox label="Transferencia" value={paymentTotals.transferencia || 0} />
                   <PaymentBox label="Tarjeta" value={paymentTotals.tarjeta || 0} />
-                  <PaymentBox label="Crédito" value={paymentTotals['crédito'] || paymentTotals.credito || 0} />
+                  <PaymentBox label="Crédito / otro" value={(paymentTotals['crédito'] || paymentTotals.credito || 0) + (paymentTotals.otro || 0)} />
                 </div>
               </div>
+
+              {currentUser?.businessType === 'panaderia' && (
+                <div className="iq-operation-card overflow-hidden">
+                  <div className="border-b border-slate-100 p-6">
+                    <h3 className="flex items-center gap-2 text-xl font-black text-slate-900"><Banknote className="h-5 w-5 text-emerald-700" /> Cobros de pedidos especiales</h3>
+                    <p className="mt-1 text-sm text-slate-500">Los anticipos y abonos entran a caja en la fecha en que se cobran. La venta final no vuelve a sumar ese efectivo.</p>
+                  </div>
+                  {sessionOrderPayments.length === 0 ? (
+                    <p className="p-6 text-sm text-slate-500">No hay cobros de pedidos especiales desde la apertura de esta caja.</p>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {sessionOrderPayments.slice(0, 8).map(payment => (
+                        <div key={payment.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="font-black text-slate-900">{payment.order?.order_code || 'Pedido especial'} · {payment.order?.customer_name || 'Cliente'}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">{new Date(payment.paid_at || payment.created_at).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' })} · {payment.payment_method}{payment.notes ? ` · ${payment.notes}` : ''}</p>
+                          </div>
+                          <p className="font-black text-emerald-700">{money(payment.amount)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">Registrar gasto del turno</h3>
@@ -442,7 +548,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
               <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">Movimientos recientes</h3>
                 <div className="space-y-3">
-                  {expenses.length === 0 && sessionSales.length === 0 ? (
+                  {expenses.length === 0 && sessionSales.length === 0 && sessionOrderPayments.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
                       No hay movimientos en esta caja.
                     </div>
@@ -458,11 +564,23 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
                         />
                       ))}
 
+                      {sessionOrderPayments.slice(0, 6).map(payment => (
+                        <MovementRow
+                          key={`order-payment-${payment.id}`}
+                          title={payment.order?.order_code || 'Cobro de pedido'}
+                          detail={`${payment.order?.customer_name || 'Cliente'} · ${payment.payment_method}`}
+                          value={Number(payment.amount || 0)}
+                          tone="cyan"
+                        />
+                      ))}
+
                       {sessionSales.slice(0, 6).map(sale => (
                         <MovementRow
                           key={sale.id}
                           title={sale.code || 'Venta'}
-                          detail={`${sale.product || 'Pedido'} · ${sale.paymentMethod || 'Efectivo'}`}
+                          detail={sale.cashAlreadyRecorded
+                            ? `${sale.product || 'Pedido'} · venta integrada (cobros registrados por separado)`
+                            : `${sale.product || 'Pedido'} · ${sale.paymentMethod || 'Efectivo'}`}
                           value={Number(sale.total || 0)}
                           tone="cyan"
                         />
@@ -486,7 +604,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
 
               <div className="space-y-4">
                 <SummaryLine label="Efectivo inicial" value={activeSession.opening_amount} />
-                <SummaryLine label="Ventas en efectivo" value={paymentTotals.efectivo || 0} />
+                <SummaryLine label="Cobros en efectivo" value={paymentTotals.efectivo || 0} />
                 <SummaryLine label="Gastos en efectivo" value={-cashExpenses} />
                 <div className="rounded-2xl bg-cyan-50 p-4">
                   <SummaryLine label="Efectivo esperado" value={expectedCash} strong />
@@ -559,7 +677,7 @@ export default function DailyCashPage({ currentUser, sales = [], purchases = [] 
 
 function CashMetric({ icon: Icon, title, value, detail, tone }) {
   const tones = {
-    emerald: 'bg-cyan-50 text-cyan-700 border-cyan-100',
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',

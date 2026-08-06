@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Clock,
   Coffee,
+  Grid2X2,
   Minus,
   Package,
   Plus,
@@ -8,8 +10,24 @@ import {
   Search,
   ShoppingCart,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
+import { isInternalStockCategory } from '../config/productTypes';
+import {
+  getRestaurantStatusMeta,
+  isRestaurantMenuProduct,
+  normalizeRestaurantProductMetadata,
+} from '../utils/restaurantMenu';
+import {
+  RESTAURANT_TABLE_STATUSES,
+  fetchRestaurantFloor,
+  getOpenDurationLabel,
+  getRestaurantTableStatusMeta as getTableStatusMeta,
+  openRestaurantTable,
+  subscribeRestaurantFloor,
+  updateRestaurantTableService,
+} from '../utils/restaurantTables';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -45,9 +63,17 @@ function hasActiveRecipe(product) {
   return Boolean(product?.recipeEnabled || product?.recipe_enabled);
 }
 
-function isMenuProductAvailable(product) {
+function isMenuProductAvailable(product, orderType = 'local', isRestaurant = false) {
+  if (isRestaurant) {
+    if (!isRestaurantMenuProduct(product)) return false;
+    const metadata = normalizeRestaurantProductMetadata(product?.productMetadata || product?.product_metadata);
+    if (metadata.menuStatus === 'paused') return false;
+    if (metadata.orderChannels.length > 0 && !metadata.orderChannels.includes(orderType)) return false;
+  }
+
   return hasActiveRecipe(product) || Number(product?.stock || 0) > 0;
 }
+
 
 function getRestaurantStockLabel(product) {
   if (hasActiveRecipe(product)) {
@@ -59,29 +85,6 @@ function getRestaurantStockLabel(product) {
 
 
 
-
-const RESTAURANT_TABLE_OPTIONS = Array.from({ length: 12 }, (_, index) => `Mesa ${index + 1}`);
-
-const TABLE_STATUS_OPTIONS = [
-  { value: 'libre', label: 'Libre', detail: 'Disponible para una nueva orden', className: 'border-slate-200 bg-white text-slate-600' },
-  { value: 'ocupada', label: 'Ocupada', detail: 'Mesa con orden abierta', className: 'border-amber-200 bg-amber-50 text-amber-700' },
-  { value: 'preparacion', label: 'En preparación', detail: 'Pedido enviado a cocina', className: 'border-orange-200 bg-orange-50 text-orange-700' },
-  { value: 'servida', label: 'Servida', detail: 'Pedido entregado en mesa', className: 'border-sky-200 bg-sky-50 text-sky-700' },
-  { value: 'cobrar', label: 'Por cobrar', detail: 'Lista para cerrar cuenta', className: 'border-cyan-200 bg-cyan-50 text-cyan-800' },
-];
-
-function getTableStatusMeta(status) {
-  return TABLE_STATUS_OPTIONS.find(option => option.value === status) || TABLE_STATUS_OPTIONS[0];
-}
-
-function createInitialRestaurantTables() {
-  return RESTAURANT_TABLE_OPTIONS.map((name, index) => ({
-    id: index + 1,
-    name,
-    status: 'libre',
-    detail: 'Disponible',
-  }));
-}
 
 function getFoodSalesCopy(isRestaurant) {
   if (isRestaurant) {
@@ -231,6 +234,7 @@ export default function FoodSalesPage({
   salePreview,
   salesLoading,
   setReceiptSale,
+  setActive,
 }) {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todos');
@@ -239,17 +243,50 @@ export default function FoodSalesPage({
   const [modifierNotice, setModifierNotice] = useState(null);
   const [modifiersLoading, setModifiersLoading] = useState(false);
   const [extrasManagerOpen, setExtrasManagerOpen] = useState(false);
-  const [restaurantTables, setRestaurantTables] = useState(createInitialRestaurantTables);
+  const [restaurantAreas, setRestaurantAreas] = useState([]);
+  const [restaurantTables, setRestaurantTables] = useState([]);
+  const [restaurantTablesLoading, setRestaurantTablesLoading] = useState(false);
+  const [restaurantTableNotice, setRestaurantTableNotice] = useState(null);
 
   const isRestaurant = currentUser?.businessType === 'restaurante';
   const copy = getFoodSalesCopy(isRestaurant);
   const activeOrderType = saleForm.orderType || 'local';
-  const selectedRestaurantTable = restaurantTables.find(table => table.name === saleForm.orderReference);
+  const selectedRestaurantTable = restaurantTables.find(table => String(table.id) === String(saleForm.restaurantTableId || ''))
+    || restaurantTables.find(table => table.name === saleForm.orderReference);
 
   useEffect(() => {
     if (!currentUser?.id) return;
     loadModifiers();
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!isRestaurant || !currentUser?.id) return undefined;
+
+    let active = true;
+
+    async function loadRestaurantTables() {
+      try {
+        setRestaurantTablesLoading(true);
+        const floor = await fetchRestaurantFloor(currentUser.id);
+        if (!active) return;
+        setRestaurantAreas(floor.areas);
+        setRestaurantTables(floor.tables);
+      } catch (error) {
+        console.error('Error cargando mesas del restaurante:', error);
+        if (active) setRestaurantTableNotice({ type: 'error', message: `No se pudieron cargar las mesas: ${error.message}` });
+      } finally {
+        if (active) setRestaurantTablesLoading(false);
+      }
+    }
+
+    loadRestaurantTables();
+    const unsubscribe = subscribeRestaurantFloor(currentUser.id, loadRestaurantTables);
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [currentUser?.id, isRestaurant]);
 
   const completedSales = useMemo(
     () => sales.filter(sale => sale.status !== 'Anulada'),
@@ -279,44 +316,18 @@ export default function FoodSalesPage({
   const tableStatusSummary = useMemo(() => {
     if (!isRestaurant) return [];
 
-    return TABLE_STATUS_OPTIONS.map(option => ({
+    return RESTAURANT_TABLE_STATUSES.map(option => ({
       ...option,
       count: restaurantTables.filter(table => table.status === option.value).length,
     }));
   }, [isRestaurant, restaurantTables]);
 
-  const restaurantKitchenOrders = useMemo(() => {
-    if (!isRestaurant) return [];
-
-    const currentOrder = saleCart.length > 0
-      ? [{
-          id: 'current-order',
-          code: saleForm.orderReference || 'Orden actual',
-          customer: copy.orderTypeLabels[activeOrderType] || getOrderTypeLabel(activeOrderType),
-          product: `${saleCart.length} ítem(s) en la orden`,
-          total: salePreview.total,
-          status: selectedRestaurantTable?.status || 'ocupada',
-          isCurrent: true,
-        }]
-      : [];
-
-    const recentClosed = recentSales.slice(0, 4).map(sale => ({
-      ...sale,
-      status: 'cobrar',
-      isCurrent: false,
-    }));
-
-    return [...currentOrder, ...recentClosed];
-  }, [activeOrderType, copy.orderTypeLabels, isRestaurant, recentSales, saleCart.length, saleForm.orderReference, salePreview.total, selectedRestaurantTable?.status]);
-
   const menuProducts = useMemo(() => {
     return products.filter(product => {
-      const category = String(product.category || '').toLowerCase();
-      const name = String(product.name || '').toLowerCase();
-      const isIngredient = category.includes('insumos') || name.includes('insumo');
-      return !isIngredient;
+      if (isRestaurant) return isRestaurantMenuProduct(product);
+      return !isInternalStockCategory(product?.category, currentUser?.businessType || 'cafeteria');
     });
-  }, [products]);
+  }, [currentUser?.businessType, isRestaurant, products]);
 
   const categories = useMemo(() => {
     const unique = Array.from(new Set(
@@ -351,31 +362,71 @@ export default function FoodSalesPage({
     setSaleForm(prev => ({ ...prev, [field]: value }));
   }
 
-  function updateRestaurantTableStatus(tableName, status, detail = '') {
-    setRestaurantTables(prevTables => prevTables.map(table => {
-      if (table.name !== tableName) return table;
-
-      return {
-        ...table,
-        status,
-        detail: detail || getTableStatusMeta(status).detail,
-      };
-    }));
+  async function refreshRestaurantTables() {
+    if (!isRestaurant || !currentUser?.id) return;
+    const floor = await fetchRestaurantFloor(currentUser.id);
+    setRestaurantAreas(floor.areas);
+    setRestaurantTables(floor.tables);
   }
 
-  function selectRestaurantTable(tableName) {
+  function getRestaurantAreaName(areaId) {
+    return restaurantAreas.find(area => area.id === areaId)?.name || 'Salón';
+  }
+
+  async function selectRestaurantTable(table) {
+    const serviceTable = table.joinedTo
+      ? restaurantTables.find(item => item.id === table.joinedTo) || table
+      : table;
+
+    if (serviceTable.status === 'limpieza') {
+      setRestaurantTableNotice({
+        type: 'error',
+        message: `${serviceTable.name} está pendiente de limpieza y todavía no puede recibir una orden.`,
+      });
+      return;
+    }
+
+    setRestaurantTableNotice(null);
     updateSaleField('orderType', 'local');
-    updateSaleField('orderReference', tableName);
-    updateRestaurantTableStatus(tableName, 'ocupada', 'Orden abierta');
+    updateSaleField('orderReference', serviceTable.name);
+    updateSaleField('restaurantTableId', serviceTable.id);
+    updateSaleField('restaurantAreaId', serviceTable.areaId);
+
+    if (['libre', 'reservada'].includes(serviceTable.status)) {
+      try {
+        await openRestaurantTable({
+          tableId: serviceTable.id,
+          guestCount: Math.max(1, Number(serviceTable.guestCount || 1)),
+          waiterName: serviceTable.waiterName || '',
+          notes: serviceTable.notes || 'Orden abierta desde Ventas',
+        });
+        await refreshRestaurantTables();
+      } catch (error) {
+        setRestaurantTableNotice({ type: 'error', message: `No se pudo abrir ${serviceTable.name}: ${error.message}` });
+      }
+    }
   }
 
-  function markSelectedTable(status) {
+  async function markSelectedTable(status) {
     if (!selectedRestaurantTable) return;
-    updateRestaurantTableStatus(selectedRestaurantTable.name, status);
+    try {
+      await updateRestaurantTableService({
+        tableId: selectedRestaurantTable.id,
+        status,
+        guestCount: selectedRestaurantTable.guestCount || 1,
+        waiterName: selectedRestaurantTable.waiterName || '',
+        notes: selectedRestaurantTable.notes || '',
+        reservationName: selectedRestaurantTable.reservationName || '',
+        reservedFor: selectedRestaurantTable.reservedFor || null,
+      });
+      await refreshRestaurantTables();
+    } catch (error) {
+      setRestaurantTableNotice({ type: 'error', message: `No se pudo actualizar la mesa: ${error.message}` });
+    }
   }
 
   function addProductToOrder(product) {
-    if (!isMenuProductAvailable(product)) return;
+    if (!isMenuProductAvailable(product, activeOrderType, isRestaurant)) return;
     addSaleItem(product.id, 1);
   }
 
@@ -548,113 +599,126 @@ export default function FoodSalesPage({
       )}
 
       {isRestaurant && (
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_0.75fr]">
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="iq-operation-card p-5">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Mesas y comandas</p>
-                <h4 className="mt-1 text-xl font-black text-slate-900">Mapa rápido del restaurante</h4>
-                <p className="text-sm text-slate-500">Selecciona una mesa y controla el estado de la orden antes de cobrarla.</p>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Mesas y salón</p>
+                <h4 className="mt-1 text-xl font-black text-slate-900">Selección rápida</h4>
+                <p className="text-sm text-slate-500">Elige una mesa para abrir la orden o entra al plano completo para administrar el salón.</p>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                {tableStatusSummary.map(status => (
-                  <span key={status.value} className={`rounded-2xl border px-3 py-1 text-xs font-black ${status.className}`}>
-                    {status.label}: {status.count}
-                  </span>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setActive?.('Mesas')}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-black text-cyan-800 hover:bg-cyan-100"
+              >
+                <Grid2X2 className="h-4 w-4" />
+                Abrir plano de mesas
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-              {restaurantTables.map(table => {
-                const status = getTableStatusMeta(table.status);
-                const selected = saleForm.orderReference === table.name && activeOrderType === 'local';
+            {restaurantTableNotice && (
+              <div className={`mt-4 rounded-2xl p-3 text-xs font-bold ${restaurantTableNotice.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-cyan-50 text-cyan-800'}`}>
+                {restaurantTableNotice.message}
+              </div>
+            )}
 
-                return (
-                  <button
-                    key={table.id}
-                    type="button"
-                    onClick={() => selectRestaurantTable(table.name)}
-                    className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selected ? 'border-cyan-300 bg-cyan-50 ring-2 ring-cyan-100' : status.className}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-black text-slate-900">{table.name}</p>
-                      <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                        {status.label}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs font-bold text-slate-500">{table.detail || status.detail}</p>
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedRestaurantTable && (
-              <div className="mt-4 rounded-3xl border border-cyan-100 bg-cyan-50 p-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-wide text-cyan-800">Mesa seleccionada</p>
-                    <p className="text-lg font-black text-slate-900">{selectedRestaurantTable.name}</p>
-                    <p className="text-sm text-cyan-800/80">Estado actual: {getTableStatusMeta(selectedRestaurantTable.status).label}</p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {TABLE_STATUS_OPTIONS.filter(status => status.value !== 'libre').map(status => (
-                      <button
-                        key={status.value}
-                        type="button"
-                        onClick={() => markSelectedTable(status.value)}
-                        className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-cyan-100 hover:bg-cyan-100"
-                      >
-                        {status.label}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => markSelectedTable('libre')}
-                      className="rounded-2xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800"
-                    >
-                      Liberar mesa
-                    </button>
-                  </div>
+            {restaurantTablesLoading ? (
+              <div className="mt-4 rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Cargando mesas...</div>
+            ) : restaurantTables.length === 0 ? (
+              <div className="mt-4 rounded-3xl border border-dashed border-slate-200 p-6 text-center">
+                <p className="text-sm font-bold text-slate-600">Aún no has configurado áreas y mesas.</p>
+                <button type="button" onClick={() => setActive?.('Mesas')} className="mt-3 rounded-2xl bg-cyan-700 px-4 py-2 text-sm font-black text-white hover:bg-cyan-800">Configurar salón</button>
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                  {tableStatusSummary.map(status => (
+                    <span key={status.value} className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-black ${status.badgeClass}`}>
+                      {status.label}: {status.count}
+                    </span>
+                  ))}
                 </div>
-              </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {restaurantTables.slice(0, 12).map(table => {
+                    const status = getTableStatusMeta(table.status);
+                    const selected = String(saleForm.restaurantTableId || '') === String(table.id)
+                      || (saleForm.orderReference === table.name && activeOrderType === 'local');
+                    return (
+                      <button
+                        key={table.id}
+                        type="button"
+                        onClick={() => selectRestaurantTable(table)}
+                        className={`rounded-2xl border p-3 text-left transition ${selected ? 'border-cyan-400 bg-cyan-50 ring-2 ring-cyan-100' : 'border-slate-200 bg-white hover:border-cyan-200 hover:bg-slate-50'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-black text-slate-900">{table.name}</p>
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${status.dotClass}`} />
+                        </div>
+                        <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{getRestaurantAreaName(table.areaId)}</p>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                          <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" /> {table.guestCount || table.capacity}</span>
+                          <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {table.openedAt ? getOpenDurationLabel(table.openedAt) : status.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
 
           <div className="iq-operation-card p-5">
             <div className="mb-4">
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-600">Cocina</p>
-              <h4 className="mt-1 text-xl font-black text-slate-900">Comandas activas</h4>
-              <p className="text-sm text-slate-500">Vista rápida para revisar lo que está en preparación o por cobrar.</p>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-600">Orden seleccionada</p>
+              <h4 className="mt-1 text-xl font-black text-slate-900">{selectedRestaurantTable?.name || 'Sin mesa seleccionada'}</h4>
+              <p className="text-sm text-slate-500">
+                {selectedRestaurantTable
+                  ? `${getRestaurantAreaName(selectedRestaurantTable.areaId)} · ${getTableStatusMeta(selectedRestaurantTable.status).label}`
+                  : 'Selecciona una mesa para vincular la orden actual.'}
+              </p>
             </div>
 
-            {restaurantKitchenOrders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                Aún no hay comandas activas. Selecciona una mesa y agrega platos del menú.
+            {selectedRestaurantTable ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2 rounded-3xl bg-slate-50 p-4 text-center">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Capacidad</p>
+                    <p className="mt-1 font-black text-slate-900">{selectedRestaurantTable.capacity}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Comensales</p>
+                    <p className="mt-1 font-black text-slate-900">{selectedRestaurantTable.guestCount || 1}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Tiempo</p>
+                    <p className="mt-1 font-black text-slate-900">{selectedRestaurantTable.openedAt ? getOpenDurationLabel(selectedRestaurantTable.openedAt) : '0 min'}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {['ocupada', 'preparacion', 'servida', 'cobrar'].map(statusValue => {
+                    const status = getTableStatusMeta(statusValue);
+                    return (
+                      <button
+                        key={statusValue}
+                        type="button"
+                        onClick={() => markSelectedTable(statusValue)}
+                        className={`rounded-2xl border px-3 py-2 text-xs font-black ${selectedRestaurantTable.status === statusValue ? status.badgeClass : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        {status.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button type="button" onClick={() => setActive?.('Mesas')} className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
+                  Administrar mesa y servicio
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {restaurantKitchenOrders.map(order => {
-                  const status = getTableStatusMeta(order.status);
-
-                  return (
-                    <div key={order.id} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-slate-900">{order.code || 'Orden'}</p>
-                          <p className="text-xs font-bold text-slate-500">{order.customer || order.product || 'Restaurante'}</p>
-                        </div>
-                        <span className={`rounded-2xl border px-2 py-1 text-[10px] font-black uppercase tracking-wide ${status.className}`}>
-                          {order.isCurrent ? status.label : 'Cobrada'}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs text-slate-500">{order.product || 'Orden del restaurante'}</p>
-                      <p className="mt-2 text-sm font-black text-cyan-800">{formatMoney(order.total)}</p>
-                    </div>
-                  );
-                })}
+              <div className="rounded-3xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+                Selecciona una mesa del panel para comenzar.
               </div>
             )}
           </div>
@@ -713,7 +777,11 @@ export default function FoodSalesPage({
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map(product => {
-                const disabled = !isMenuProductAvailable(product);
+                const disabled = !isMenuProductAvailable(product, activeOrderType, isRestaurant);
+                const restaurantMetadata = isRestaurant
+                  ? normalizeRestaurantProductMetadata(product.productMetadata || product.product_metadata)
+                  : null;
+                const restaurantStatus = isRestaurant ? getRestaurantStatusMeta(product) : null;
 
                 return (
                   <button
@@ -739,6 +807,11 @@ export default function FoodSalesPage({
                       <div className="min-w-0 flex-1">
                         <p className="line-clamp-2 text-sm font-black text-slate-900">{product.name}</p>
                         <p className="mt-1 text-xs font-bold text-slate-400">{getCategoryLabel(product.category)}</p>
+                        {isRestaurant && (
+                          <p className={`mt-1 text-[11px] font-bold ${restaurantStatus.value === 'paused' ? 'text-red-500' : 'text-slate-400'}`}>
+                            {restaurantStatus.label} · {restaurantMetadata.preparationMinutes > 0 ? `${restaurantMetadata.preparationMinutes} min` : 'tiempo no definido'}
+                          </p>
+                        )}
                       </div>
                     </div>
 

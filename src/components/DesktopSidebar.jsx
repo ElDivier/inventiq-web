@@ -11,45 +11,56 @@ export default function DesktopSidebar({
   logout,
 }) {
   return (
-    <aside className="inventiq-sidebar fixed inset-y-0 left-0 z-40 hidden h-screen w-[280px] overflow-y-auto p-5 text-white lg:flex lg:flex-col">
+    <aside className="inventiq-sidebar fixed inset-y-0 left-0 z-40 hidden h-screen w-[250px] overflow-y-auto p-5 text-white lg:flex lg:flex-col">
       <div className="flex-1">
-        <div className="mb-8 rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.045] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.2)] backdrop-blur">
+        <div className="mb-8 rounded-[1.75rem] border border-cyan-300/15 bg-white/[0.045] px-4 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.2)] backdrop-blur">
           <div className="flex items-center gap-3">
-            <InventiQIcon className="h-14 w-14 rounded-2xl object-cover shadow-[0_10px_28px_rgba(8,145,178,0.28)]" />
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-black tracking-[0.08em]">INVENTIQ</h1>
-              <p className="truncate text-xs font-medium text-cyan-100/80">Gestión inteligente</p>
+            <InventiQIcon className="h-12 w-12 shrink-0 rounded-2xl object-cover shadow-[0_10px_28px_rgba(8,145,178,0.28)]" />
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg font-black leading-none tracking-[0.04em] text-white">INVENTIQ</h1>
+              <p className="mt-1 text-[11px] font-medium leading-4 text-cyan-100/80 whitespace-normal break-words">
+                Gestión inteligente
+              </p>
             </div>
           </div>
         </div>
 
-        <nav className="space-y-2">
-          {menu.map(item => {
+        <nav className="space-y-1.5">
+          {menu.map((item, index) => {
             const Icon = item.icon;
             const isActive = active === item.label;
+            const previousGroup = index > 0 ? menu[index - 1]?.group : '';
+            const showGroup = Boolean(item.group) && item.group !== previousGroup;
 
             return (
-              <button
-                type="button"
-                key={item.label}
-                onClick={() => {
-                  setActive(item.label);
-                  setMobileMoreOpen(false);
-                }}
-                aria-current={isActive ? 'page' : undefined}
-                className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-200 ${
-                  isActive
-                    ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-[0_12px_30px_rgba(14,165,233,0.28)]'
-                    : 'text-slate-200 hover:bg-white/[0.08] hover:text-white'
-                }`}
-              >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
-                  isActive ? 'bg-white/15' : 'bg-white/[0.035] text-cyan-100 group-hover:bg-white/[0.08]'
-                }`}>
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="font-semibold">{item.displayLabel || item.label}</span>
-              </button>
+              <div key={item.label}>
+                {showGroup && (
+                  <p className={`${index === 0 ? 'mb-2' : 'mb-2 mt-5'} px-3 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/45`}>
+                    {item.group}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActive(item.label);
+                    setMobileMoreOpen(false);
+                  }}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-200 ${
+                    isActive
+                      ? 'bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-400 text-white shadow-[0_12px_30px_rgba(14,165,233,0.28)]'
+                      : 'text-slate-200 hover:bg-white/[0.08] hover:text-white'
+                  }`}
+                >
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+                    isActive ? 'bg-white/15' : 'bg-white/[0.035] text-cyan-100 group-hover:bg-white/[0.08]'
+                  }`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="font-semibold">{item.displayLabel || item.label}</span>
+                </button>
+              </div>
             );
           })}
         </nav>

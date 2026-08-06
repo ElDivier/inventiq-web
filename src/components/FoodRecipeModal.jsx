@@ -10,7 +10,7 @@ function formatQuantity(value) {
 
 
 function getIngredientStockUnit(ingredient) {
-  return ingredient?.unit || ingredient?.size || '';
+  return ingredient?.stockUnit || ingredient?.stock_unit || ingredient?.unit || ingredient?.size || '';
 }
 
 function buildRecipeSummary(recipeItems, ingredientById) {
@@ -156,7 +156,7 @@ export default function FoodRecipeModal({
     event.preventDefault();
 
     if (!form.ingredientProductId) {
-      setNotice({ type: 'error', message: 'Selecciona un insumo para la receta.' });
+      setNotice({ type: 'error', message: 'Selecciona un insumo o preparación para la receta.' });
       return;
     }
 
@@ -190,7 +190,7 @@ export default function FoodRecipeModal({
       const nextItems = [...recipeItems, data];
       setRecipeItems(nextItems);
       setForm({ ingredientProductId: '', quantity: '', unit: '', notes: '' });
-      setNotice({ type: 'success', message: 'Insumo agregado a la receta.' });
+      setNotice({ type: 'success', message: 'Ingrediente agregado a la receta.' });
 
       if (nextItems.length > 0) {
         await updateRecipeEnabled(true);
@@ -218,7 +218,7 @@ export default function FoodRecipeModal({
 
       const nextItems = recipeItems.filter(item => item.id !== itemId);
       setRecipeItems(nextItems);
-      setNotice({ type: 'success', message: 'Insumo eliminado de la receta.' });
+      setNotice({ type: 'success', message: 'Ingrediente eliminado de la receta.' });
 
       if (nextItems.length === 0) {
         await updateRecipeEnabled(false);
@@ -243,7 +243,7 @@ export default function FoodRecipeModal({
             </p>
             <h3 className="mt-1 text-2xl font-black text-slate-900">{menuProduct.name}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Agrega los insumos necesarios para preparar este producto del menú.
+              Agrega insumos y preparaciones intermedias para calcular el costo y la disponibilidad del plato.
             </p>
           </div>
 
@@ -270,7 +270,7 @@ export default function FoodRecipeModal({
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.4fr_0.5fr_0.5fr_1fr_auto] lg:items-end">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Insumo</span>
+                <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Insumo o preparación</span>
                 <select
                   value={form.ingredientProductId}
                   onChange={event => {
@@ -312,7 +312,7 @@ export default function FoodRecipeModal({
                   value={form.unit}
                   onChange={event => setForm(prev => ({ ...prev, unit: event.target.value }))}
                   className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
-                  placeholder={selectedIngredient?.size || 'g, ml, und'}
+                  placeholder={selectedIngredient?.stockUnit || selectedIngredient?.size || 'g, ml, und'}
                 />
               </label>
 
@@ -341,7 +341,7 @@ export default function FoodRecipeModal({
                 <p className="font-black text-slate-800">{selectedIngredient.name}</p>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <span>Stock disponible: <strong>{selectedIngredient.stock}</strong></span>
-                  <span>Unidad/presentación: <strong>{selectedIngredient.size || 'Sin unidad'}</strong></span>
+                  <span>Unidad/presentación: <strong>{selectedIngredient.stockUnit || selectedIngredient.size || 'Sin unidad'}</strong></span>
                   <span>Costo referencial: <strong>{Number(selectedIngredient.cost || 0).toFixed(2)}</strong></span>
                 </div>
                 <p className="mt-2 text-amber-700">
@@ -384,7 +384,7 @@ export default function FoodRecipeModal({
           <div className="mt-5 rounded-3xl border border-slate-200 bg-white">
             <div className="border-b border-slate-100 p-4">
               <h4 className="text-sm font-black uppercase tracking-wide text-slate-500">
-                Insumos de la receta
+                Ingredientes de la receta
               </h4>
             </div>
 
