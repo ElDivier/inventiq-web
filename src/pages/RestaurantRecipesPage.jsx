@@ -36,6 +36,7 @@ import {
   isRestaurantMenuProduct,
   isRestaurantPreparation,
 } from '../utils/restaurantMenu';
+import { auditRestaurantAction } from '../utils/restaurantStaff';
 
 const EMPTY_FORM = {
   outputProductId: '',
@@ -448,6 +449,7 @@ export default function RestaurantRecipesPage({ currentUser, products, setActive
       });
       if (error) throw error;
 
+      await auditRestaurantAction(currentUser, editingRecipe ? 'recipe.updated' : 'recipe.created', 'production_recipe', editingRecipe?.id || form.outputProductId, { name: form.name.trim(), outputProductId: form.outputProductId });
       await loadRecipes(false);
       resetEditor();
       setNotice({
@@ -469,6 +471,7 @@ export default function RestaurantRecipesPage({ currentUser, products, setActive
         p_is_active: !recipe.is_active,
       });
       if (error) throw error;
+      await auditRestaurantAction(currentUser, 'recipe.status_changed', 'production_recipe', recipe.id, { active: !recipe.is_active, name: recipe.name });
       await loadRecipes(false);
       setNotice({
         type: 'success',
@@ -486,6 +489,7 @@ export default function RestaurantRecipesPage({ currentUser, products, setActive
       });
       if (error) throw error;
       setPendingDeleteId(null);
+      await auditRestaurantAction(currentUser, 'recipe.deleted', 'production_recipe', recipeId, {});
       await loadRecipes(false);
       setNotice({ type: 'success', message: 'Receta eliminada.' });
     } catch (error) {

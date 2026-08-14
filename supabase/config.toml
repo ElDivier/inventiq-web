@@ -1,0 +1,4 @@
+project_id = "inventiq"
+
+[functions.restaurant-employee-auth]
+verify_jwt = false

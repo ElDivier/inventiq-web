@@ -18,6 +18,7 @@ import {
   User,
   Users,
   Utensils,
+  WalletCards,
   X,
 } from 'lucide-react';
 import {
@@ -656,6 +657,13 @@ export default function RestaurantTablesPage({ currentUser, setActive, setSaleFo
     setActive('Ventas');
   }
 
+  function goToCheckout(table) {
+    if (table?.id) {
+      sessionStorage.setItem('inventiq-restaurant-checkout-table', table.id);
+    }
+    setActive('Cobros');
+  }
+
   function handleDragStart(event, table) {
     if (!organizeMode) return;
     setDraggedTableId(table.id);
@@ -992,6 +1000,12 @@ export default function RestaurantTablesPage({ currentUser, setActive, setSaleFo
                       <button type="button" onClick={() => goToOrder(selectedTable)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
                         <Utensils className="h-4 w-4" /> Tomar pedido
                       </button>
+
+                      {selectedTable.status === 'cobrar' && (
+                        <button type="button" onClick={() => goToCheckout(selectedTable)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700">
+                          <WalletCards className="h-4 w-4" /> Cobrar cuenta
+                        </button>
+                      )}
 
                       <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                         <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500"><ArrowRightLeft className="h-4 w-4" /> Transferir ocupación</p>

@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { KeyRound, LogOut } from 'lucide-react';
 import InventiQIcon from './InventiQIcon';
 import StoreAvatar from './StoreAvatar';
 
@@ -9,6 +9,7 @@ export default function DesktopSidebar({
   setMobileMoreOpen,
   currentUser,
   logout,
+  onOpenOperatorSwitcher,
 }) {
   return (
     <aside className="inventiq-sidebar fixed inset-y-0 left-0 z-40 hidden h-screen w-[250px] overflow-y-auto p-5 text-white lg:flex lg:flex-col">
@@ -74,6 +75,17 @@ export default function DesktopSidebar({
             <p className="truncate text-sm text-cyan-100/75">{currentUser.store}</p>
           </div>
         </div>
+
+        {['restaurante', 'cafeteria'].includes(currentUser?.businessType) && onOpenOperatorSwitcher && (
+          <button
+            type="button"
+            onClick={onOpenOperatorSwitcher}
+            className="flex w-full items-center gap-3 rounded-2xl border border-cyan-200/10 bg-white/[0.045] px-3 py-3 text-left transition hover:bg-white/[0.08]"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200"><KeyRound className="h-4 w-4" /></span>
+            <span className="min-w-0"><span className="block text-[10px] font-black uppercase tracking-[0.14em] text-cyan-100/50">Operador activo</span><span className="block truncate text-sm font-bold text-white">{currentUser.operatorName || 'Administrador'}</span></span>
+          </button>
+        )}
 
         <button
           type="button"

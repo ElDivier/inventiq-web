@@ -39,7 +39,12 @@ export function isInternalStockCategory(category, businessType = 'general') {
   }
 
   if (businessType === 'cafeteria') {
-    return normalizedCategory.startsWith('insumos -') || normalizedCategory.includes('insumos');
+    return normalizedCategory.startsWith('insumos -')
+      || normalizedCategory.startsWith('preparaciones -')
+      || normalizedCategory.startsWith('preparación -')
+      || normalizedCategory.startsWith('empaques -')
+      || normalizedCategory.startsWith('empaque -')
+      || normalizedCategory.includes('insumos');
   }
 
   if (businessType === 'panaderia') {
@@ -53,6 +58,13 @@ export function inferProductTypeFromCategory(category, businessType = 'general')
   const normalizedCategory = String(category || '').trim().toLowerCase();
 
   if (businessType === 'restaurante') {
+    if (normalizedCategory.startsWith('preparaciones -') || normalizedCategory.startsWith('preparación -')) return PRODUCT_TYPES.INTERMEDIATE;
+    if (normalizedCategory.startsWith('empaques -') || normalizedCategory.startsWith('empaque -')) return PRODUCT_TYPES.PACKAGING;
+    if (normalizedCategory.startsWith('insumos -')) return PRODUCT_TYPES.RAW_MATERIAL;
+    if (normalizedCategory.startsWith('menú -') || normalizedCategory.startsWith('menu -')) return PRODUCT_TYPES.SALE_PRODUCT;
+  }
+
+  if (businessType === 'cafeteria') {
     if (normalizedCategory.startsWith('preparaciones -') || normalizedCategory.startsWith('preparación -')) return PRODUCT_TYPES.INTERMEDIATE;
     if (normalizedCategory.startsWith('empaques -') || normalizedCategory.startsWith('empaque -')) return PRODUCT_TYPES.PACKAGING;
     if (normalizedCategory.startsWith('insumos -')) return PRODUCT_TYPES.RAW_MATERIAL;

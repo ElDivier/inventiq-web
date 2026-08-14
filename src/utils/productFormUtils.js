@@ -99,13 +99,13 @@ export function buildProductData({
     expirationDate: form.expirationDate || '',
     imageUrl: uploadedImageUrl,
     productType: inferProductTypeFromCategory(finalCategory, businessType),
-    stockUnit: ['panaderia', 'restaurante'].includes(businessType)
+    stockUnit: ['panaderia', 'restaurante', 'cafeteria'].includes(businessType)
       ? (form.stockUnit || form.size || '').trim()
       : (form.stockUnit || '').trim(),
-    tracksLots: ['panaderia', 'restaurante'].includes(businessType)
+    tracksLots: ['panaderia', 'restaurante', 'cafeteria'].includes(businessType)
       ? Boolean(form.batchNumber || form.entryDate)
       : undefined,
-    tracksExpiration: ['panaderia', 'restaurante'].includes(businessType)
+    tracksExpiration: ['panaderia', 'restaurante', 'cafeteria'].includes(businessType)
       ? Boolean(form.expirationDate)
       : undefined,
     productMetadata: form.productMetadata && typeof form.productMetadata === 'object'

@@ -19,6 +19,8 @@ import ReportRow from '../components/ReportRow';
 import { exportToCSV } from '../utils/csv';
 import { getBusinessConfig } from '../config/businessTypes';
 import { supabase } from '../supabaseClient';
+import RestaurantReportsPanel from '../components/RestaurantReportsPanel';
+import CafeteriaReportsPanel from '../components/CafeteriaReportsPanel';
 import {
   buildBakeryReportModel,
   formatBakeryReportQuantity,
@@ -68,6 +70,9 @@ export default function ReportsPage({
 }) {
   const businessConfig = getBusinessConfig(currentUser?.businessType);
   const isBakery = currentUser?.businessType === 'panaderia';
+  const isRestaurant = currentUser?.businessType === 'restaurante';
+  const isCafeteria = currentUser?.businessType === 'cafeteria';
+  const usesOperationalReports = isRestaurant || isCafeteria;
   const [bakeryData, setBakeryData] = useState({
     batches: [],
     adjustments: [],
@@ -446,7 +451,8 @@ export default function ReportsPage({
 
   return (
     <div className="space-y-5">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      {!usesOperationalReports && (
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Metric
           icon={DollarSign}
           label="Ventas"
@@ -478,7 +484,16 @@ export default function ReportsPage({
           note="ventas - compras"
           color={netBalance >= 0 ? 'emerald' : 'red'}
         />
-      </section>
+        </section>
+      )}
+
+      {isRestaurant && (
+        <RestaurantReportsPanel currentUser={currentUser} products={products} />
+      )}
+
+      {isCafeteria && (
+        <CafeteriaReportsPanel currentUser={currentUser} products={products} />
+      )}
 
       {isBakery && (
         <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
@@ -538,7 +553,8 @@ export default function ReportsPage({
         </section>
       )}
 
-      <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
+      {!usesOperationalReports && (
+        <section className="rounded-3xl border border-cyan-100 bg-cyan-50 p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-xl">
             <h3 className="text-lg font-bold text-cyan-950">{isBakery ? 'Reportes exportables de panadería' : 'Reportes exportables'}</h3>
@@ -572,7 +588,8 @@ export default function ReportsPage({
             <ExportButton onClick={exportProviders} label="Proveedores" />
           </div>
         </div>
-      </section>
+        </section>
+      )}
 
       {isBakery ? (
         <>
@@ -685,7 +702,7 @@ export default function ReportsPage({
             </div>
           </section>
         </>
-      ) : (
+      ) : usesOperationalReports ? null : (
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
           <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">

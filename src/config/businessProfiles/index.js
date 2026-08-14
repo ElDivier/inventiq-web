@@ -1,5 +1,6 @@
 import { createBusinessProfile } from './profileFactory';
 import { restauranteProfile } from './restaurante';
+import { cafeteriaProfile } from './cafeteria';
 import { panaderiaProfile } from './panaderia';
 
 export const businessProfiles = {
@@ -38,12 +39,7 @@ export const businessProfiles = {
     },
   }),
 
-  cafeteria: createBusinessProfile({
-    id: 'cafeteria',
-    name: 'Cafetería',
-    businessType: 'cafeteria',
-    description: 'Perfil para cafeterías con menú, insumos, recetas y caja diaria.',
-  }),
+  cafeteria: cafeteriaProfile,
 
   restaurante: restauranteProfile,
 

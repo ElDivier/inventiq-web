@@ -3,11 +3,14 @@ import {
   Clock,
   Coffee,
   Grid2X2,
+  ListChecks,
   Minus,
   Package,
   Plus,
   ReceiptText,
   Search,
+  Save,
+  Send,
   ShoppingCart,
   Trash2,
   Users,
@@ -20,14 +23,29 @@ import {
   normalizeRestaurantProductMetadata,
 } from '../utils/restaurantMenu';
 import {
+  buildCafeteriaVariantSummary,
+  isCafeteriaMenuProductAvailable,
+  normalizeCafeteriaProductMetadata,
+} from '../utils/cafeteriaMenu';
+import {
   RESTAURANT_TABLE_STATUSES,
   fetchRestaurantFloor,
   getOpenDurationLabel,
   getRestaurantTableStatusMeta as getTableStatusMeta,
-  openRestaurantTable,
   subscribeRestaurantFloor,
   updateRestaurantTableService,
 } from '../utils/restaurantTables';
+import {
+  RESTAURANT_COURSES,
+  buildRestaurantDraftItem,
+  fetchActiveRestaurantOrderByTable,
+  fetchRestaurantOrder,
+  getRestaurantItemStatusMeta,
+  getRestaurantOrderStatusMeta,
+  saveRestaurantOrder,
+  sendRestaurantOrder,
+} from '../utils/restaurantOrders';
+import { hasRestaurantPermission } from '../utils/restaurantPermissions';
 
 function formatMoney(value) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -63,13 +81,15 @@ function hasActiveRecipe(product) {
   return Boolean(product?.recipeEnabled || product?.recipe_enabled);
 }
 
-function isMenuProductAvailable(product, orderType = 'local', isRestaurant = false) {
-  if (isRestaurant) {
+function isMenuProductAvailable(product, orderType = 'local', businessType = 'cafeteria') {
+  if (businessType === 'restaurante') {
     if (!isRestaurantMenuProduct(product)) return false;
     const metadata = normalizeRestaurantProductMetadata(product?.productMetadata || product?.product_metadata);
     if (metadata.menuStatus === 'paused') return false;
     if (metadata.orderChannels.length > 0 && !metadata.orderChannels.includes(orderType)) return false;
   }
+
+  if (businessType === 'cafeteria' && !isCafeteriaMenuProductAvailable(product, orderType)) return false;
 
   return hasActiveRecipe(product) || Number(product?.stock || 0) > 0;
 }
@@ -141,7 +161,7 @@ function getFoodSalesCopy(isRestaurant) {
   return {
     eyebrow: 'Cafetería',
     title: 'Caja rápida',
-    description: '{copy.description}',
+    description: 'Toma pedidos en segundos, personaliza bebidas y envíalos automáticamente a la barra con un número de pedido.',
     metrics: {
       sales: 'Ventas',
       profit: 'Utilidad',
@@ -151,7 +171,7 @@ function getFoodSalesCopy(isRestaurant) {
     menuTitle: 'Menú',
     menuSubtitle: 'Selecciona productos para agregarlos al pedido.',
     menuSearchPlaceholder: 'Buscar en el menú...',
-    emptyMenu: '{copy.emptyMenu}',
+    emptyMenu: 'No hay productos disponibles para este tipo de pedido.',
     orderTitle: 'Pedido',
     orderSubtitle: 'Productos seleccionados para cobrar.',
     orderTypeTitle: 'Tipo de pedido',
@@ -168,23 +188,23 @@ function getFoodSalesCopy(isRestaurant) {
     getReferenceLabel(orderType) {
       if (orderType === 'delivery') return 'Cliente / entrega';
       if (orderType === 'takeaway') return 'Nombre del pedido';
-      return 'Mesa / número';
+      return 'Nombre / referencia (opcional)';
     },
     getReferencePlaceholder(orderType) {
       if (orderType === 'delivery') return 'Ej: Diego / dirección';
       if (orderType === 'takeaway') return 'Ej: Juan';
-      return 'Ej: Mesa 3';
+      return 'Ej: Ana / mesa 2';
     },
     notesLabel: 'Nota rápida',
     notesPlaceholder: 'Ej: sin azúcar, sin hielo, calentar',
-    modifiersTitle: '{copy.modifiersTitle}',
-    quickModifiersTitle: '{copy.quickModifiersTitle}',
+    modifiersTitle: 'Extras rápidos',
+    quickModifiersTitle: 'Extras generales',
     modifierPlaceholder: 'Ej: Leche de almendra',
-    submitLabel: '{copy.submitLabel}',
+    submitLabel: 'Cobrar y enviar a barra',
     totalSummaryLabel: 'Pedido',
     recentTitle: 'Ventas recientes',
     recentSubtitle: 'Últimos pedidos cobrados.',
-    emptyRecent: '{copy.emptyRecent}',
+    emptyRecent: 'Sin pedidos cobrados recientemente.',
   };
 }
 
@@ -247,8 +267,16 @@ export default function FoodSalesPage({
   const [restaurantTables, setRestaurantTables] = useState([]);
   const [restaurantTablesLoading, setRestaurantTablesLoading] = useState(false);
   const [restaurantTableNotice, setRestaurantTableNotice] = useState(null);
+  const [activeRestaurantOrder, setActiveRestaurantOrder] = useState(null);
+  const [restaurantOrderLoading, setRestaurantOrderLoading] = useState(false);
+  const [restaurantOrderSaving, setRestaurantOrderSaving] = useState(false);
+  const [restaurantOrderNotice, setRestaurantOrderNotice] = useState(null);
+  const [cafeCustomizer, setCafeCustomizer] = useState(null);
 
   const isRestaurant = currentUser?.businessType === 'restaurante';
+  const isCafeteria = currentUser?.businessType === 'cafeteria';
+  const canApplyDiscounts = hasRestaurantPermission(currentUser, 'discounts.apply');
+  const canCancelSales = hasRestaurantPermission(currentUser, 'cancellations.manage');
   const copy = getFoodSalesCopy(isRestaurant);
   const activeOrderType = saleForm.orderType || 'local';
   const selectedRestaurantTable = restaurantTables.find(table => String(table.id) === String(saleForm.restaurantTableId || ''))
@@ -287,6 +315,34 @@ export default function FoodSalesPage({
       unsubscribe();
     };
   }, [currentUser?.id, isRestaurant]);
+
+  useEffect(() => {
+    if (!isRestaurant || !currentUser?.id) return;
+    let active = true;
+
+    async function loadOrder() {
+      try {
+        setRestaurantOrderLoading(true);
+        const order = saleForm.restaurantOrderId
+          ? await fetchRestaurantOrder(saleForm.restaurantOrderId, currentUser.id)
+          : saleForm.restaurantTableId
+            ? await fetchActiveRestaurantOrderByTable(saleForm.restaurantTableId, currentUser.id)
+            : null;
+        if (!active) return;
+        setActiveRestaurantOrder(order);
+        if (order && String(saleForm.restaurantOrderId || '') !== String(order.id)) {
+          setSaleForm((current) => ({ ...current, restaurantOrderId: order.id }));
+        }
+      } catch (error) {
+        if (active) setRestaurantOrderNotice({ type: 'error', message: `No se pudo cargar la comanda: ${error.message}` });
+      } finally {
+        if (active) setRestaurantOrderLoading(false);
+      }
+    }
+
+    loadOrder();
+    return () => { active = false; };
+  }, [currentUser?.id, isRestaurant, saleForm.restaurantOrderId, saleForm.restaurantTableId, setSaleForm]);
 
   const completedSales = useMemo(
     () => sales.filter(sale => sale.status !== 'Anulada'),
@@ -362,6 +418,27 @@ export default function FoodSalesPage({
     setSaleForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function changeOrderType(nextType) {
+    if (nextType === activeOrderType) return;
+    if (saleCart.length > 0) {
+      const confirmed = window.confirm('La ronda actual todavía no está guardada. ¿Deseas descartarla y cambiar el tipo de pedido?');
+      if (!confirmed) return;
+      clearSaleCart?.();
+    }
+    setActiveRestaurantOrder(null);
+    setRestaurantOrderNotice(null);
+    setSaleForm((current) => ({
+      ...current,
+      orderType: nextType,
+      orderReference: '',
+      restaurantOrderId: '',
+      restaurantTableId: '',
+      restaurantAreaId: '',
+      restaurantWaiterName: '',
+      restaurantGuestCount: 1,
+    }));
+  }
+
   async function refreshRestaurantTables() {
     if (!isRestaurant || !currentUser?.id) return;
     const floor = await fetchRestaurantFloor(currentUser.id);
@@ -386,25 +463,23 @@ export default function FoodSalesPage({
       return;
     }
 
-    setRestaurantTableNotice(null);
+    const changingTable = saleForm.restaurantTableId && String(saleForm.restaurantTableId) !== String(serviceTable.id);
+    if (changingTable && saleCart.length > 0) {
+      const confirmed = window.confirm('La ronda actual todavía no está guardada. ¿Deseas descartarla y cambiar de mesa?');
+      if (!confirmed) return;
+      clearSaleCart?.();
+    }
+
+    setRestaurantTableNotice({ type: 'success', message: `${serviceTable.name} fue seleccionada. Su estado no cambia hasta guardar o abrir el servicio.` });
+    setRestaurantOrderNotice(null);
     updateSaleField('orderType', 'local');
     updateSaleField('orderReference', serviceTable.name);
     updateSaleField('restaurantTableId', serviceTable.id);
     updateSaleField('restaurantAreaId', serviceTable.areaId);
-
-    if (['libre', 'reservada'].includes(serviceTable.status)) {
-      try {
-        await openRestaurantTable({
-          tableId: serviceTable.id,
-          guestCount: Math.max(1, Number(serviceTable.guestCount || 1)),
-          waiterName: serviceTable.waiterName || '',
-          notes: serviceTable.notes || 'Orden abierta desde Ventas',
-        });
-        await refreshRestaurantTables();
-      } catch (error) {
-        setRestaurantTableNotice({ type: 'error', message: `No se pudo abrir ${serviceTable.name}: ${error.message}` });
-      }
-    }
+    updateSaleField('restaurantOrderId', '');
+    updateSaleField('restaurantWaiterName', serviceTable.waiterName || '');
+    updateSaleField('restaurantGuestCount', serviceTable.guestCount || 1);
+    setActiveRestaurantOrder(null);
   }
 
   async function markSelectedTable(status) {
@@ -425,8 +500,145 @@ export default function FoodSalesPage({
     }
   }
 
+  function updateCartItemCommand(item, field, value) {
+    if (typeof setSaleCart !== 'function') return;
+    setSaleCart((current) => current.map((cartItem) =>
+      String(cartItem.productId) === String(item.productId)
+        ? { ...cartItem, [field]: value }
+        : cartItem
+    ));
+  }
+
+  function buildCurrentDraftItems() {
+    return saleCart.map((item) => {
+      const product = products.find((candidate) => String(candidate.id) === String(item.productId));
+      return buildRestaurantDraftItem(item, product);
+    });
+  }
+
+  async function reloadCurrentRestaurantOrder(orderId) {
+    if (!orderId || !currentUser?.id) {
+      setActiveRestaurantOrder(null);
+      return null;
+    }
+    const order = await fetchRestaurantOrder(orderId, currentUser.id);
+    setActiveRestaurantOrder(order);
+    return order;
+  }
+
+  async function saveCurrentRestaurantOrder({ send = false } = {}) {
+    if (!isRestaurant) return;
+    if (activeOrderType === 'local' && !saleForm.restaurantTableId) {
+      setRestaurantOrderNotice({ type: 'error', message: 'Selecciona una mesa antes de guardar la comanda.' });
+      return;
+    }
+    if (saleCart.length === 0 && !activeRestaurantOrder) {
+      setRestaurantOrderNotice({ type: 'error', message: 'Agrega al menos un producto al pedido.' });
+      return;
+    }
+
+    try {
+      setRestaurantOrderSaving(true);
+      setRestaurantOrderNotice(null);
+      const orderId = await saveRestaurantOrder({
+        orderId: activeRestaurantOrder?.id || saleForm.restaurantOrderId || null,
+        tableId: activeOrderType === 'local' ? saleForm.restaurantTableId || null : null,
+        areaId: activeOrderType === 'local' ? saleForm.restaurantAreaId || null : null,
+        orderType: activeOrderType,
+        orderReference: saleForm.orderReference || '',
+        waiterName: saleForm.restaurantWaiterName || selectedRestaurantTable?.waiterName || '',
+        guestCount: saleForm.restaurantGuestCount || selectedRestaurantTable?.guestCount || 1,
+        customerName: saleForm.customer || '',
+        notes: saleForm.orderNotes || '',
+        items: buildCurrentDraftItems(),
+      });
+
+      updateSaleField('restaurantOrderId', orderId);
+      if (send) await sendRestaurantOrder(orderId);
+      const order = await reloadCurrentRestaurantOrder(orderId);
+      clearSaleCart?.();
+      await refreshRestaurantTables();
+      setRestaurantOrderNotice({
+        type: 'success',
+        message: send ? 'La nueva ronda fue enviada a cocina.' : `Comanda ${order?.code || ''} guardada como borrador.`,
+      });
+    } catch (error) {
+      setRestaurantOrderNotice({ type: 'error', message: error.message });
+    } finally {
+      setRestaurantOrderSaving(false);
+    }
+  }
+
+  function getCartLineKey(item) {
+    return item?.lineId || String(item?.productId || '');
+  }
+
+  function addConfiguredCafeteriaProduct() {
+    const draft = cafeCustomizer;
+    if (!draft?.product || typeof setSaleCart !== 'function') return;
+    const product = draft.product;
+    const metadata = normalizeCafeteriaProductMetadata(product.productMetadata || product.product_metadata);
+    const size = metadata.sizes.find((item) => item.id === draft.sizeId) || null;
+    const milk = metadata.milkOptions.find((item) => item.id === draft.milkId) || null;
+    const syrup = metadata.syrupOptions.find((item) => item.id === draft.syrupId) || null;
+    const temperature = draft.temperature || metadata.temperatures[0] || '';
+    const extraShot = Boolean(draft.extraShot && metadata.extraShotEnabled);
+    const options = [
+      size ? { id: `size-${size.id}`, name: size.label, price: Number(size.priceDelta || 0), cafeConfigured: true } : null,
+      milk ? { id: `milk-${milk.id}`, name: milk.label, price: Number(milk.priceDelta || 0), cafeConfigured: true } : null,
+      temperature ? { id: `temp-${temperature}`, name: temperature === 'frio' ? 'Frío' : temperature === 'ambiente' ? 'Ambiente' : 'Caliente', price: 0, cafeConfigured: true } : null,
+      syrup ? { id: `syrup-${syrup.id}`, name: syrup.label, price: Number(syrup.priceDelta || 0), cafeConfigured: true } : null,
+      extraShot ? { id: 'extra-shot', name: 'Shot extra', price: Number(metadata.extraShotPrice || 0), cafeConfigured: true } : null,
+    ].filter(Boolean);
+    const variantSummary = buildCafeteriaVariantSummary({ size, milk, temperature, syrup, extraShot });
+    const price = Number(product.price || 0) + options.reduce((sum, item) => sum + Number(item.price || 0), 0);
+    const currentQuantity = saleCart.filter((item) => String(item.productId) === String(product.id)).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    if (!hasActiveRecipe(product) && currentQuantity + 1 > Number(product.stock || 0)) return;
+    const signature = JSON.stringify({ productId: product.id, variantSummary, notes: draft.notes || '' });
+    const existing = saleCart.find((item) => item.cafeSignature === signature);
+    if (existing) {
+      setSaleCart((prev) => prev.map((item) => getCartLineKey(item) === getCartLineKey(existing)
+        ? { ...item, quantity: Number(item.quantity || 0) + 1, subtotal: price * (Number(item.quantity || 0) + 1), profit: (price - Number(item.cost || 0)) * (Number(item.quantity || 0) + 1) }
+        : item));
+    } else {
+      setSaleCart((prev) => [...prev, {
+        lineId: `cafe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        cafeSignature: signature,
+        productId: product.id,
+        baseProduct: product.name,
+        product: variantSummary ? `${product.name} (${variantSummary})` : product.name,
+        quantity: 1,
+        basePrice: Number(product.price || 0),
+        price,
+        cost: Number(product.cost || 0),
+        subtotal: price,
+        profit: price - Number(product.cost || 0),
+        modifiers: options,
+        variantSummary,
+        station: metadata.station,
+        notes: String(draft.notes || '').trim(),
+        discountType: 'percent',
+        discountValue: '',
+      }]);
+    }
+    setCafeCustomizer(null);
+  }
+
   function addProductToOrder(product) {
-    if (!isMenuProductAvailable(product, activeOrderType, isRestaurant)) return;
+    if (!isMenuProductAvailable(product, activeOrderType, currentUser?.businessType)) return;
+    if (isCafeteria) {
+      const metadata = normalizeCafeteriaProductMetadata(product.productMetadata || product.product_metadata);
+      setCafeCustomizer({
+        product,
+        sizeId: metadata.sizes[0]?.id || '',
+        milkId: '',
+        syrupId: '',
+        temperature: metadata.temperatures[0] || '',
+        extraShot: false,
+        notes: '',
+      });
+      return;
+    }
     addSaleItem(product.id, 1);
   }
 
@@ -437,18 +649,18 @@ export default function FoodSalesPage({
     }
 
     setSaleCart(prevCart => {
-      const currentItem = prevCart.find(current => String(current.productId) === String(item.productId));
+      const currentItem = prevCart.find(current => isCafeteria ? getCartLineKey(current) === getCartLineKey(item) : String(current.productId) === String(item.productId));
 
       if (!currentItem) return prevCart;
 
       const nextQuantity = Number(currentItem.quantity || 0) - 1;
 
       if (nextQuantity <= 0) {
-        return prevCart.filter(current => String(current.productId) !== String(item.productId));
+        return prevCart.filter(current => isCafeteria ? getCartLineKey(current) !== getCartLineKey(item) : String(current.productId) !== String(item.productId));
       }
 
       return prevCart.map(current => {
-        if (String(current.productId) !== String(item.productId)) return current;
+        if (isCafeteria ? getCartLineKey(current) !== getCartLineKey(item) : String(current.productId) !== String(item.productId)) return current;
 
         return {
           ...current,
@@ -546,7 +758,7 @@ export default function FoodSalesPage({
     if (typeof setSaleCart !== 'function') return;
 
     setSaleCart(prevCart => prevCart.map(current => {
-      if (String(current.productId) !== String(item.productId)) return current;
+      if (isCafeteria ? getCartLineKey(current) !== getCartLineKey(item) : String(current.productId) !== String(item.productId)) return current;
 
       const currentModifiers = Array.isArray(current.modifiers) ? current.modifiers : [];
       const nextModifiers = [...currentModifiers, modifier];
@@ -558,7 +770,7 @@ export default function FoodSalesPage({
     if (typeof setSaleCart !== 'function') return;
 
     setSaleCart(prevCart => prevCart.map(current => {
-      if (String(current.productId) !== String(item.productId)) return current;
+      if (isCafeteria ? getCartLineKey(current) !== getCartLineKey(item) : String(current.productId) !== String(item.productId)) return current;
 
       const currentModifiers = Array.isArray(current.modifiers) ? current.modifiers : [];
       const nextModifiers = currentModifiers.filter((_, index) => index !== modifierIndex);
@@ -568,6 +780,14 @@ export default function FoodSalesPage({
 
   return (
     <div className="space-y-6">
+      {isCafeteria && cafeCustomizer && (
+        <CafeteriaCustomizerModal
+          draft={cafeCustomizer}
+          setDraft={setCafeCustomizer}
+          onClose={() => setCafeCustomizer(null)}
+          onConfirm={addConfiguredCafeteriaProduct}
+        />
+      )}
       <section className="iq-module-hero iq-module-hero-food">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -725,6 +945,52 @@ export default function FoodSalesPage({
         </section>
       )}
 
+      {isRestaurant && (restaurantOrderNotice || activeRestaurantOrder || restaurantOrderLoading) && (
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          {restaurantOrderNotice && (
+            <div className={`mb-4 rounded-2xl p-3 text-sm font-bold ${restaurantOrderNotice.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+              {restaurantOrderNotice.message}
+            </div>
+          )}
+          {restaurantOrderLoading ? (
+            <p className="text-sm font-bold text-slate-400">Cargando comanda activa...</p>
+          ) : activeRestaurantOrder ? (
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-700">Comanda activa</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${getRestaurantOrderStatusMeta(activeRestaurantOrder.status).badgeClass}`}>
+                    {getRestaurantOrderStatusMeta(activeRestaurantOrder.status).label}
+                  </span>
+                </div>
+                <h4 className="mt-2 text-xl font-black text-slate-900">{activeRestaurantOrder.code} · {activeRestaurantOrder.orderReference || 'Pedido'}</h4>
+                <p className="mt-1 text-sm text-slate-500">
+                  {activeRestaurantOrder.items.filter((item) => item.status !== 'cancelado').length} producto(s) guardados · {formatMoney(activeRestaurantOrder.total)}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {activeRestaurantOrder.items.filter((item) => item.status !== 'cancelado').slice(0, 8).map((item) => (
+                    <span key={item.id} className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                      {item.quantity}× {item.product}
+                      <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black ${getRestaurantItemStatusMeta(item.status).badgeClass}`}>
+                        {getRestaurantItemStatusMeta(item.status).label}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button type="button" onClick={() => setActive?.('Comandas')} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-black text-white hover:bg-slate-800">
+                <ListChecks className="h-4 w-4" /> Ver comandas
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div><p className="text-sm font-black text-slate-900">Sin comanda abierta</p><p className="mt-1 text-sm text-slate-500">Selecciona una mesa y guarda la primera ronda para abrir la cuenta.</p></div>
+              <button type="button" onClick={() => setActive?.('Comandas')} className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50">Ver todas las comandas</button>
+            </div>
+          )}
+        </section>
+      )}
+
       {saleNotice && (
         <div className={`rounded-3xl p-4 text-sm font-bold ${saleNotice.type === 'success' ? 'border border-cyan-100 bg-cyan-50 text-cyan-800' : 'border border-red-100 bg-red-50 text-red-700'}`}>
           {saleNotice.message}
@@ -777,11 +1043,12 @@ export default function FoodSalesPage({
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {filteredProducts.map(product => {
-                const disabled = !isMenuProductAvailable(product, activeOrderType, isRestaurant);
+                const disabled = !isMenuProductAvailable(product, activeOrderType, currentUser?.businessType);
                 const restaurantMetadata = isRestaurant
                   ? normalizeRestaurantProductMetadata(product.productMetadata || product.product_metadata)
                   : null;
                 const restaurantStatus = isRestaurant ? getRestaurantStatusMeta(product) : null;
+                const cafeMetadata = isCafeteria ? normalizeCafeteriaProductMetadata(product.productMetadata || product.product_metadata) : null;
 
                 return (
                   <button
@@ -812,6 +1079,11 @@ export default function FoodSalesPage({
                             {restaurantStatus.label} · {restaurantMetadata.preparationMinutes > 0 ? `${restaurantMetadata.preparationMinutes} min` : 'tiempo no definido'}
                           </p>
                         )}
+                        {isCafeteria && cafeMetadata && (
+                          <p className="mt-1 text-[11px] font-bold text-slate-400">
+                            {cafeMetadata.station === 'barra' ? 'Barra' : cafeMetadata.station === 'reposteria' ? 'Repostería' : cafeMetadata.station === 'entrega' ? 'Entrega' : 'Cocina'} · {cafeMetadata.preparationMinutes > 0 ? `${cafeMetadata.preparationMinutes} min` : 'rápido'}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -837,7 +1109,7 @@ export default function FoodSalesPage({
         </div>
 
         <aside className="space-y-5">
-          <form onSubmit={registerSale} className="iq-operation-card iq-operation-card-accent iq-sticky-workspace p-5">
+          <form onSubmit={isRestaurant ? (event) => { event.preventDefault(); saveCurrentRestaurantOrder({ send: true }); } : registerSale} className="iq-operation-card iq-operation-card-accent iq-sticky-workspace p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h4 className="flex items-center gap-2 text-xl font-black text-slate-900">
@@ -868,7 +1140,7 @@ export default function FoodSalesPage({
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => updateSaleField('orderType', option.value)}
+                      onClick={() => isRestaurant ? changeOrderType(option.value) : updateSaleField('orderType', option.value)}
                       className={`rounded-2xl px-3 py-2 text-xs font-black transition ${active ? 'bg-cyan-700 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100'}`}
                     >
                       {option.label}
@@ -895,7 +1167,7 @@ export default function FoodSalesPage({
                         <button
                           key={table.name}
                           type="button"
-                          onClick={() => selectRestaurantTable(table.name)}
+                          onClick={() => selectRestaurantTable(table)}
                           className={`rounded-xl px-2 py-1 text-[11px] font-black transition ${saleForm.orderReference === table.name ? 'bg-cyan-700 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50'}`}
                         >
                           {table.name}
@@ -915,6 +1187,19 @@ export default function FoodSalesPage({
                   />
                 </label>
               </div>
+
+              {isRestaurant && activeOrderType === 'local' && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_130px]">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-black uppercase tracking-wide text-slate-500">Mesero responsable</span>
+                    <input value={saleForm.restaurantWaiterName || selectedRestaurantTable?.waiterName || ''} onChange={(event) => updateSaleField('restaurantWaiterName', event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100" placeholder="Nombre del mesero" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-black uppercase tracking-wide text-slate-500">Comensales</span>
+                    <input type="number" min="1" max="100" value={saleForm.restaurantGuestCount || selectedRestaurantTable?.guestCount || 1} onChange={(event) => updateSaleField('restaurantGuestCount', event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100" />
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="mb-4 rounded-3xl border border-cyan-100 bg-cyan-50 p-3">
@@ -996,7 +1281,7 @@ export default function FoodSalesPage({
             ) : (
               <div className="space-y-3">
                 {saleCart.map(item => (
-                  <div key={item.productId} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                  <div key={getCartLineKey(item)} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-slate-900">{item.product}</p>
@@ -1017,7 +1302,15 @@ export default function FoodSalesPage({
                         <span className="min-w-8 text-center text-sm font-black text-slate-700">{item.quantity}</span>
                         <button
                           type="button"
-                          onClick={() => addSaleItem(item.productId, 1)}
+                          onClick={() => {
+                            if (isCafeteria && typeof setSaleCart === 'function') {
+                              const product = products.find((candidate) => String(candidate.id) === String(item.productId));
+                              const totalInCart = saleCart.filter((candidate) => String(candidate.productId) === String(item.productId)).reduce((sum, candidate) => sum + Number(candidate.quantity || 0), 0);
+                              if (product && (hasActiveRecipe(product) || totalInCart < Number(product.stock || 0))) {
+                                setSaleCart((prev) => prev.map((candidate) => getCartLineKey(candidate) === getCartLineKey(item) ? { ...candidate, quantity: Number(candidate.quantity || 0) + 1, subtotal: Number(candidate.price || 0) * (Number(candidate.quantity || 0) + 1), profit: (Number(candidate.price || 0) - Number(candidate.cost || 0)) * (Number(candidate.quantity || 0) + 1) } : candidate));
+                              }
+                            } else { addSaleItem(item.productId, 1); }
+                          }}
                           className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50"
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -1026,7 +1319,10 @@ export default function FoodSalesPage({
 
                       <button
                         type="button"
-                        onClick={() => removeSaleItem(item.productId)}
+                        onClick={() => {
+                            if (isCafeteria && typeof setSaleCart === 'function') setSaleCart((prev) => prev.filter((candidate) => getCartLineKey(candidate) !== getCartLineKey(item)));
+                            else removeSaleItem(item.productId);
+                          }}
                         className="rounded-xl border border-red-100 bg-white px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50"
                       >
                         Quitar
@@ -1057,23 +1353,49 @@ export default function FoodSalesPage({
                           {item.modifiers.map((modifier, modifierIndex) => (
                             <div key={`${modifier.id}-${modifierIndex}`} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-2 py-1 text-xs text-slate-600">
                               <span>{modifier.name} · {formatMoney(modifier.price)}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeModifierFromItem(item, modifierIndex)}
-                                className="font-black text-red-500 hover:text-red-600"
-                              >
-                                ×
-                              </button>
+                              {!modifier.cafeConfigured && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeModifierFromItem(item, modifierIndex)}
+                                  className="font-black text-red-500 hover:text-red-600"
+                                >
+                                  ×
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
                       )}
                     </div>
+
+                    {isRestaurant && (
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_90px]">
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">Curso</span>
+                          <select
+                            value={item.course || 'principal'}
+                            onChange={(event) => updateCartItemCommand(item, 'course', event.target.value)}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-cyan-100"
+                          >
+                            {RESTAURANT_COURSES.map((course) => <option key={course.value} value={course.value}>{course.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">Asiento</span>
+                          <input type="number" min="1" max="100" value={item.seatNumber || ''} onChange={(event) => updateCartItemCommand(item, 'seatNumber', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-cyan-100" placeholder="Opc." />
+                        </label>
+                        <label className="block sm:col-span-2">
+                          <span className="mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-400">Observación para cocina</span>
+                          <input value={item.notes || ''} onChange={(event) => updateCartItemCommand(item, 'notes', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-cyan-100" placeholder="Ej: sin cebolla, término medio..." />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
+            {(!isRestaurant || activeOrderType !== 'local') && (
             <div className="mt-5 space-y-3 rounded-3xl border border-slate-100 bg-slate-50 p-4">
               <label className="block">
                 <span className="mb-1 block text-xs font-black uppercase tracking-wide text-slate-500">Método de pago</span>
@@ -1097,6 +1419,7 @@ export default function FoodSalesPage({
                     min="0"
                     value={saleForm.discount || ''}
                     onChange={event => updateSaleField('discount', event.target.value)}
+                    disabled={!canApplyDiscounts}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                     placeholder="0"
                   />
@@ -1107,6 +1430,7 @@ export default function FoodSalesPage({
                   <select
                     value={saleForm.discountType || 'percent'}
                     onChange={event => updateSaleField('discountType', event.target.value)}
+                    disabled={!canApplyDiscounts}
                     className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-100"
                   >
                     <option value="percent">%</option>
@@ -1115,6 +1439,7 @@ export default function FoodSalesPage({
                 </label>
               </div>
             </div>
+            )}
 
             <div className="mt-5 iq-total-highlight iq-total-highlight-dark">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -1129,25 +1454,35 @@ export default function FoodSalesPage({
                 <span className="text-lg font-black">Total</span>
                 <span className="text-3xl font-black text-cyan-300">{formatMoney(salePreview.total)}</span>
               </div>
-              <p className="mt-2 text-xs text-slate-400">{copy.totalSummaryLabel}: {copy.orderTypeLabels[activeOrderType] || getOrderTypeLabel(activeOrderType)} · Pago: {getPaymentLabel(saleForm.paymentMethod)}</p>
+              <p className="mt-2 text-xs text-slate-400">
+                {isRestaurant && activeOrderType === 'local'
+                  ? `Nueva ronda · Cuenta acumulada ${formatMoney(Number(activeRestaurantOrder?.total || 0) + Number(salePreview.total || 0))}`
+                  : `${copy.totalSummaryLabel}: ${copy.orderTypeLabels[activeOrderType] || getOrderTypeLabel(activeOrderType)} · Pago: ${getPaymentLabel(saleForm.paymentMethod)}`}
+              </p>
             </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={resetSaleForm}
-                className="iq-secondary-button"
-              >
-                Reiniciar
-              </button>
-              <button
-                type="submit"
-                disabled={saleCart.length === 0 || salesLoading}
-                className="iq-primary-button disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {copy.submitLabel}
-              </button>
-            </div>
+            {isRestaurant ? (
+              <div className="mt-5 space-y-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button type="button" onClick={() => saveCurrentRestaurantOrder({ send: false })} disabled={restaurantOrderSaving || saleCart.length === 0} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Save className="h-4 w-4" /> Guardar borrador
+                  </button>
+                  <button type="submit" disabled={restaurantOrderSaving || saleCart.length === 0} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-700 px-4 py-3 text-sm font-black text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Send className="h-4 w-4" /> {restaurantOrderSaving ? 'Guardando...' : 'Enviar a cocina'}
+                  </button>
+                </div>
+                {activeOrderType !== 'local' && (
+                  <button type="button" onClick={(event) => registerSale(event)} disabled={saleCart.length === 0 || salesLoading} className="w-full rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-800 hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50">
+                    Cobrar ahora sin dejar cuenta abierta
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button type="button" onClick={resetSaleForm} className="iq-secondary-button">Reiniciar</button>
+                <button type="submit" disabled={saleCart.length === 0 || salesLoading} className="iq-primary-button disabled:cursor-not-allowed disabled:opacity-50">{copy.submitLabel}</button>
+              </div>
+            )}
           </form>
 
           <div className="iq-operation-card p-5">
@@ -1184,13 +1519,13 @@ export default function FoodSalesPage({
                       >
                         Recibo
                       </button>
-                      <button
+                      {canCancelSales && <button
                         type="button"
                         onClick={() => cancelSale(sale.id)}
                         className="iq-action-danger"
                       >
                         Anular
-                      </button>
+                      </button>}
                     </div>
                   </div>
                 ))}
@@ -1203,6 +1538,39 @@ export default function FoodSalesPage({
   );
 }
 
+
+
+function CafeteriaCustomizerModal({ draft, setDraft, onClose, onConfirm }) {
+  const product = draft.product;
+  const metadata = normalizeCafeteriaProductMetadata(product?.productMetadata || product?.product_metadata);
+  const update = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
+  const optionButton = (active) => `rounded-xl border px-3 py-2 text-xs font-black transition ${active ? 'border-cyan-300 bg-cyan-700 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`;
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[30px] bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-600">Personalizar pedido</p><h3 className="mt-1 text-2xl font-black text-slate-900">{product?.name}</h3><p className="mt-1 text-sm text-slate-500">Elige únicamente las opciones que aplican a esta bebida o producto.</p></div>
+          <button type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-3 py-2 font-black text-slate-500">×</button>
+        </div>
+
+        {metadata.sizes.length > 0 && <CafeOptionGroup title="Tamaño" values={metadata.sizes} selected={draft.sizeId} onSelect={(id) => update('sizeId', id)} optionButton={optionButton} />}
+        {metadata.temperatures.length > 0 && <div className="mt-5"><p className="mb-2 text-sm font-black text-slate-800">Temperatura</p><div className="flex flex-wrap gap-2">{metadata.temperatures.map((value) => <button key={value} type="button" onClick={() => update('temperature', value)} className={optionButton(draft.temperature === value)}>{value === 'frio' ? 'Frío' : value === 'ambiente' ? 'Ambiente' : 'Caliente'}</button>)}</div></div>}
+        {metadata.milkOptions.length > 0 && <CafeOptionGroup title="Leche" values={[{ id: '', label: 'Sin cambio', priceDelta: 0 }, ...metadata.milkOptions]} selected={draft.milkId} onSelect={(id) => update('milkId', id)} optionButton={optionButton} />}
+        {metadata.syrupOptions.length > 0 && <CafeOptionGroup title="Jarabe / sabor" values={[{ id: '', label: 'Sin jarabe', priceDelta: 0 }, ...metadata.syrupOptions]} selected={draft.syrupId} onSelect={(id) => update('syrupId', id)} optionButton={optionButton} />}
+        {metadata.extraShotEnabled && <div className="mt-5"><button type="button" onClick={() => update('extraShot', !draft.extraShot)} className={optionButton(draft.extraShot)}>Shot extra {metadata.extraShotPrice > 0 ? `+$${metadata.extraShotPrice.toFixed(2)}` : ''}</button></div>}
+
+        <label className="mt-5 block"><span className="mb-2 block text-sm font-black text-slate-800">Nota para barra</span><input value={draft.notes || ''} onChange={(event) => update('notes', event.target.value)} className="iq-input" placeholder="Ej: poco hielo, sin azúcar, extra caliente" /></label>
+
+        <div className="mt-6 grid grid-cols-2 gap-3"><button type="button" onClick={onClose} className="iq-secondary-button">Cancelar</button><button type="button" onClick={onConfirm} className="iq-primary-button">Agregar al pedido</button></div>
+      </div>
+    </div>
+  );
+}
+
+function CafeOptionGroup({ title, values, selected, onSelect, optionButton }) {
+  return <div className="mt-5"><p className="mb-2 text-sm font-black text-slate-800">{title}</p><div className="flex flex-wrap gap-2">{values.map((item) => <button key={item.id || 'none'} type="button" onClick={() => onSelect(item.id)} className={optionButton(selected === item.id)}>{item.label}{Number(item.priceDelta || 0) > 0 ? ` +$${Number(item.priceDelta).toFixed(2)}` : ''}</button>)}</div></div>;
+}
 
 function RestaurantOrderCard({ title, value, detail }) {
   return (

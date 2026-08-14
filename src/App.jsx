@@ -114,7 +114,17 @@ import PageHeader from './components/PageHeader';
 import AppRoutes from './components/AppRoutes';
 import ReceiptModal from './components/ReceiptModal';
 import AuthPage from './pages/AuthPage';
+import EmployeeLoginPage from './pages/EmployeeLoginPage';
 import LandingPage from './pages/LandingPage';
+import RestaurantOperatorSwitcher from './components/RestaurantOperatorSwitcher';
+import { hasRestaurantPermission, isGastronomyEmployeeBusiness } from './utils/restaurantPermissions';
+import { auditRestaurantAction } from './utils/restaurantStaff';
+import {
+  clearRestaurantEmployeeBootstrap,
+  fetchRestaurantEmployeeSessionContext,
+  getRestaurantEmployeeBootstrap,
+  saveRestaurantEmployeeBootstrap,
+} from './utils/restaurantEmployeeAccess';
 
 
 function getPublicRoute(pathname = '') {
@@ -124,13 +134,21 @@ function getPublicRoute(pathname = '') {
 
   if (normalized === '/app') return 'app';
   if (normalized === '/iniciar-sesion' || normalized === '/login') return 'login';
+  if (normalized === '/empleados' || normalized === '/equipo') return 'employee';
   return 'landing';
 }
 
 function App() {
   const [publicRoute, setPublicRoute] = useState(() => getPublicRoute(typeof window !== 'undefined' ? window.location.pathname : '/'));
   const [users, setUsers] = useState(() => loadFromStorage(STORAGE_KEYS.users, initialUsers));
-  const [currentUser, setCurrentUser] = useState(() => loadFromStorage(STORAGE_KEYS.currentUser, null));
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = loadFromStorage(STORAGE_KEYS.currentUser, null);
+    if (saved?.isEmployeeSession) {
+      const key = saved?.authUserId ? `inventiq_employee_unlocked_${saved.authUserId}` : '';
+      if (!key || typeof window === 'undefined' || sessionStorage.getItem(key) !== '1') return null;
+    }
+    return saved;
+  });
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
@@ -172,6 +190,8 @@ function App() {
   const [settingsForm, setSettingsForm] = useState(emptySettingsForm);
   const [settingsNotice, setSettingsNotice] = useState(null);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [restaurantOperator, setRestaurantOperator] = useState(null);
+  const [operatorSwitcherOpen, setOperatorSwitcherOpen] = useState(false);
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm);
   const [expenseForm, setExpenseForm] = useState(() => createEmptyExpenseForm());
   const [editingExpenseId, setEditingExpenseId] = useState(null);
@@ -233,6 +253,37 @@ function App() {
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
+
+
+  useEffect(() => {
+    if (!currentUser?.id || !isGastronomyEmployeeBusiness(currentUser?.businessType)) {
+      setRestaurantOperator(null);
+      return;
+    }
+
+    if (currentUser?.isEmployeeSession) {
+      setRestaurantOperator(currentUser.restaurantOperator || null);
+      return;
+    }
+
+    try {
+      const saved = sessionStorage.getItem(`inventiq_restaurant_operator_${currentUser.id}`);
+      setRestaurantOperator(saved ? JSON.parse(saved) : null);
+    } catch {
+      setRestaurantOperator(null);
+    }
+  }, [currentUser?.id, currentUser?.businessType, currentUser?.isEmployeeSession]);
+
+  function handleRestaurantOperatorChange(operator) {
+    setRestaurantOperator(operator || null);
+    if (currentUser?.id) {
+      const key = `inventiq_restaurant_operator_${currentUser.id}`;
+      if (operator) sessionStorage.setItem(key, JSON.stringify(operator));
+      else sessionStorage.removeItem(key);
+    }
+    setActive('Inicio');
+    setMobileMoreOpen(false);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -535,7 +586,95 @@ function App() {
     }
   }, [currentUser]);
 
-  async function loadUserProfile(sessionUser) {
+  async function loadEmployeeUserProfile(sessionUser, bootstrapContext = null) {
+    const unlockKey = `inventiq_employee_unlocked_${sessionUser.id}`;
+    const isUnlocked = typeof window !== 'undefined' && sessionStorage.getItem(unlockKey) === '1';
+
+    if (!isUnlocked) {
+      await supabase.auth.signOut();
+      localStorage.removeItem(STORAGE_KEYS.currentUser);
+      currentUserRef.current = null;
+      setCurrentUser(null);
+      setRestaurantOperator(null);
+      setAuthMode('employee');
+      return null;
+    }
+
+    try {
+      let context = bootstrapContext || getRestaurantEmployeeBootstrap(sessionUser.id);
+      let contextError = null;
+
+      try {
+        const freshContext = await fetchRestaurantEmployeeSessionContext();
+        if (freshContext?.ownerId && freshContext?.operator?.id) {
+          context = freshContext;
+          saveRestaurantEmployeeBootstrap(sessionUser.id, freshContext);
+        }
+      } catch (error) {
+        contextError = error;
+        console.warn('No se pudo refrescar inmediatamente el contexto del empleado; se usará el contexto seguro del inicio de sesión.', error);
+      }
+
+      const operator = context?.operator || null;
+      if (!context?.ownerId || !operator?.id) {
+        throw contextError || new Error('El perfil del empleado ya no está disponible.');
+      }
+
+      const resolvedUser = {
+        id: context.ownerId,
+        authUserId: sessionUser.id,
+        email: sessionUser.email || '',
+        username: sessionUser.email || '',
+        name: context.ownerName || context.storeName || 'Administrador',
+        store: context.storeName || 'Mi negocio',
+        city: context.city || 'Sin ciudad registrada',
+        businessId: context.businessId || '',
+        address: context.address || '',
+        phone: context.phone || '',
+        commercialEmail: context.commercialEmail || '',
+        receiptFooter: context.receiptFooter || 'Gracias por su compra.',
+        logoUrl: context.logoUrl || '',
+        businessType: context.businessType || 'restaurante',
+        plan: context.plan || 'anual',
+        subscriptionStatus: context.subscriptionStatus || 'activo',
+        subscriptionStart: context.subscriptionStart || '',
+        subscriptionEnd: context.subscriptionEnd || '',
+        isSuspended: Boolean(context.isSuspended),
+        maxProducts: Number(context.maxProducts || 2000),
+        splitPaymentEnabled: Boolean(context.splitPaymentEnabled),
+        customerAccountsEnabled: Boolean(context.customerAccountsEnabled),
+        isEmployeeSession: true,
+        restaurantOperator: operator,
+        restaurantPermissions: operator.permissions || [],
+        restaurantRole: operator.role || 'mesero',
+        operatorName: operator.name || 'Empleado',
+      };
+
+      currentUserRef.current = resolvedUser;
+      setRestaurantOperator(operator);
+      setCurrentUser(resolvedUser);
+      return resolvedUser;
+    } catch (error) {
+      console.error('Error cargando sesión de empleado:', error);
+      clearRestaurantEmployeeBootstrap(sessionUser.id);
+      await supabase.auth.signOut();
+      localStorage.removeItem(STORAGE_KEYS.currentUser);
+      currentUserRef.current = null;
+      setCurrentUser(null);
+      setRestaurantOperator(null);
+      setAuthMode('employee');
+      setAuthNotice({
+        type: 'error',
+        message: error?.message || 'No se pudo abrir el perfil del empleado.',
+      });
+      return null;
+    }
+  }
+
+  async function loadUserProfile(sessionUser, employeeBootstrap = null) {
+    if (sessionUser?.user_metadata?.inventiq_employee_session) {
+      return loadEmployeeUserProfile(sessionUser, employeeBootstrap);
+    }
     if (currentUserRef.current?.id && currentUserRef.current.id !== sessionUser.id) {
       profileLoadTokenRef.current += 1;
     }
@@ -782,15 +921,28 @@ function App() {
   }
 
   async function logout() {
+    const wasEmployeeSession = Boolean(currentUser?.isEmployeeSession);
     profileLoadTokenRef.current += 1;
+    if (currentUser?.id) sessionStorage.removeItem(`inventiq_restaurant_operator_${currentUser.id}`);
+    if (currentUser?.authUserId) clearRestaurantEmployeeBootstrap(currentUser.authUserId);
+    setRestaurantOperator(null);
+    setOperatorSwitcherOpen(false);
     currentUserRef.current = null;
     await supabase.auth.signOut();
     localStorage.removeItem(STORAGE_KEYS.currentUser);
     setCurrentUser(null);
     setActive('Inicio');
-    setAuthMode('login');
+    setAuthMode(wasEmployeeSession ? 'employee' : 'login');
     setAuthNotice(null);
     navigateTo('/iniciar-sesion', { replace: true, instant: true });
+  }
+
+  function openRestaurantOperatorControl() {
+    if (currentUser?.isEmployeeSession) {
+      void logout();
+      return;
+    }
+    setOperatorSwitcherOpen(true);
   }
 
   const storeKey = currentUser?.id || 'demo';
@@ -1841,114 +1993,29 @@ function App() {
     clearDraft(currentUser?.id, 'purchaseCart');
   }
 
-  async function buildRecipeIngredientAdjustments(cartItems, sourceProducts, direction = 'subtract') {
-    const isCafeteria = currentUser?.businessType === 'cafeteria';
-
-    if (!isCafeteria || !Array.isArray(cartItems) || cartItems.length === 0) {
-      return { updates: [], errorMessage: '' };
+  async function getCafeteriaRecipeProductIds(cartItems) {
+    if (currentUser?.businessType !== 'cafeteria' || !currentUser?.id || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return new Set();
     }
 
-    const menuProductIds = Array.from(new Set(
+    const productIds = Array.from(new Set(
       cartItems
         .map(item => item.productId)
         .filter(Boolean)
         .map(String)
     ));
 
-    if (menuProductIds.length === 0) {
-      return { updates: [], errorMessage: '' };
+    if (productIds.length === 0) return new Set();
+
+    const { data, error } = await supabase.rpc('cafeteria_get_recipe_controlled_products', {
+      p_product_ids: productIds,
+    });
+
+    if (error) {
+      throw new Error(`No se pudieron validar las recetas de cafetería: ${error.message}`);
     }
 
-    const { data: recipeRows, error: recipeError } = await supabase
-      .from('product_recipes')
-      .select('*')
-      .eq('user_id', currentUser.id)
-      .in('menu_product_id', menuProductIds);
-
-    if (recipeError) {
-      return {
-        updates: [],
-        errorMessage: `No se pudieron cargar las recetas: ${recipeError.message}`,
-      };
-    }
-
-    if (!recipeRows?.length) {
-      return { updates: [], errorMessage: '' };
-    }
-
-    const quantityByMenuProduct = cartItems.reduce((acc, item) => {
-      const key = String(item.productId || '');
-      acc[key] = (acc[key] || 0) + Number(item.quantity || 0);
-      return acc;
-    }, {});
-
-    const requiredByIngredient = {};
-
-    for (const recipe of recipeRows) {
-      const menuQuantity = quantityByMenuProduct[String(recipe.menu_product_id)] || 0;
-      const ingredientId = String(recipe.ingredient_product_id || '');
-      const ingredient = sourceProducts.find(product => String(product.id) === String(ingredientId));
-
-      if (!ingredientId || menuQuantity <= 0) continue;
-
-      if (!ingredient) {
-        return {
-          updates: [],
-          errorMessage: 'No se encontró uno de los insumos de la receta. Revisa la receta antes de vender.',
-        };
-      }
-
-      const recipeQuantity = Number(recipe.quantity || 0);
-      const stockUnit = ingredient.unit || ingredient.size || '';
-      const convertedQuantity = convertRecipeQuantityToStockUnit(recipeQuantity, recipe.unit, stockUnit);
-
-      if (convertedQuantity === null) {
-        return {
-          updates: [],
-          errorMessage: `No se pudo convertir la unidad de ${ingredient.name}. Receta: ${recipe.quantity} ${recipe.unit || ''}, stock en: ${stockUnit || 'sin unidad'}.`,
-        };
-      }
-
-      const requiredQuantity = convertedQuantity * menuQuantity;
-
-      if (requiredQuantity <= 0) continue;
-
-      requiredByIngredient[ingredientId] = (requiredByIngredient[ingredientId] || 0) + requiredQuantity;
-    }
-
-    const updates = [];
-
-    for (const [ingredientId, requiredQuantity] of Object.entries(requiredByIngredient)) {
-      const ingredient = sourceProducts.find(product => String(product.id) === String(ingredientId));
-
-      if (!ingredient) {
-        return {
-          updates: [],
-          errorMessage: 'No se encontró uno de los insumos de la receta. Revisa la receta antes de vender.',
-        };
-      }
-
-      const currentStock = Number(ingredient.stock || 0);
-      const nextStock = direction === 'restore'
-        ? currentStock + requiredQuantity
-        : currentStock - requiredQuantity;
-
-      if (direction !== 'restore' && nextStock < 0) {
-        return {
-          updates: [],
-          errorMessage: `Stock insuficiente del insumo "${ingredient.name}". Necesitas ${requiredQuantity}, disponible: ${currentStock}.`,
-        };
-      }
-
-      updates.push({
-        product: ingredient,
-        requiredQuantity,
-        nextStock,
-        nextStatus: nextStock === 0 ? 'Inactivo' : 'Activo',
-      });
-    }
-
-    return { updates, errorMessage: '' };
+    return new Set((Array.isArray(data) ? data : []).map(String));
   }
 
   function buildFoodOrderCustomer() {
@@ -1976,9 +2043,10 @@ function App() {
     return parts.join(' · ');
   }
 
-  function isRecipeControlledProduct(product) {
-    const usesLegacySaleRecipes = currentUser?.businessType === 'cafeteria';
-    return usesLegacySaleRecipes && Boolean(product?.recipeEnabled || product?.recipe_enabled);
+  function isRecipeControlledProduct(product, cafeteriaRecipeProductIds = new Set()) {
+    return currentUser?.businessType === 'cafeteria'
+      && Boolean(product?.id)
+      && cafeteriaRecipeProductIds.has(String(product.id));
   }
 
   async function registerSale(e) {
@@ -2000,6 +2068,11 @@ function App() {
       return;
     }
 
+    if (isGastronomyEmployeeBusiness(currentUser?.businessType) && Number(discount || 0) > 0 && !hasRestaurantPermission(effectiveCurrentUser, 'discounts.apply')) {
+      setSaleNotice({ type: 'error', message: 'El operador actual no tiene permiso para aplicar descuentos.' });
+      return;
+    }
+
     if (isSplitPayment) {
       if (splitTotal <= 0) {
         setSaleNotice({ type: 'error', message: 'Ingresa al menos un valor para el pago mixto.' });
@@ -2017,6 +2090,14 @@ function App() {
       return;
     }
 
+    let cafeteriaRecipeProductIds = new Set();
+    try {
+      cafeteriaRecipeProductIds = await getCafeteriaRecipeProductIds(saleCart);
+    } catch (recipeLookupError) {
+      setSaleNotice({ type: 'error', message: recipeLookupError.message });
+      return;
+    }
+
     for (const item of saleCart) {
       const product = storeProducts.find(p => String(p.id) === String(item.productId));
       if (!product) {
@@ -2024,7 +2105,7 @@ function App() {
         return;
       }
 
-      if (isRecipeControlledProduct(product)) {
+      if (isRecipeControlledProduct(product, cafeteriaRecipeProductIds)) {
         continue;
       }
 
@@ -2032,13 +2113,6 @@ function App() {
         setSaleNotice({ type: 'error', message: `Stock insuficiente para ${product.name}. Disponible: ${product.stock}.` });
         return;
       }
-    }
-
-    const { updates: recipeStockUpdates, errorMessage: recipeErrorMessage } = await buildRecipeIngredientAdjustments(saleCart, storeProducts, 'subtract');
-
-    if (recipeErrorMessage) {
-      setSaleNotice({ type: 'error', message: recipeErrorMessage });
-      return;
     }
 
     const normalizedSaleCart = businessConfig.salesMode === 'food' ? saleCart : saleCart.map(normalizeSaleCartItem);
@@ -2100,7 +2174,7 @@ function App() {
 
     for (const item of normalizedSaleCart) {
       const product = storeProducts.find(p => String(p.id) === String(item.productId));
-      if (!product || isRecipeControlledProduct(product)) continue;
+      if (!product || isRecipeControlledProduct(product, cafeteriaRecipeProductIds)) continue;
 
       const newStock = product.stock - item.quantity;
       const newStatus = newStock === 0 ? 'Inactivo' : 'Activo';
@@ -2120,21 +2194,33 @@ function App() {
       }
     }
 
-    for (const ingredientUpdate of recipeStockUpdates) {
-      const { product, nextStock, nextStatus } = ingredientUpdate;
-
-      const { error: ingredientError } = await supabase
-        .from('products')
-        .update({ stock: nextStock, status: nextStatus })
-        .eq('id', product.id)
-        .eq('user_id', currentUser.id);
-
-      if (ingredientError) {
-        console.error('Error descontando insumo:', ingredientError);
-        setSaleNotice({ type: 'error', message: `La venta se registró, pero no se pudo descontar el insumo ${product.name}: ${ingredientError.message}` });
-        await loadSalesFromSupabase(currentUser.id, false);
-        await loadProductsFromSupabase(currentUser.id, false);
-        return;
+    let cafeteriaOrder = null;
+    let cafeteriaQueueWarning = '';
+    if (currentUser?.businessType === 'cafeteria') {
+      try {
+        const { data: queueData, error: queueError } = await supabase.rpc('cafeteria_create_order_from_sale', {
+          p_sale_id: saleData.id,
+          p_order_type: saleForm.orderType || 'local',
+          p_order_reference: saleForm.orderReference || '',
+          p_customer_name: saleForm.customer || '',
+          p_notes: saleForm.orderNotes || '',
+          p_items: normalizedSaleCart.map((item) => ({
+            productId: item.productId,
+            product: item.product,
+            baseProduct: item.baseProduct || item.product,
+            quantity: item.quantity,
+            price: item.price,
+            modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
+            variantSummary: item.variantSummary || '',
+            station: item.station || '',
+            notes: item.notes || '',
+          })),
+        });
+        if (queueError) throw queueError;
+        cafeteriaOrder = queueData;
+      } catch (queueError) {
+        console.error('Venta registrada, pero no se pudo crear el ticket de barra:', queueError);
+        cafeteriaQueueWarning = ` La venta quedó registrada, pero no se pudo enviar el ticket a Barra: ${queueError.message}`;
       }
     }
 
@@ -2143,18 +2229,51 @@ function App() {
     clearDraft(currentUser?.id, 'saleForm');
     clearDraft(currentUser?.id, 'saleCart');
 
-    const recipeMessage = recipeStockUpdates.length > 0
-      ? ` También se descontaron ${recipeStockUpdates.length} insumo(s) de recetas.`
+    const recipeMessage = currentUser?.businessType === 'cafeteria' && cafeteriaRecipeProductIds.size > 0
+      ? ' El consumo de recetas se aplicará al iniciar la preparación en Barra.'
       : '';
+    const cafeteriaMessage = cafeteriaOrder?.number
+      ? ` Pedido #${cafeteriaOrder.number} enviado a Barra.`
+      : cafeteriaQueueWarning;
 
-    setSaleNotice({ type: 'success', message: `Venta ${newSale.code} registrada correctamente con ${normalizedSaleCart.length} producto(s).${recipeMessage}` });
+    setSaleNotice({ type: cafeteriaQueueWarning ? 'error' : 'success', message: `Venta ${newSale.code} registrada correctamente con ${normalizedSaleCart.length} producto(s).${recipeMessage}${cafeteriaMessage}` });
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
   }
 
   async function cancelSale(id) {
+    if (!hasRestaurantPermission(effectiveCurrentUser, 'cancellations.manage')) {
+      setSaleNotice({ type: 'error', message: 'El operador actual no tiene permiso para anular ventas.' });
+      return;
+    }
     const sale = storeSales.find(s => s.id === id);
     if (!sale || !currentUser?.id) return;
+
+    if (sale.sourceType === 'restaurant_order') {
+      const confirmed = window.confirm(
+        `La venta ${sale.code} proviene de una cuenta de restaurante. La anulación corregirá la venta y conservará la trazabilidad de los cobros, pero NO devolverá automáticamente ingredientes ni preparaciones al inventario, porque pueden haber sido consumidos durante la preparación. ¿Continuar?`
+      );
+      if (!confirmed) return;
+
+      const { data, error } = await supabase.rpc('cancel_restaurant_order_sale', {
+        p_sale_id: id,
+      });
+
+      if (error) {
+        console.error('Error anulando venta de restaurante:', error);
+        setSaleNotice({ type: 'error', message: `No se pudo anular la venta del restaurante: ${error.message}` });
+        return;
+      }
+
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+      setSaleNotice({
+        type: 'success',
+        message: `Venta ${data?.sale_code || sale.code} anulada. El consumo gastronómico registrado se conservó y no se devolvieron ingredientes automáticamente al inventario.`,
+      });
+      await auditRestaurantAction(effectiveCurrentUser, 'sale.cancelled', 'sale', id, { code: sale.code, sourceType: sale.sourceType });
+      return;
+    }
 
     if (sale.sourceType === 'bakery_order') {
       const confirmed = window.confirm(
@@ -2181,16 +2300,50 @@ function App() {
       return;
     }
 
+    if (currentUser?.businessType === 'cafeteria') {
+      const confirmed = window.confirm(
+        `La venta ${sale.code} pertenece a una cafetería. InventIQ anulará la venta y el ticket en una sola operación. Solo volverá al stock lo que todavía no había iniciado preparación; los ingredientes ya consumidos se conservarán. ¿Continuar?`
+      );
+      if (!confirmed) return;
+
+      const { data, error } = await supabase.rpc('cancel_cafeteria_sale', {
+        p_sale_id: id,
+      });
+
+      if (error) {
+        console.error('Error anulando venta de cafetería:', error);
+        setSaleNotice({ type: 'error', message: `No se pudo anular la venta de cafetería: ${error.message}` });
+        return;
+      }
+
+      await loadSalesFromSupabase(currentUser.id, false);
+      await loadProductsFromSupabase(currentUser.id, false);
+
+      const restoredProducts = Number(data?.restored_products || 0);
+      const consumptionRecords = Number(data?.consumption_records || 0);
+      const stockMessage = restoredProducts > 0
+        ? ` Se devolvió stock directo pendiente de ${restoredProducts} producto(s).`
+        : ' No existía stock directo pendiente por devolver.';
+      const consumptionMessage = consumptionRecords > 0
+        ? ' Los ingredientes ya consumidos durante la preparación se conservaron para mantener la trazabilidad real.'
+        : '';
+
+      setSaleNotice({
+        type: 'success',
+        message: `Venta ${data?.sale_code || sale.code} anulada correctamente.${stockMessage}${consumptionMessage}`,
+      });
+      await auditRestaurantAction(effectiveCurrentUser, 'sale.cancelled', 'sale', id, {
+        code: sale.code,
+        sourceType: 'cafeteria',
+        restoredProducts,
+        consumptionRecords,
+      });
+      return;
+    }
+
     const items = sale.items?.length > 0
       ? sale.items
       : [{ productId: sale.productId, product: sale.product, quantity: sale.quantity }];
-
-    const { updates: recipeRestoreUpdates, errorMessage: recipeRestoreError } = await buildRecipeIngredientAdjustments(items, products, 'restore');
-
-    if (recipeRestoreError) {
-      setSaleNotice({ type: 'error', message: recipeRestoreError });
-      return;
-    }
 
     const { error: saleError } = await supabase
       .from('sales')
@@ -2206,9 +2359,12 @@ function App() {
 
     for (const item of items) {
       const product = products.find(p => String(p.id) === String(item.productId));
-      if (!product || isRecipeControlledProduct(product)) continue;
+      if (!product) continue;
 
-      const restoredStock = product.stock + item.quantity;
+      const quantityToRestore = Number(item.quantity || 0);
+      if (quantityToRestore <= 0) continue;
+
+      const restoredStock = product.stock + quantityToRestore;
       const { error: productError } = await supabase
         .from('products')
         .update({ stock: restoredStock, status: 'Activo' })
@@ -2223,32 +2379,9 @@ function App() {
       }
     }
 
-    for (const ingredientUpdate of recipeRestoreUpdates) {
-      const { product, nextStock } = ingredientUpdate;
-
-      const { error: ingredientError } = await supabase
-        .from('products')
-        .update({ stock: nextStock, status: 'Activo' })
-        .eq('id', product.id)
-        .eq('user_id', currentUser.id);
-
-      if (ingredientError) {
-        console.error('Error devolviendo insumo:', ingredientError);
-        setSaleNotice({ type: 'error', message: `Venta anulada, pero no se pudo devolver el insumo ${product.name}: ${ingredientError.message}` });
-        await loadSalesFromSupabase(currentUser.id, false);
-        await loadProductsFromSupabase(currentUser.id, false);
-        return;
-      }
-    }
-
     await loadSalesFromSupabase(currentUser.id, false);
     await loadProductsFromSupabase(currentUser.id, false);
-
-    const recipeMessage = recipeRestoreUpdates.length > 0
-      ? ` También se devolvieron ${recipeRestoreUpdates.length} insumo(s) de recetas.`
-      : '';
-
-    setSaleNotice({ type: 'success', message: `Venta anulada y stock devuelto correctamente.${recipeMessage}` });
+    setSaleNotice({ type: 'success', message: 'Venta anulada correctamente.' });
   }
 
   function resetSaleForm() {
@@ -2281,6 +2414,9 @@ function App() {
   }
 
   async function adjustProductStock(productId, newStockValue, reason) {
+    if (!hasRestaurantPermission(effectiveCurrentUser, 'inventory.adjust')) {
+      throw new Error('El operador actual no tiene permiso para realizar ajustes de inventario.');
+    }
     if (!currentUser?.id) throw new Error('No existe una sesión activa.');
 
     const stock = Number(newStockValue);
@@ -2301,6 +2437,7 @@ function App() {
     }
 
     await loadProductsFromSupabase(currentUser.id, false);
+    await auditRestaurantAction(effectiveCurrentUser, 'inventory.adjusted', 'product', productId, { newStock: stock, reason: reason || '' });
     return reason;
   }
 
@@ -3056,11 +3193,31 @@ function App() {
     setSettingsNotice({ type: 'success', message: 'Configuración actualizada correctamente.' });
   }
 
-  const businessProfile = getBusinessProfile(currentUser?.businessProfile || currentUser?.businessType);
-  const businessConfig = businessProfile.config || getBusinessConfig(currentUser?.businessType);
+  const effectiveCurrentUser = useMemo(() => {
+    if (!currentUser) return null;
+    if (!isGastronomyEmployeeBusiness(currentUser.businessType)) return currentUser;
+    const effectiveOperator = restaurantOperator || currentUser.restaurantOperator || null;
+    return {
+      ...currentUser,
+      restaurantOperator: effectiveOperator,
+      restaurantPermissions: effectiveOperator?.permissions || [],
+      restaurantRole: effectiveOperator?.role || 'administrador',
+      operatorName: effectiveOperator?.name || 'Administrador',
+    };
+  }, [currentUser, restaurantOperator]);
+
+  const businessProfile = getBusinessProfile(effectiveCurrentUser?.businessProfile || effectiveCurrentUser?.businessType);
+  const businessConfig = businessProfile.config || getBusinessConfig(effectiveCurrentUser?.businessType);
 
   const pageInfo = getPageInfo(active, businessConfig, businessProfile);
-  const visibleMenu = getVisibleMenu(isInventiQAdmin(currentUser), businessProfile);
+  const visibleMenu = getVisibleMenu(isInventiQAdmin(effectiveCurrentUser) && !effectiveCurrentUser?.restaurantOperator, businessProfile, effectiveCurrentUser);
+
+  useEffect(() => {
+    if (!effectiveCurrentUser || visibleMenu.length === 0) return;
+    if (!visibleMenu.some((item) => item.label === active)) {
+      setActive(visibleMenu.find((item) => item.label === 'Inicio')?.label || visibleMenu[0].label);
+    }
+  }, [active, effectiveCurrentUser, visibleMenu]);
 
   if (authMode === 'update-password') {
     return (
@@ -3095,6 +3252,24 @@ function App() {
   }
 
   if (!currentUser) {
+    if (publicRoute === 'employee' || authMode === 'employee') {
+      return (
+        <EmployeeLoginPage
+          onBackToAdmin={() => { setAuthMode('login'); setAuthNotice(null); navigateTo('/iniciar-sesion', { instant: true }); }}
+          onBackToLanding={() => navigateTo('/', { instant: true })}
+          onAuthenticated={async (authResult) => {
+            const sessionUser = authResult?.sessionUser || authResult;
+            const resolved = await loadUserProfile(sessionUser, authResult?.context || null);
+            if (resolved) {
+              setAuthMode('login');
+              setAuthNotice(null);
+              navigateTo('/app', { replace: true, instant: true });
+            }
+          }}
+        />
+      );
+    }
+
     return (
       <AuthPage
         authMode={authMode}
@@ -3124,29 +3299,30 @@ function App() {
 
   return (
     <div className="inventiq-app-shell min-h-screen overflow-x-hidden text-slate-900">
-      <MobileTopBar currentUser={currentUser} logout={logout} active={active} />
+      <MobileTopBar currentUser={effectiveCurrentUser} logout={logout} active={active} onOpenOperatorSwitcher={openRestaurantOperatorControl} />
       <div className="min-h-screen">
         <DesktopSidebar
           menu={visibleMenu}
           active={active}
           setActive={setActive}
           setMobileMoreOpen={setMobileMoreOpen}
-          currentUser={currentUser}
+          currentUser={effectiveCurrentUser}
           logout={logout}
+          onOpenOperatorSwitcher={openRestaurantOperatorControl}
         />
 
         <main className="relative min-w-0 p-3 pb-32 pt-[calc(env(safe-area-inset-top)+5.25rem)] sm:p-6 sm:pb-28 sm:pt-20 lg:ml-[250px] lg:px-10 lg:pb-10 lg:pt-10 2xl:px-12">
           {active !== 'Inicio' && (
             <PageHeader
               pageInfo={pageInfo}
-              currentUser={currentUser}
+              currentUser={effectiveCurrentUser}
             />
           )}
 
           <AppRoutes
             active={active}
             businessConfig={businessConfig}
-            currentUser={currentUser}
+            currentUser={effectiveCurrentUser}
             totalSales={totalSales}
             totalProducts={totalProducts}
             lowStock={lowStock}
@@ -3176,6 +3352,7 @@ function App() {
             salePreview={calculateSalePreview()}
             salesLoading={salesLoading}
             setReceiptSale={setReceiptSale}
+            refreshSales={() => loadSalesFromSupabase(currentUser.id, false)}
             purchases={purchases}
             expenses={expenses}
             expenseForm={expenseForm}
@@ -3267,11 +3444,19 @@ function App() {
             setAdminCreateUserForm={setAdminCreateUserForm}
             adminNotice={adminNotice}
             createClientAccount={createClientAccount}
+            onOpenOperatorSwitcher={openRestaurantOperatorControl}
           />
         </main>
       </div>
       <MobileBottomNav menu={visibleMenu} active={active} setActive={setActive} mobileMoreOpen={mobileMoreOpen} setMobileMoreOpen={setMobileMoreOpen} logout={logout} />
       {/* Botón flotante retirado: el menú inferior ya cubre la navegación móvil. */}
+      <RestaurantOperatorSwitcher
+        open={operatorSwitcherOpen && isGastronomyEmployeeBusiness(currentUser?.businessType) && !currentUser?.isEmployeeSession}
+        ownerUser={currentUser}
+        currentOperator={restaurantOperator}
+        onClose={() => setOperatorSwitcherOpen(false)}
+        onOperatorChange={handleRestaurantOperatorChange}
+      />
       {receiptSale && <ReceiptModal sale={receiptSale} currentUser={currentUser} onClose={() => setReceiptSale(null)} />}
     </div>
   );

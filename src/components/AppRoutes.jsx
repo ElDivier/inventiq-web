@@ -2,6 +2,11 @@ import React from 'react';
 import HomePage from '../pages/HomePage';
 import FoodSalesPage from '../pages/FoodSalesPage';
 import RestaurantTablesPage from '../pages/RestaurantTablesPage';
+import RestaurantOrdersPage from '../pages/RestaurantOrdersPage';
+import RestaurantKitchenPage from '../pages/RestaurantKitchenPage';
+import CafeteriaQueuePage from '../pages/CafeteriaQueuePage';
+import CafeteriaPickupPage from '../pages/CafeteriaPickupPage';
+import RestaurantCheckoutPage from '../pages/RestaurantCheckoutPage';
 import SalesPage from '../pages/SalesPage';
 import CashPage from '../pages/CashPage';
 import DailyCashPage from '../pages/DailyCashPage';
@@ -13,6 +18,10 @@ import ProductsPage from '../pages/ProductsPage';
 import InventoryPage from '../pages/InventoryPage';
 import BakeryRecipesPage from '../pages/BakeryRecipesPage';
 import RestaurantRecipesPage from '../pages/RestaurantRecipesPage';
+import CafeteriaRecipesPage from '../pages/CafeteriaRecipesPage';
+import CafeteriaInventoryPage from '../pages/CafeteriaInventoryPage';
+import RestaurantInventoryPage from '../pages/RestaurantInventoryPage';
+import RestaurantTeamPage from '../pages/RestaurantTeamPage';
 import BakeryProductionPage from '../pages/BakeryProductionPage';
 import BakeryWastePage from '../pages/BakeryWastePage';
 import BakeryOrdersPage from '../pages/BakeryOrdersPage';
@@ -56,6 +65,7 @@ export default function AppRoutes({
   salePreview,
   salesLoading,
   setReceiptSale,
+  refreshSales,
   purchases,
   expenses,
   expenseForm,
@@ -147,6 +157,7 @@ export default function AppRoutes({
   setAdminCreateUserForm,
   adminNotice,
   createClientAccount,
+  onOpenOperatorSwitcher,
 }) {
   return (
     <>
@@ -229,6 +240,40 @@ export default function AppRoutes({
           setActive={setActive}
           setSaleForm={setSaleForm}
           clearSaleCart={clearSaleCart}
+        />
+      )}
+
+      {active === 'Comandas' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantOrdersPage
+          currentUser={currentUser}
+          setActive={setActive}
+          setSaleForm={setSaleForm}
+          setSaleCart={setSaleCart}
+          clearSaleCart={clearSaleCart}
+        />
+      )}
+
+      {active === 'Cocina' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantKitchenPage
+          currentUser={currentUser}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Barra' && currentUser?.businessType === 'cafeteria' && (
+        <CafeteriaQueuePage currentUser={currentUser} setActive={setActive} />
+      )}
+
+      {active === 'Entrega' && currentUser?.businessType === 'cafeteria' && (
+        <CafeteriaPickupPage currentUser={currentUser} setActive={setActive} />
+      )}
+
+      {active === 'Cobros' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantCheckoutPage
+          currentUser={currentUser}
+          setActive={setActive}
+          setReceiptSale={setReceiptSale}
+          refreshSales={refreshSales}
         />
       )}
 
@@ -382,6 +427,23 @@ export default function AppRoutes({
         />
       )}
 
+      {active === 'Recetas' && currentUser?.businessType === 'cafeteria' && (
+        <CafeteriaRecipesPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setProducts={setProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Control gastronómico' && currentUser?.businessType === 'restaurante' && (
+        <RestaurantInventoryPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
       {active === 'Producción' && currentUser?.businessType === 'panaderia' && (
         <BakeryProductionPage
           currentUser={currentUser}
@@ -407,7 +469,15 @@ export default function AppRoutes({
         />
       )}
 
-      {active === 'Inventario' && (
+      {active === 'Inventario' && currentUser?.businessType === 'cafeteria' && (
+        <CafeteriaInventoryPage
+          currentUser={currentUser}
+          products={storeProducts}
+          setActive={setActive}
+        />
+      )}
+
+      {active === 'Inventario' && currentUser?.businessType !== 'cafeteria' && (
         <InventoryPage
           currentUser={currentUser}
           products={storeProducts}
@@ -484,6 +554,14 @@ export default function AppRoutes({
           bestSeller={bestSeller}
           totalProfit={totalProfit}
           expirationText={expirationText}
+        />
+      )}
+
+
+      {active === 'Equipo' && ['restaurante', 'cafeteria'].includes(currentUser?.businessType) && (
+        <RestaurantTeamPage
+          currentUser={currentUser}
+          onOpenOperatorSwitcher={onOpenOperatorSwitcher}
         />
       )}
 

@@ -6,6 +6,8 @@ import {
   Boxes,
   CalendarDays,
   ClipboardList,
+  ChefHat,
+  Coffee,
   DollarSign,
   Grid2X2,
   Package,
@@ -16,6 +18,7 @@ import {
   Sparkles,
   Store,
   TrendingUp,
+  WalletCards,
 } from 'lucide-react';
 import { getBusinessConfig } from '../config/businessTypes';
 import { parseInventiqDate, startOfDay } from '../utils/dates';
@@ -94,6 +97,7 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
   const businessConfig = getBusinessConfig(currentUser?.businessType);
   const isBakery = currentUser?.businessType === 'panaderia';
   const isRestaurant = currentUser?.businessType === 'restaurante';
+  const isCafeteria = currentUser?.businessType === 'cafeteria';
   const completedSales = sales.filter(sale => sale.status !== 'Anulada');
   const recentSales = [...completedSales]
     .sort((a, b) => {
@@ -280,8 +284,16 @@ function HomePage({ currentUser, totalSales, totalProducts, lowStock, noStock, i
             ) : isRestaurant ? (
               <>
                 <QuickAction icon={Grid2X2} label="Mesas y salón" helper="Controlar ocupación y servicio" onClick={() => setActive('Mesas')} tone="blue" />
-                <QuickAction icon={Package} label="Gestionar menú" helper="Platos, preparaciones e insumos" onClick={() => setActive('Productos')} tone="blue" />
-                <QuickAction icon={ClipboardList} label="Registrar compra" helper="Reponer inventario de cocina" onClick={() => setActive('Compras')} tone="slate" />
+                <QuickAction icon={ChefHat} label="Pantalla de cocina" helper="Revisar tickets y tiempos" onClick={() => setActive('Cocina')} tone="blue" />
+                <QuickAction icon={ClipboardList} label="Pedidos y comandas" helper="Gestionar cuentas abiertas" onClick={() => setActive('Comandas')} tone="slate" />
+                <QuickAction icon={WalletCards} label="Cobro y cuentas" helper="Dividir y registrar pagos" onClick={() => setActive('Cobros')} tone="cyan" />
+              </>
+            ) : isCafeteria ? (
+              <>
+                <QuickAction icon={Coffee} label="Barra y pedidos" helper="Preparar pedidos por estación" onClick={() => setActive('Barra')} tone="blue" />
+                <QuickAction icon={PackageCheck} label="Entrega de pedidos" helper="Llamar y confirmar entregas" onClick={() => setActive('Entrega')} tone="cyan" />
+                <QuickAction icon={Package} label="Menú y variantes" helper="Configurar bebidas y tamaños" onClick={() => setActive('Productos')} tone="blue" />
+                <QuickAction icon={ClipboardList} label="Registrar compra" helper="Reponer café, leche e insumos" onClick={() => setActive('Compras')} tone="slate" />
               </>
             ) : (
               <>

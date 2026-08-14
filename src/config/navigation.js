@@ -16,9 +16,17 @@ import {
   ClipboardCheck,
   CalendarDays,
   Grid2X2,
+  ListChecks,
+  ChefHat,
+  Coffee,
+  WalletCards,
+  PackageSearch,
+  UsersRound,
+  BellRing,
 } from 'lucide-react';
 
 import { menu } from './menu';
+import { canAccessRestaurantSection } from '../utils/restaurantPermissions';
 
 function getProfileLabel(businessProfile = {}, key, fallback) {
   return businessProfile?.labels?.[key] || fallback;
@@ -28,12 +36,17 @@ function isRestaurantProfile(businessProfile = {}, businessConfig = {}) {
   return businessProfile?.businessType === 'restaurante' || businessConfig?.label === 'Restaurante';
 }
 
+function isCafeteriaProfile(businessProfile = {}, businessConfig = {}) {
+  return businessProfile?.businessType === 'cafeteria' || businessConfig?.label === 'Cafetería';
+}
+
 function isBakeryProfile(businessProfile = {}, businessConfig = {}) {
   return businessProfile?.businessType === 'panaderia' || businessConfig?.label === 'Panadería';
 }
 
 export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
   const restaurant = isRestaurantProfile(businessProfile, businessConfig);
+  const cafeteria = isCafeteriaProfile(businessProfile, businessConfig);
   const bakery = isBakeryProfile(businessProfile, businessConfig);
 
   const pages = {
@@ -41,6 +54,8 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       title: 'Inicio',
       subtitle: restaurant
         ? 'Resumen de ventas, órdenes e inventario de cocina.'
+        : cafeteria
+          ? 'Resumen de caja rápida, pedidos en barra e inventario de cafetería.'
         : bakery
           ? 'Resumen de ventas, productos terminados y materias primas.'
           : 'Resumen general de tu negocio.',
@@ -51,6 +66,8 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       title: getProfileLabel(businessProfile, 'sales', businessConfig.salesSectionTitle || 'Ventas'),
       subtitle: restaurant
         ? 'Registra órdenes de restaurante, consumo en mesa, para llevar o delivery.'
+        : cafeteria
+          ? 'Toma pedidos rápidos de mostrador, personaliza bebidas y envíalos automáticamente a barra.'
         : bakery
           ? 'Registra ventas de pan, pasteles, bocaditos y otros productos terminados.'
           : businessConfig.salesMode === 'food'
@@ -64,6 +81,48 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       subtitle: 'Organiza áreas, controla ocupación, asigna meseros y abre pedidos por mesa.',
       icon: Grid2X2,
       actionLabel: 'Nueva mesa',
+      showAction: false,
+    },
+    Comandas: {
+      title: 'Pedidos y comandas',
+      subtitle: 'Controla cuentas abiertas, rondas enviadas a cocina y solicitudes de cuenta.',
+      icon: ListChecks,
+      actionLabel: 'Nueva orden',
+      showAction: false,
+    },
+    Cocina: {
+      title: 'Pantalla de cocina',
+      subtitle: 'Controla tickets por estación, tiempos de preparación y productos listos para entregar.',
+      icon: ChefHat,
+      actionLabel: 'Ver comandas',
+      showAction: false,
+    },
+    Barra: {
+      title: 'Barra y pedidos',
+      subtitle: 'Prepara pedidos cobrados, controla tiempos y marca bebidas o alimentos como listos y entregados.',
+      icon: Coffee,
+      actionLabel: 'Ver pedidos',
+      showAction: false,
+    },
+    Entrega: {
+      title: 'Entrega de pedidos',
+      subtitle: 'Llama pedidos listos por número o nombre y confirma la entrega al cliente.',
+      icon: BellRing,
+      actionLabel: 'Actualizar entrega',
+      showAction: false,
+    },
+    Cobros: {
+      title: 'Cobro y división de cuentas',
+      subtitle: 'Registra cobros completos o parciales por personas, asientos, productos y métodos de pago.',
+      icon: WalletCards,
+      actionLabel: 'Cobrar cuenta',
+      showAction: false,
+    },
+    'Control gastronómico': {
+      title: 'Inventario gastronómico',
+      subtitle: 'Controla consumo de recetas, preparaciones internas, faltantes, mermas y conteos físicos.',
+      icon: PackageSearch,
+      actionLabel: 'Registrar movimiento',
       showAction: false,
     },
     Caja: {
@@ -113,10 +172,12 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       actionLabel: businessProfile?.labels?.addProduct || 'Agregar producto',
     },
     Recetas: {
-      title: restaurant ? 'Recetas y costos gastronómicos' : 'Recetas y costos',
+      title: restaurant ? 'Recetas y costos gastronómicos' : cafeteria ? 'Recetas y costos de cafetería' : 'Recetas y costos',
       subtitle: restaurant
         ? 'Costea platos y preparaciones internas con ingredientes, mermas, mano de obra y margen real.'
-        : 'Define fórmulas, rendimientos y costos actualizados para cada producto terminado.',
+        : cafeteria
+          ? 'Define receta base, tamaños, tipos de leche, jarabes, shots y costo real por variante.'
+          : 'Define fórmulas, rendimientos y costos actualizados para cada producto terminado.',
       icon: BookOpenText,
       actionLabel: 'Nueva receta',
       showAction: false,
@@ -146,13 +207,16 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       title: getProfileLabel(businessProfile, 'inventory', businessConfig.inventorySectionTitle || 'Inventario'),
       subtitle: restaurant
         ? 'Controla stock de cocina, alertas de insumos, caducidades y valor del inventario.'
-        : bakery
-          ? 'Controla existencias, lotes, caducidades y alertas de abastecimiento.'
-          : businessConfig.productMode === 'menu-inventory'
-            ? 'Controla insumos, stock y alertas de cocina.'
-          : 'Controla stock, alertas y valor de inventario.',
+        : cafeteria
+          ? 'Controla café, leche, jarabes, empaques, preparaciones internas, mermas y reposición sugerida.'
+          : bakery
+            ? 'Controla existencias, lotes, caducidades y alertas de abastecimiento.'
+            : businessConfig.productMode === 'menu-inventory'
+              ? 'Controla insumos, stock y alertas de cocina.'
+              : 'Controla stock, alertas y valor de inventario.',
       icon: Boxes,
       actionLabel: businessProfile?.labels?.addProduct || 'Agregar producto',
+      showAction: !cafeteria,
     },
     Clientes: {
       title: 'Clientes',
@@ -178,13 +242,27 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
       title: getProfileLabel(businessProfile, 'reports', 'Reportes'),
       subtitle: restaurant
         ? 'Analiza platos más vendidos, utilidad, insumos críticos y ventas por tipo de consumo.'
-        : bakery
-          ? 'Analiza ventas, utilidad, productos destacados y materias primas críticas.'
-          : businessConfig.salesMode === 'food'
-            ? 'Analiza ventas, utilidad, platos e insumos.'
-          : 'Analiza ventas, utilidad y decisiones de compra.',
+        : cafeteria
+          ? 'Analiza pedidos, tiempos de barra, variantes, consumo de insumos, mermas y reposición.'
+          : bakery
+            ? 'Analiza ventas, utilidad, productos destacados y materias primas críticas.'
+            : businessConfig.salesMode === 'food'
+              ? 'Analiza ventas, utilidad, platos e insumos.'
+              : 'Analiza ventas, utilidad y decisiones de compra.',
       icon: BarChart3,
       actionLabel: businessProfile?.labels?.addProduct || 'Agregar producto',
+    },
+
+    Equipo: {
+      title: 'Equipo y permisos',
+      subtitle: restaurant
+        ? 'Configura perfiles operativos, PIN, permisos por rol y revisa la auditoría del restaurante.'
+        : businessProfile?.businessType === 'cafeteria'
+          ? 'Configura perfiles operativos, PIN, permisos por rol y el acceso del equipo de la cafetería.'
+          : 'Configura perfiles operativos, PIN y permisos por rol.',
+      icon: UsersRound,
+      actionLabel: 'Nuevo integrante',
+      showAction: false,
     },
     Configuración: {
       title: 'Configuración',
@@ -207,10 +285,12 @@ export function getPageInfo(active, businessConfig = {}, businessProfile = {}) {
   return pages[active] || pages.Inicio;
 }
 
-export function getVisibleMenu(isAdmin = false, businessProfile = {}) {
+export function getVisibleMenu(isAdmin = false, businessProfile = {}, currentUser = null) {
   const labels = businessProfile?.labels || {};
   const isBakery = businessProfile?.businessType === 'panaderia';
   const isRestaurant = businessProfile?.businessType === 'restaurante';
+  const isCafe = businessProfile?.businessType === 'cafeteria';
+  const usesEmployeeTeam = isRestaurant || isCafe;
 
   const displayLabels = {
     Ventas: labels.sales,
@@ -243,8 +323,16 @@ export function getVisibleMenu(isAdmin = false, businessProfile = {}) {
       )
     : menuWithExpenses;
 
+  const cafeteriaOperationModules = [
+    { label: 'Barra', displayLabel: 'Barra y pedidos', icon: Coffee },
+    { label: 'Entrega', displayLabel: 'Entrega de pedidos', icon: BellRing },
+  ];
+
   const restaurantOperationModules = [
     { label: 'Mesas', displayLabel: 'Mesas y salón', icon: Grid2X2 },
+    { label: 'Comandas', displayLabel: 'Pedidos y comandas', icon: ListChecks },
+    { label: 'Cocina', displayLabel: 'Pantalla de cocina', icon: ChefHat },
+    { label: 'Cobros', displayLabel: 'Cobro y cuentas', icon: WalletCards },
   ];
 
   const menuWithRestaurantOperation = isRestaurant
@@ -253,15 +341,36 @@ export function getVisibleMenu(isAdmin = false, businessProfile = {}) {
           ? [item, ...restaurantOperationModules]
           : [item]
       )
-    : menuWithBakeryModules;
+    : isCafe
+      ? menuWithBakeryModules.flatMap((item) =>
+          item.label === 'Ventas'
+            ? [item, ...cafeteriaOperationModules]
+            : [item]
+        )
+      : menuWithBakeryModules;
 
-  const menuWithProfileModules = isRestaurant
-    ? menuWithRestaurantOperation.flatMap((item) =>
-        item.label === 'Productos'
-          ? [item, { label: 'Recetas', displayLabel: 'Recetas y costos', icon: BookOpenText }]
-          : [item]
-      )
-    : menuWithRestaurantOperation;
+  const menuWithProfileModules = menuWithRestaurantOperation.flatMap((item) => {
+    if (isRestaurant && item.label === 'Productos') {
+      return [
+        item,
+        { label: 'Recetas', displayLabel: 'Recetas y costos', icon: BookOpenText },
+        { label: 'Control gastronómico', displayLabel: 'Consumo y mermas', icon: PackageSearch },
+      ];
+    }
+    if (isCafe && item.label === 'Productos') {
+      return [
+        item,
+        { label: 'Recetas', displayLabel: 'Recetas y costos', icon: BookOpenText },
+      ];
+    }
+    if (usesEmployeeTeam && item.label === 'Configuración') {
+      return [
+        { label: 'Equipo', displayLabel: 'Equipo y permisos', icon: UsersRound },
+        item,
+      ];
+    }
+    return [item];
+  });
 
   function getBakeryGroup(label) {
     if (['Inicio', 'Ventas', 'Caja', 'Gastos fijos', 'Compras'].includes(label)) return 'Operación';
@@ -272,11 +381,20 @@ export function getVisibleMenu(isAdmin = false, businessProfile = {}) {
     return '';
   }
 
-  function getRestaurantGroup(label) {
-    if (['Inicio', 'Ventas', 'Mesas', 'Caja', 'Gastos fijos'].includes(label)) return 'Operación';
+
+  function getCafeteriaGroup(label) {
+    if (['Inicio', 'Ventas', 'Barra', 'Entrega', 'Caja', 'Gastos fijos'].includes(label)) return 'Operación';
     if (['Productos', 'Recetas', 'Compras', 'Inventario'].includes(label)) return 'Menú e inventario';
     if (['Clientes', 'Proveedores'].includes(label)) return 'Relaciones';
-    if (['Reportes', 'Configuración', 'Admin'].includes(label)) return 'Análisis y ajustes';
+    if (['Reportes', 'Equipo', 'Configuración', 'Admin'].includes(label)) return 'Análisis y ajustes';
+    return '';
+  }
+
+  function getRestaurantGroup(label) {
+    if (['Inicio', 'Ventas', 'Mesas', 'Comandas', 'Cocina', 'Cobros', 'Caja', 'Gastos fijos'].includes(label)) return 'Operación';
+    if (['Productos', 'Recetas', 'Control gastronómico', 'Compras', 'Inventario'].includes(label)) return 'Menú e inventario';
+    if (['Clientes', 'Proveedores'].includes(label)) return 'Relaciones';
+    if (['Reportes', 'Equipo', 'Configuración', 'Admin'].includes(label)) return 'Análisis y ajustes';
     return '';
   }
 
@@ -287,17 +405,23 @@ export function getVisibleMenu(isAdmin = false, businessProfile = {}) {
       ? getBakeryGroup(item.label)
       : isRestaurant
         ? getRestaurantGroup(item.label)
-        : '',
+        : isCafe
+          ? getCafeteriaGroup(item.label)
+          : '',
   }));
 
+  const permissionFilteredMenu = usesEmployeeTeam && currentUser
+    ? visibleMenu.filter((item) => canAccessRestaurantSection(currentUser, item.label))
+    : visibleMenu;
+
   const finalMenu = isAdmin
-    ? [...visibleMenu, {
+    ? [...permissionFilteredMenu, {
         label: 'Admin',
         displayLabel: 'Admin',
         icon: UserPlus,
-        group: (isBakery || isRestaurant) ? 'Análisis y ajustes' : '',
+        group: (isBakery || usesEmployeeTeam) ? 'Análisis y ajustes' : '',
       }]
-    : visibleMenu;
+    : permissionFilteredMenu;
 
   return finalMenu;
 }

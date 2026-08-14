@@ -79,7 +79,7 @@ export default function AuthPage({ authMode, setAuthMode, loginForm, setLoginFor
               <Field label="Contraseña" type="password" value={loginForm.password} onChange={v => setLoginForm({ ...loginForm, password: v })} placeholder="Tu contraseña" />
               <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 font-bold text-white hover:from-blue-700 hover:to-cyan-600">Ingresar</button>
               <button type="button" onClick={() => { setResetEmail(loginForm.username || ''); switchMode('reset'); }} className="w-full rounded-2xl border border-transparent px-5 py-2 text-sm font-bold text-cyan-700 hover:bg-cyan-50">¿Olvidaste tu contraseña?</button>
-              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">El registro público está desactivado. Las cuentas son creadas por el administrador de INVENTIQ.</p>
+              <p className="rounded-2xl bg-slate-50 p-3 text-center text-xs text-slate-500">Este acceso corresponde a la cuenta administradora de INVENTIQ.</p>
             </form>
           ) : (
             <div className="space-y-4">

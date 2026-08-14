@@ -12,6 +12,13 @@ import {
   RESTAURANT_STATIONS,
   normalizeRestaurantProductMetadata,
 } from '../utils/restaurantMenu';
+import {
+  CAFETERIA_MENU_STATUS,
+  CAFETERIA_ORDER_CHANNELS,
+  CAFETERIA_STATIONS,
+  CAFETERIA_TEMPERATURES,
+  normalizeCafeteriaProductMetadata,
+} from '../utils/cafeteriaMenu';
 
 export default function ProductForm({
   businessConfig,
@@ -30,9 +37,10 @@ export default function ProductForm({
   const extraLabels = businessConfig?.extraLabels || {};
   const businessType = businessConfig?.businessType || 'general';
   const isRestaurantBusiness = businessType === 'restaurante' || businessConfig?.label === 'Restaurante';
+  const isCafeteriaBusiness = businessType === 'cafeteria' || businessConfig?.label === 'Cafetería';
   const isBakeryBusiness = businessType === 'panaderia' || businessConfig?.label === 'Panadería';
   const isFoodProductMode = businessConfig?.productMode === 'menu-inventory';
-  const isRestaurantPreparationMode = isRestaurantBusiness && foodFormMode === 'preparacion';
+  const isFoodPreparationMode = (isRestaurantBusiness || isCafeteriaBusiness) && foodFormMode === 'preparacion';
   const isFoodIngredientMode = isFoodProductMode && foodFormMode === 'insumo';
   const isFoodMenuMode = isFoodProductMode && foodFormMode === 'menu';
 
@@ -40,7 +48,7 @@ export default function ProductForm({
     editingId,
     isFoodIngredientMode,
     isFoodMenuMode,
-    isRestaurantPreparationMode,
+    isFoodPreparationMode,
     isRestaurantBusiness,
     isBakeryBusiness,
   });
@@ -68,7 +76,9 @@ export default function ProductForm({
   function updateProductMetadata(field, value) {
     const metadata = isRestaurantBusiness
       ? normalizeRestaurantProductMetadata(form.productMetadata)
-      : (form.productMetadata || {});
+      : isCafeteriaBusiness
+        ? normalizeCafeteriaProductMetadata(form.productMetadata)
+        : (form.productMetadata || {});
 
     setForm({
       ...form,
@@ -85,13 +95,13 @@ export default function ProductForm({
         <div>
           {isFoodProductMode && (
             <span className={`mb-2 inline-flex rounded-full px-3 py-1 text-xs font-black ${
-              isRestaurantPreparationMode
+              isFoodPreparationMode
                 ? 'bg-violet-50 text-violet-700'
                 : isFoodIngredientMode
                   ? 'bg-amber-50 text-amber-700'
                   : 'bg-cyan-50 text-cyan-800'
             }`}>
-              {isRestaurantPreparationMode
+              {isFoodPreparationMode
                 ? modeText.badgePreparation
                 : isFoodIngredientMode
                   ? modeText.badgeIngredient
@@ -145,7 +155,7 @@ export default function ProductForm({
           />
         )}
 
-        {isRestaurantPreparationMode ? (
+        {isFoodPreparationMode ? (
           <PreparationFields form={form} updateField={updateField} />
         ) : isFoodIngredientMode ? (
           <IngredientFields
@@ -172,11 +182,18 @@ export default function ProductForm({
           />
         )}
 
+        {isCafeteriaBusiness && isFoodMenuMode && (
+          <CafeteriaMenuSettings
+            metadata={normalizeCafeteriaProductMetadata(form.productMetadata)}
+            updateMetadata={updateProductMetadata}
+          />
+        )}
+
         <Field
           label="Código / SKU"
           value={form.sku}
           onChange={value => updateField('sku', value)}
-          placeholder={isFoodIngredientMode || isRestaurantPreparationMode ? 'Ej: COC-001' : 'Ej: MENU-001'}
+          placeholder={isFoodIngredientMode || isFoodPreparationMode ? 'Ej: COC-001' : 'Ej: MENU-001'}
         />
 
         <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -211,7 +228,7 @@ export default function ProductForm({
           )}
         </div>
 
-        {isRestaurantBusiness && isRestaurantPreparationMode ? (
+        {isFoodPreparationMode ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="Estación responsable"
@@ -308,7 +325,7 @@ export default function ProductForm({
           </div>
         )}
 
-        {(isFoodIngredientMode || isRestaurantPreparationMode || (isBakeryBusiness && isFoodMenuMode) || (!isFoodProductMode && businessConfig?.usesExpiration)) && (
+        {(isFoodIngredientMode || isFoodPreparationMode || (isBakeryBusiness && isFoodMenuMode) || (!isFoodProductMode && businessConfig?.usesExpiration)) && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field
               label="Lote"
@@ -513,6 +530,158 @@ function PreparationFields({ form, updateField }) {
   );
 }
 
+
+function CafeteriaMenuSettings({ metadata, updateMetadata }) {
+  return (
+    <section className="rounded-3xl border border-amber-100 bg-amber-50/60 p-4">
+      <div>
+        <p className="text-sm font-black text-amber-950">Configuración para barra</p>
+        <p className="mt-1 text-xs text-amber-800">Define tamaños, leche, temperatura y extras que el cajero podrá elegir al tomar el pedido.</p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SelectField
+          label="Estado en el menú"
+          value={metadata.menuStatus}
+          onChange={value => updateMetadata('menuStatus', value)}
+          options={CAFETERIA_MENU_STATUS}
+        />
+        <SelectField
+          label="Estación"
+          value={metadata.station}
+          onChange={value => updateMetadata('station', value)}
+          options={CAFETERIA_STATIONS}
+        />
+        <Field
+          label="Tiempo objetivo (min)"
+          type="number"
+          min="0"
+          step="1"
+          value={String(metadata.preparationMinutes || '')}
+          onChange={value => updateMetadata('preparationMinutes', Number(value || 0))}
+          placeholder="Ej: 4"
+        />
+      </div>
+
+      <CheckboxGroup
+        title="Canales disponibles"
+        options={CAFETERIA_ORDER_CHANNELS}
+        values={metadata.orderChannels}
+        onChange={values => updateMetadata('orderChannels', values)}
+      />
+
+      <CheckboxGroup
+        title="Temperaturas disponibles"
+        options={CAFETERIA_TEMPERATURES}
+        values={metadata.temperatures}
+        onChange={values => updateMetadata('temperatures', values)}
+      />
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <OptionListEditor
+          title="Tamaños"
+          hint="Ej: Mediano +$0.00, Grande +$0.75"
+          values={metadata.sizes}
+          onChange={values => updateMetadata('sizes', values)}
+        />
+        <OptionListEditor
+          title="Tipos de leche"
+          hint="Ej: Entera +$0.00, Almendra +$0.60"
+          values={metadata.milkOptions}
+          onChange={values => updateMetadata('milkOptions', values)}
+        />
+        <OptionListEditor
+          title="Jarabes / sabores"
+          hint="Ej: Vainilla +$0.50"
+          values={metadata.syrupOptions}
+          onChange={values => updateMetadata('syrupOptions', values)}
+        />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="flex items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-white p-4">
+          <div>
+            <p className="text-sm font-black text-slate-800">Permitir shot extra</p>
+            <p className="text-xs text-slate-500">Se ofrecerá como opción rápida en caja.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={metadata.extraShotEnabled}
+            onChange={event => updateMetadata('extraShotEnabled', event.target.checked)}
+            className="h-5 w-5 rounded border-slate-300"
+          />
+        </label>
+        <Field
+          label="Precio del shot extra"
+          type="number"
+          min="0"
+          step="0.01"
+          value={String(metadata.extraShotPrice || '')}
+          onChange={value => updateMetadata('extraShotPrice', Number(value || 0))}
+          placeholder="$ 0.00"
+        />
+      </div>
+
+      <div className="mt-4">
+        <Field
+          label="Nota base para barra"
+          value={metadata.preparationNotes}
+          onChange={value => updateMetadata('preparationNotes', value)}
+          placeholder="Ej: servir con doble servilleta / mezclar antes de entregar"
+        />
+      </div>
+    </section>
+  );
+}
+
+function OptionListEditor({ title, hint, values, onChange }) {
+  const [label, setLabel] = useState('');
+  const [price, setPrice] = useState('');
+  const list = Array.isArray(values) ? values : [];
+
+  function addOption() {
+    const cleanLabel = label.trim();
+    if (!cleanLabel) return;
+    onChange([
+      ...list,
+      {
+        id: `${Date.now()}-${cleanLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        label: cleanLabel,
+        priceDelta: Math.max(0, Number(price || 0) || 0),
+      },
+    ]);
+    setLabel('');
+    setPrice('');
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-100 bg-white p-3">
+      <p className="text-sm font-black text-slate-800">{title}</p>
+      <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
+      <div className="mt-3 grid grid-cols-[1fr_90px] gap-2">
+        <input value={label} onChange={event => setLabel(event.target.value)} className="iq-input" placeholder="Nombre" />
+        <input type="number" min="0" step="0.01" value={price} onChange={event => setPrice(event.target.value)} className="iq-input" placeholder="+$" />
+      </div>
+      <button type="button" onClick={addOption} className="mt-2 w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">Agregar opción</button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {list.length === 0 ? (
+          <span className="text-xs text-slate-400">Sin opciones configuradas.</span>
+        ) : list.map((item, index) => (
+          <button
+            key={item.id || `${item.label}-${index}`}
+            type="button"
+            onClick={() => onChange(list.filter((_, itemIndex) => itemIndex !== index))}
+            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+            title="Quitar opción"
+          >
+            {item.label}{Number(item.priceDelta || 0) > 0 ? ` +$${Number(item.priceDelta).toFixed(2)}` : ''} ×
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RestaurantMenuSettings({ metadata, updateMetadata }) {
   return (
     <section className="rounded-3xl border border-cyan-100 bg-cyan-50/60 p-4">
@@ -654,7 +823,7 @@ function getCategoryOptions(productCategories, foodFormMode, isFoodProductMode, 
 
   if (!isFoodProductMode) return categories;
 
-  if (businessType === 'restaurante') {
+  if (['restaurante', 'cafeteria'].includes(businessType)) {
     const filtered = categories.filter(category => {
       const normalized = String(category || '').trim().toLowerCase();
       if (foodFormMode === 'preparacion') {
@@ -678,23 +847,25 @@ function getCategoryOptions(productCategories, foodFormMode, isFoodProductMode, 
   return filtered.length > 0 ? filtered : categories;
 }
 
-function getFormTexts({ editingId, isFoodIngredientMode, isFoodMenuMode, isRestaurantPreparationMode, isRestaurantBusiness, isBakeryBusiness }) {
-  if (isRestaurantPreparationMode) {
+function getFormTexts({ editingId, isFoodIngredientMode, isFoodMenuMode, isFoodPreparationMode, isRestaurantBusiness, isBakeryBusiness }) {
+  if (isFoodPreparationMode) {
     return {
       badgePreparation: 'Preparación intermedia',
       badgeIngredient: 'Insumo de cocina',
-      badgeMenu: 'Plato del menú',
+      badgeMenu: isRestaurantBusiness ? 'Plato del menú' : 'Producto del menú',
       title: editingId ? 'Editar preparación intermedia' : 'Agregar preparación intermedia',
       subtitle: editingId
         ? 'Actualiza la preparación seleccionada.'
-        : 'Registra salsas, fondos, guarniciones, aderezos o bases que se elaboran antes del servicio.',
+        : isRestaurantBusiness
+          ? 'Registra salsas, fondos, guarniciones, aderezos o bases que se elaboran antes del servicio.'
+          : 'Registra bases de café, cold brew, cremas, salsas o preparaciones que luego se usan en bebidas y alimentos.',
       nameLabel: 'Nombre de la preparación',
-      namePlaceholder: 'Ej: Salsa de la casa, fondo de pollo, arroz preparado',
+      namePlaceholder: isRestaurantBusiness ? 'Ej: Salsa de la casa, fondo de pollo, arroz preparado' : 'Ej: Cold brew concentrado, crema de vainilla, salsa de chocolate',
       categoryLabel: 'Categoría de preparación',
       categoryPlaceholder: 'Seleccionar tipo de preparación',
-      newCategoryPlaceholder: 'Ej: Preparaciones - Encurtidos',
+      newCategoryPlaceholder: isRestaurantBusiness ? 'Ej: Preparaciones - Encurtidos' : 'Ej: Preparaciones - Bases frías',
       descriptionLabel: 'Descripción / método de conservación',
-      descriptionPlaceholder: 'Ej: rendimiento, conservación, responsable y uso en platos...',
+      descriptionPlaceholder: isRestaurantBusiness ? 'Ej: rendimiento, conservación, responsable y uso en platos...' : 'Ej: rendimiento, conservación, vida útil y bebidas donde se utiliza...',
       submitLabel: editingId ? 'Actualizar preparación' : 'Guardar preparación',
     };
   }

@@ -43,6 +43,7 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
 
   const businessConfig = getBusinessConfig(currentUser?.businessType);
   const isBakery = currentUser?.businessType === 'panaderia';
+  const isRestaurant = currentUser?.businessType === 'restaurante';
   const {
     alerts,
     criticalProducts,
@@ -198,15 +199,16 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
     );
   }
 
-  const views = isBakery
+  const usesDedicatedAdjustments = isBakery || isRestaurant;
+  const views = usesDedicatedAdjustments
     ? ['Alertas', 'Movimientos', 'Resumen']
     : ['Alertas', 'Movimientos', 'Ajuste de stock', 'Resumen'];
 
   useEffect(() => {
-    if (isBakery && inventoryView === 'Ajuste de stock') {
+    if (usesDedicatedAdjustments && inventoryView === 'Ajuste de stock') {
       setInventoryView('Alertas');
     }
-  }, [isBakery, inventoryView]);
+  }, [usesDedicatedAdjustments, inventoryView]);
 
   return (
     <div className="space-y-5">
@@ -231,6 +233,15 @@ export default function InventoryPage({ currentUser, products, sales, purchases,
                 className="rounded-2xl border border-cyan-200 bg-white px-5 py-3 font-bold text-cyan-800 hover:bg-cyan-100"
               >
                 Mermas y conteos
+              </button>
+            )}
+            {isRestaurant && (
+              <button
+                type="button"
+                onClick={() => setActive?.('Control gastronómico')}
+                className="rounded-2xl border border-cyan-200 bg-white px-5 py-3 font-bold text-cyan-800 hover:bg-cyan-100"
+              >
+                Consumo y mermas
               </button>
             )}
             <button onClick={exportInventory} className="rounded-2xl bg-cyan-700 px-5 py-3 font-bold text-white hover:bg-cyan-800">

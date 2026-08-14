@@ -99,6 +99,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [expenses, setExpenses] = useState([]);
+  const [restaurantPayments, setRestaurantPayments] = useState([]);
   const [openingAmount, setOpeningAmount] = useState('0');
   const [closingAmount, setClosingAmount] = useState('');
   const [closingNotes, setClosingNotes] = useState('');
@@ -112,6 +113,23 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
     loadCashData();
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    if (!currentUser?.id || currentUser?.businessType !== 'restaurante') return undefined;
+    const channel = supabase
+      .channel(`restaurant-cash-payments-${currentUser.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'restaurant_order_payments',
+        filter: `user_id=eq.${currentUser.id}`,
+      }, () => loadRestaurantPayments())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, currentUser?.businessType]);
+
   const sessionStartDate = useMemo(() => {
     return activeSession?.opened_at ? new Date(activeSession.opened_at) : null;
   }, [activeSession?.opened_at]);
@@ -122,8 +140,22 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       .filter(sale => isAfterStart(sale, sessionStartDate));
   }, [sales, sessionStartDate]);
 
+  const sessionRestaurantPayments = useMemo(() => {
+    return (restaurantPayments || [])
+      .filter(payment => payment.status === 'active')
+      .filter(payment => {
+        const paidAt = payment.paid_at || payment.created_at;
+        return isAfterStart({ created_at: paidAt }, sessionStartDate);
+      });
+  }, [restaurantPayments, sessionStartDate]);
+
+  const cashRecordedSales = useMemo(
+    () => sessionSales.filter(sale => !sale.cashAlreadyRecorded && !sale.cash_already_recorded),
+    [sessionSales]
+  );
+
   const paymentTotals = useMemo(() => {
-    return sessionSales.reduce((acc, sale) => {
+    const totals = cashRecordedSales.reduce((acc, sale) => {
       const method = paymentKey(sale.paymentMethod || sale.payment_method || 'Efectivo');
 
       if (method === 'mixto') {
@@ -136,7 +168,20 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       addPaymentAmount(acc, method, sale.total || 0);
       return acc;
     }, {});
-  }, [sessionSales]);
+
+    sessionRestaurantPayments.forEach(payment => {
+      const method = paymentKey(payment.payment_method || 'Efectivo');
+      if (method === 'mixto') {
+        addPaymentAmount(totals, 'efectivo', payment.cash_amount || 0);
+        addPaymentAmount(totals, 'tarjeta', payment.card_amount || 0);
+        addPaymentAmount(totals, 'transferencia', payment.transfer_amount || 0);
+      } else {
+        addPaymentAmount(totals, method, payment.amount || 0);
+      }
+    });
+
+    return totals;
+  }, [cashRecordedSales, sessionRestaurantPayments]);
 
   const cashExpenses = useMemo(() => {
     return expenses
@@ -151,6 +196,10 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
   const salesTotal = useMemo(() => {
     return sessionSales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
   }, [sessionSales]);
+
+  const restaurantCollectedTotal = useMemo(() => {
+    return sessionRestaurantPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  }, [sessionRestaurantPayments]);
 
   const sessionPurchases = useMemo(() => {
     return (purchases || []).filter(purchase => isAfterStart(purchase, sessionStartDate));
@@ -229,6 +278,12 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
       setClosingAmount('');
       setClosingNotes('');
 
+      if (currentUser?.businessType === 'restaurante') {
+        await loadRestaurantPayments();
+      } else {
+        setRestaurantPayments([]);
+      }
+
       if (openSession) {
         await loadExpenses(openSession.id);
       } else {
@@ -240,6 +295,29 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadRestaurantPayments() {
+    if (!currentUser?.id || currentUser?.businessType !== 'restaurante') {
+      setRestaurantPayments([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('restaurant_order_payments')
+      .select('*, order:restaurant_orders(order_code, order_reference, order_type, status, table_id)')
+      .eq('user_id', currentUser.id)
+      .order('paid_at', { ascending: false })
+      .limit(300);
+
+    if (error) {
+      if (error.code === '42P01') {
+        setRestaurantPayments([]);
+        return;
+      }
+      throw error;
+    }
+    setRestaurantPayments(data || []);
   }
 
   async function loadExpenses(sessionId) {
@@ -550,9 +628,10 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
               {isRestaurant && (
                 <div className="iq-operation-card p-6">
                   <h3 className="mb-4 text-xl font-black text-slate-900">Abastecimiento del turno</h3>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <PaymentBox label="Compras registradas" value={purchaseTotal} />
-                    <PaymentBox label="Órdenes cobradas" value={salesTotal} />
+                    <PaymentBox label="Cobros de cuentas" value={restaurantCollectedTotal} />
+                    <PaymentBox label="Ventas cerradas" value={salesTotal} />
                     <PaymentBox label="Ventas - compras" value={salesTotal - purchaseTotal} />
                   </div>
                   <p className="mt-3 text-xs font-semibold text-slate-500">
@@ -614,7 +693,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
               <div className="iq-operation-card p-6">
                 <h3 className="mb-4 text-xl font-black text-slate-900">{cashCopy.movementTitle}</h3>
                 <div className="space-y-3">
-                  {expenses.length === 0 && sessionSales.length === 0 ? (
+                  {expenses.length === 0 && cashRecordedSales.length === 0 && sessionRestaurantPayments.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
                       No hay movimientos en esta caja.
                     </div>
@@ -630,7 +709,17 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
                         />
                       ))}
 
-                      {sessionSales.slice(0, 6).map(sale => (
+                      {sessionRestaurantPayments.slice(0, 8).map(payment => (
+                        <MovementRow
+                          key={`restaurant-payment-${payment.id}`}
+                          title={payment.payment_code || 'Cobro de cuenta'}
+                          detail={`${payment.order?.order_reference || payment.order?.order_code || 'Cuenta restaurante'} · ${payment.payment_method || 'Efectivo'}${payment.split_label ? ` · ${payment.split_label}` : ''}`}
+                          value={Number(payment.amount || 0)}
+                          tone="cyan"
+                        />
+                      ))}
+
+                      {cashRecordedSales.slice(0, 6).map(sale => (
                         <MovementRow
                           key={sale.id}
                           title={sale.code || 'Venta'}
@@ -658,7 +747,7 @@ export default function FoodCashPage({ currentUser, sales = [], purchases = [], 
 
               <div className="space-y-4">
                 <SummaryLine label="Efectivo inicial" value={activeSession.opening_amount} />
-                <SummaryLine label="Ventas en efectivo" value={paymentTotals.efectivo || 0} />
+                <SummaryLine label="Cobros en efectivo" value={paymentTotals.efectivo || 0} />
                 <SummaryLine label="Gastos en efectivo" value={-cashExpenses} />
                 <div className="rounded-2xl bg-cyan-50 p-4">
                   <SummaryLine label="Efectivo esperado" value={expectedCash} strong />

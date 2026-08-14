@@ -33,6 +33,12 @@ import {
   getRestaurantStatusMeta,
   normalizeRestaurantProductMetadata,
 } from '../utils/restaurantMenu';
+import {
+  getCafeteriaMenuStatusLabel,
+  getCafeteriaStationLabel,
+  normalizeCafeteriaProductMetadata,
+} from '../utils/cafeteriaMenu';
+import { isCafeteriaPreparation } from '../utils/cafeteriaRecipes';
 
 const FOOD_EMPTY_FORM = {
   name: '',
@@ -73,7 +79,9 @@ function isIngredientProduct(product, businessType) {
 }
 
 function isPreparationProduct(product, businessType) {
-  return businessType === 'restaurante' && getRestaurantProductRole(product) === 'preparation';
+  if (businessType === 'restaurante') return getRestaurantProductRole(product) === 'preparation';
+  if (businessType === 'cafeteria') return isCafeteriaPreparation(product);
+  return false;
 }
 
 function isMenuProduct(product, businessType) {
@@ -130,6 +138,7 @@ export default function FoodProductsPage({
   const businessConfig = getBusinessConfig(businessType);
   const pageText = getFoodProductsPageTexts(businessType, businessConfig);
   const isRestaurant = businessType === 'restaurante';
+  const isCafeteria = businessType === 'cafeteria';
 
   const menuProducts = useMemo(
     () => products.filter(product => isMenuProduct(product, businessType)),
@@ -147,8 +156,8 @@ export default function FoodProductsPage({
   );
 
   const recipeInputs = useMemo(
-    () => isRestaurant ? [...preparationProducts, ...ingredientProducts] : ingredientProducts,
-    [ingredientProducts, isRestaurant, preparationProducts]
+    () => (isRestaurant || isCafeteria) ? [...preparationProducts, ...ingredientProducts] : ingredientProducts,
+    [ingredientProducts, isRestaurant, isCafeteria, preparationProducts]
   );
 
   const activeProducts = view === 'preparaciones'
@@ -195,9 +204,10 @@ export default function FoodProductsPage({
   }, [businessConfig.usesExpiration, products, expirationText]);
 
   const pausedMenuProducts = useMemo(() => {
-    if (!isRestaurant) return [];
-    return menuProducts.filter(product => getRestaurantStatusMeta(product).value === 'paused');
-  }, [isRestaurant, menuProducts]);
+    if (isRestaurant) return menuProducts.filter(product => getRestaurantStatusMeta(product).value === 'paused');
+    if (isCafeteria) return menuProducts.filter(product => normalizeCafeteriaProductMetadata(product.productMetadata).menuStatus === 'paused');
+    return [];
+  }, [isRestaurant, isCafeteria, menuProducts]);
 
   function selectView(nextView) {
     setView(nextView);
@@ -239,7 +249,9 @@ export default function FoodProductsPage({
             minStock: '0',
             productMetadata: isRestaurant
               ? normalizeRestaurantProductMetadata({})
-              : {},
+              : isCafeteria
+                ? normalizeCafeteriaProductMetadata({})
+                : {},
           };
 
     setForm({ ...FOOD_EMPTY_FORM, ...defaults });
@@ -265,6 +277,11 @@ export default function FoodProductsPage({
       setActive?.('Recetas');
       return;
     }
+    if (isCafeteria) {
+      sessionStorage.setItem('inventiq_cafeteria_recipe_product_id', String(product.id));
+      setActive?.('Recetas');
+      return;
+    }
     setRecipeProduct(product);
   }
 
@@ -274,7 +291,7 @@ export default function FoodProductsPage({
       ? UtensilsCrossed
       : Coffee;
 
-  const viewButtons = isRestaurant
+  const viewButtons = (isRestaurant || isCafeteria)
     ? [
         { id: 'menu', title: pageText.menuTabTitle, detail: `${menuProducts.length} ${pageText.menuTabDetail}` },
         { id: 'preparaciones', title: pageText.preparationTabTitle, detail: `${preparationProducts.length} ${pageText.preparationTabDetail}` },
@@ -297,9 +314,9 @@ export default function FoodProductsPage({
         <FoodMetric icon={AlertTriangle} title="Stock bajo" value={lowStock} detail={pageText.lowStockDetail} tone="red" />
         <FoodMetric
           icon={isRestaurant ? Clock3 : CalendarDays}
-          title={isRestaurant ? 'Menú pausado' : 'Por vencer'}
-          value={isRestaurant ? pausedMenuProducts.length : expiringProducts.length}
-          detail={isRestaurant ? 'no visibles en ventas' : 'perecibles'}
+          title={(isRestaurant || isCafeteria) ? 'Menú pausado' : 'Por vencer'}
+          value={(isRestaurant || isCafeteria) ? pausedMenuProducts.length : expiringProducts.length}
+          detail={(isRestaurant || isCafeteria) ? 'no visibles en caja' : 'perecibles'}
           tone="slate"
         />
       </section>
@@ -332,12 +349,12 @@ export default function FoodProductsPage({
         </div>
       </section>
 
-      {isRestaurant && (
+      {(isRestaurant || isCafeteria) && (
         <section className="rounded-3xl border border-slate-200 bg-white p-5">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <WorkflowStep number="01" title="Menú" text="Platos y bebidas que el cliente puede ordenar." />
-            <WorkflowStep number="02" title="Preparaciones" text="Salsas, fondos y bases elaboradas antes del servicio." />
-            <WorkflowStep number="03" title="Insumos y empaques" text="Materias primas y materiales que sostienen la operación." />
+            <WorkflowStep number="01" title="Menú" text={isRestaurant ? 'Platos y bebidas que el cliente puede ordenar.' : 'Bebidas y alimentos que se venden en Caja rápida.'} />
+            <WorkflowStep number="02" title="Preparaciones" text={isRestaurant ? 'Salsas, fondos y bases elaboradas antes del servicio.' : 'Cold brew, cremas, salsas y bases preparadas con anticipación.'} />
+            <WorkflowStep number="03" title="Insumos y empaques" text={isRestaurant ? 'Materias primas y materiales que sostienen la operación.' : 'Café, leches, jarabes, vasos y demás materiales de operación.'} />
           </div>
         </section>
       )}
@@ -393,11 +410,11 @@ export default function FoodProductsPage({
                 <p className="text-sm text-slate-500">{getViewDescription(view, pageText)}</p>
               </div>
 
-              <div className={`grid gap-2 ${isRestaurant ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+              <div className={`grid gap-2 ${(isRestaurant || isCafeteria) ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
                 <button type="button" onClick={() => prepareForm('menu')} className="rounded-2xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm font-black text-cyan-800 hover:bg-cyan-100">
                   {pageText.addMenuButton}
                 </button>
-                {isRestaurant && (
+                {(isRestaurant || isCafeteria) && (
                   <button type="button" onClick={() => prepareForm('preparacion')} className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-black text-violet-700 hover:bg-violet-100">
                     Agregar preparación
                   </button>
@@ -444,6 +461,7 @@ export default function FoodProductsPage({
               showRecipeButton={pageText.showRecipeButton}
               productIcon={MainProductIcon}
               isRestaurant={isRestaurant}
+              isCafeteria={isCafeteria}
             />
           ) : (
             <InternalItemsList
@@ -457,7 +475,7 @@ export default function FoodProductsPage({
               printLabel={printLabel}
               expirationText={expirationText}
               openRecipe={openProductRecipe}
-              showRecipeButton={isRestaurant && view === 'preparaciones'}
+              showRecipeButton={(isRestaurant || isCafeteria) && view === 'preparaciones'}
             />
           )}
         </div>
@@ -478,7 +496,7 @@ export default function FoodProductsPage({
         </div>
       </section>
 
-      {recipeProduct && !isRestaurant && (
+      {recipeProduct && !isRestaurant && !isCafeteria && (
         <FoodRecipeModal
           currentUser={currentUser}
           menuProduct={recipeProduct}
@@ -491,7 +509,7 @@ export default function FoodProductsPage({
   );
 }
 
-function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe, showRecipeButton = true, productIcon: ProductIcon = Coffee, isRestaurant = false }) {
+function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, editProduct, deleteProduct, printLabel, openRecipe, showRecipeButton = true, productIcon: ProductIcon = Coffee, isRestaurant = false, isCafeteria = false }) {
   if (products.length === 0) {
     return <EmptyFoodState title={pageText.emptyMenuTitle} text={pageText.emptyMenuText} />;
   }
@@ -502,9 +520,12 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
         const isPendingDelete = pendingDeleteId === product.id;
         const metadata = isRestaurant ? normalizeRestaurantProductMetadata(product.productMetadata) : null;
         const statusMeta = isRestaurant ? getRestaurantStatusMeta(product) : null;
+        const cafeMetadata = isCafeteria ? normalizeCafeteriaProductMetadata(product.productMetadata) : null;
         const station = metadata ? getRestaurantStationLabel(metadata.kitchenStation) : '';
         const serviceLabels = metadata ? getRestaurantServiceLabels(metadata.servicePeriods) : [];
         const channelLabels = metadata ? getRestaurantChannelLabels(metadata.orderChannels) : [];
+        const cafeStatusLabel = cafeMetadata ? getCafeteriaMenuStatusLabel(cafeMetadata.menuStatus) : '';
+        const cafeStation = cafeMetadata ? getCafeteriaStationLabel(cafeMetadata.station) : '';
 
         return (
           <div key={product.id} className="iq-menu-product-card p-4">
@@ -537,6 +558,19 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
               </div>
             )}
 
+            {isCafeteria && cafeMetadata && (
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600">
+                  <span className="block font-black text-slate-800">{cafeStation}</span>
+                  <span>{cafeMetadata.preparationMinutes > 0 ? `${cafeMetadata.preparationMinutes} min` : 'Preparación rápida'}</span>
+                </div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-slate-600">
+                  <span className="block font-black text-slate-800">{cafeMetadata.sizes.length} tamaño(s)</span>
+                  <span>{cafeMetadata.milkOptions.length} leche(s) · {cafeMetadata.syrupOptions.length} sabor(es)</span>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <p className="text-2xl font-black text-cyan-800">{formatMoney(product.price)}</p>
@@ -549,11 +583,17 @@ function MenuGrid({ products, pageText, pendingDeleteId, setPendingDeleteId, edi
                     : statusMeta.value === 'paused'
                       ? 'bg-red-50 text-red-700'
                       : 'bg-amber-50 text-amber-700'
-                  : Number(product.stock || 0) > 0
-                    ? 'bg-cyan-50 text-cyan-800'
-                    : 'bg-red-50 text-red-700'
+                  : isCafeteria
+                    ? cafeMetadata.menuStatus === 'available'
+                      ? 'bg-cyan-50 text-cyan-800'
+                      : cafeMetadata.menuStatus === 'paused'
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-amber-50 text-amber-700'
+                    : Number(product.stock || 0) > 0
+                      ? 'bg-cyan-50 text-cyan-800'
+                      : 'bg-red-50 text-red-700'
               }`}>
-                {isRestaurant ? statusMeta.label : Number(product.stock || 0) > 0 ? 'Disponible' : 'Sin stock'}
+                {isRestaurant ? statusMeta.label : isCafeteria ? cafeStatusLabel : Number(product.stock || 0) > 0 ? 'Disponible' : 'Sin stock'}
               </span>
             </div>
 
@@ -715,19 +755,19 @@ function getFoodProductsPageTexts(businessType, businessConfig = {}) {
   }
 
   return {
-    kicker: 'Cafetería', title: 'Menú e insumos',
-    description: 'Administra por separado los productos que vendes al cliente y los insumos que usas en cocina.',
-    totalDetail: 'menú e insumos', menuMetricTitle: 'Menú', menuMetricDetail: 'productos de venta', ingredientMetricTitle: 'Insumos', ingredientMetricDetail: 'uso interno', lowStockDetail: 'ítems',
-    loadingText: 'Cargando menú e insumos desde Supabase...',
-    menuTabTitle: 'Menú', menuTabDetail: 'productos', ingredientTabTitle: 'Insumos', ingredientTabDetail: 'insumos', preparationTabTitle: '', preparationTabDetail: '',
-    importTitle: 'Importar menú e insumos desde Excel', importDescription: 'Usa categorías como Menú - Café caliente, Menú - Postres, Insumos - Lácteos o Insumos - Desechables.',
-    menuListTitle: 'Productos del menú', ingredientsListTitle: 'Insumos de cocina', preparationListTitle: '',
-    menuListDescription: 'Productos que se venden al cliente en la caja rápida.', ingredientsListDescription: 'Materias primas, materiales y productos internos.', preparationListDescription: '',
-    addMenuButton: 'Agregar al menú', addIngredientButton: 'Agregar insumo', ingredientColumnTitle: 'Insumo',
-    defaultMenuCategory: 'Menú - Café caliente', defaultPreparationCategory: '', defaultIngredientCategory: 'Insumos - Café',
-    searchMenuPlaceholder: 'Buscar producto del menú...', searchPreparationPlaceholder: '', searchIngredientPlaceholder: 'Buscar insumo...',
+    kicker: 'Cafetería', title: 'Menú, preparaciones e insumos',
+    description: 'Organiza bebidas, alimentos, bases internas e insumos; configura variantes y conecta cada producto con su receta y costo real.',
+    totalDetail: 'catálogo de cafetería', menuMetricTitle: 'Menú', menuMetricDetail: 'productos de venta', ingredientMetricTitle: 'Insumos', ingredientMetricDetail: 'uso interno', lowStockDetail: 'ítems',
+    loadingText: 'Cargando menú, preparaciones e insumos desde Supabase...',
+    menuTabTitle: 'Menú', menuTabDetail: 'productos', ingredientTabTitle: 'Insumos y empaques', ingredientTabDetail: 'ítems', preparationTabTitle: 'Preparaciones', preparationTabDetail: 'bases',
+    importTitle: 'Importar menú e insumos desde Excel', importDescription: 'Usa categorías como Menú - Café caliente, Preparaciones - Bases de café, Insumos - Lácteos o Empaques - Vasos y tapas.',
+    menuListTitle: 'Productos del menú', ingredientsListTitle: 'Insumos y empaques', preparationListTitle: 'Preparaciones internas',
+    menuListDescription: 'Bebidas y alimentos disponibles en caja rápida, con variantes y estación de preparación.', ingredientsListDescription: 'Café, leches, jarabes, vasos, tapas y materiales internos.', preparationListDescription: 'Cold brew, cremas, salsas y bases que se elaboran antes de atender pedidos.',
+    addMenuButton: 'Agregar al menú', addIngredientButton: 'Agregar insumo o empaque', ingredientColumnTitle: 'Insumo / empaque',
+    defaultMenuCategory: 'Menú - Café caliente', defaultPreparationCategory: 'Preparaciones - Bases de café', defaultIngredientCategory: 'Insumos - Café',
+    searchMenuPlaceholder: 'Buscar producto del menú...', searchPreparationPlaceholder: 'Buscar cold brew, crema, salsa o base...', searchIngredientPlaceholder: 'Buscar insumo o empaque...',
     emptyMenuTitle: 'No hay productos del menú', emptyMenuText: 'Agrega productos como capuchino, latte, postres, sanduches o combos.',
-    emptyPreparationTitle: '', emptyPreparationText: '', emptyIngredientTitle: 'No hay insumos registrados', emptyIngredientText: 'Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas.',
+    emptyPreparationTitle: 'No hay preparaciones internas', emptyPreparationText: 'Agrega bases de café, cremas, salsas o preparaciones que se reutilizan en bebidas y alimentos.', emptyIngredientTitle: 'No hay insumos registrados', emptyIngredientText: 'Agrega insumos como café, leche, azúcar, vasos, tapas o servilletas.',
     showRecipeButton: true,
   };
 }
